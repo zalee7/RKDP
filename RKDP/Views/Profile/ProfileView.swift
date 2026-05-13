@@ -7,51 +7,90 @@ struct ProfileView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                // Avatar & name header
-                Section {
-                    HStack(spacing: 16) {
-                        Circle()
-                            .fill(Color.blue.gradient)
-                            .frame(width: 64, height: 64)
-                            .overlay(Text(String(user.username.prefix(1))).font(.largeTitle.bold()).foregroundStyle(.white))
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(user.username).font(.title3.bold())
+            ZStack {
+                AppTheme.backgroundGradient.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Avatar header card
+                        VStack(spacing: 12) {
+                            Circle()
+                                .fill(AppTheme.brandGradient)
+                                .frame(width: 72, height: 72)
+                                .overlay(Text(String(user.username.prefix(1))).font(.largeTitle.bold()).foregroundStyle(.white))
+                                .shadow(color: AppTheme.accent.opacity(0.6), radius: 12)
+
+                            Text(user.username).font(.title2.bold()).foregroundStyle(AppTheme.textPrimary)
                             Text("Puzzler")
-                                .font(.caption.italic())
-                                .foregroundStyle(.orange)
-                            Text(user.email).font(.caption).foregroundStyle(.secondary)
+                                .font(.subheadline.italic())
+                                .foregroundStyle(AppTheme.accentBright)
+                            Text(user.email).font(.caption).foregroundStyle(AppTheme.textSecondary)
                             CoinBadgeView(amount: user.coins)
                         }
+                        .padding(.top, 24)
+
+                        // Per-mode ranks
+                        sectionCard(title: "Rankings") {
+                            VStack(spacing: 10) {
+                                ForEach(GameMode.allCases) { mode in
+                                    ModeRankRow(mode: mode, info: user.rank(for: mode))
+                                    if mode != GameMode.allCases.last {
+                                        Divider().overlay(AppTheme.cardBorder)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Career stats
+                        sectionCard(title: "Career Stats") {
+                            let totalWins   = user.ranks.values.reduce(0) { $0 + $1.wins }
+                            let totalLosses = user.ranks.values.reduce(0) { $0 + $1.losses }
+                            VStack(spacing: 8) {
+                                StatRow(label: "Total Wins",   value: "\(totalWins)")
+                                StatRow(label: "Total Losses", value: "\(totalLosses)")
+                                StatRow(label: "Total Points", value: "\(user.totalRankPoints)")
+                            }
+                        }
+
+                        // Sign out
+                        Button(role: .destructive) {
+                            auth.signOut(); dismiss()
+                        } label: {
+                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                                .frame(maxWidth: .infinity).padding()
+                                .background(Color.red.opacity(0.15))
+                                .foregroundStyle(.red)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.red.opacity(0.3), lineWidth: 1))
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 32)
                     }
-                    .padding(.vertical, 4)
-                }
-
-                // Per-mode ranks
-                Section("Rankings") {
-                    ForEach(GameMode.allCases) { mode in
-                        let info = user.rank(for: mode)
-                        ModeRankRow(mode: mode, info: info)
-                    }
-                }
-
-                // Stats
-                Section("Career Stats") {
-                    let totalWins   = user.ranks.values.reduce(0) { $0 + $1.wins }
-                    let totalLosses = user.ranks.values.reduce(0) { $0 + $1.losses }
-                    StatRow(label: "Total Wins",   value: "\(totalWins)")
-                    StatRow(label: "Total Losses", value: "\(totalLosses)")
-                    StatRow(label: "Total Points", value: "\(user.totalRankPoints)")
-                }
-
-                Section {
-                    Button("Sign Out", role: .destructive) { auth.signOut(); dismiss() }
                 }
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }.foregroundStyle(AppTheme.accentBright)
+                }
+            }
         }
+    }
+
+    @ViewBuilder
+    private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline).foregroundStyle(AppTheme.accentBright)
+            content()
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .padding(.horizontal)
     }
 }
 
@@ -61,16 +100,18 @@ struct ModeRankRow: View {
 
     var body: some View {
         HStack {
-            Image(systemName: mode.icon)
-                .frame(width: 28)
-                .foregroundStyle(mode.accentColor)
-            Text(mode.displayName)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(AppTheme.modeGradient(mode))
+                .frame(width: 32, height: 32)
+                .overlay(Image(systemName: mode.icon).font(.caption).foregroundStyle(.white))
+
+            Text(mode.displayName).foregroundStyle(AppTheme.textPrimary)
+
             Spacer()
+
             VStack(alignment: .trailing, spacing: 2) {
                 RankBadgeView(tier: info.tier)
-                Text("\(info.points) pts")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("\(info.points) pts").font(.caption).foregroundStyle(AppTheme.textSecondary)
             }
         }
     }
@@ -82,9 +123,10 @@ struct StatRow: View {
 
     var body: some View {
         HStack {
-            Text(label).foregroundStyle(.secondary)
+            Text(label).foregroundStyle(AppTheme.textSecondary)
             Spacer()
-            Text(value).bold()
+            Text(value).bold().foregroundStyle(AppTheme.textPrimary)
         }
+        .font(.subheadline)
     }
 }

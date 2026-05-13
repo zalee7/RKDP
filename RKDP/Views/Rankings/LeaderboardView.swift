@@ -2,53 +2,63 @@ import SwiftUI
 
 struct LeaderboardView: View {
     @StateObject private var vm = RankViewModel()
-    @State private var selectedMode: GameMode = .sudoku
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Mode picker
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(GameMode.allCases) { mode in
-                            Button {
-                                Task { await vm.loadLeaderboard(mode: mode) }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: mode.icon)
-                                    Text(mode.displayName)
+            ZStack {
+                AppTheme.backgroundGradient.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Mode picker
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(GameMode.allCases) { mode in
+                                Button {
+                                    Task { await vm.loadLeaderboard(mode: mode) }
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: mode.icon)
+                                        Text(mode.displayName)
+                                    }
+                                    .font(.subheadline.weight(vm.selectedMode == mode ? .bold : .regular))
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(vm.selectedMode == mode ? AppTheme.brandGradient : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(vm.selectedMode == mode ? Color.clear : AppTheme.cardBorder, lineWidth: 1))
                                 }
-                                .font(.subheadline.weight(vm.selectedMode == mode ? .bold : .regular))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(vm.selectedMode == mode ? mode.accentColor : Color(.secondarySystemBackground))
-                                .foregroundStyle(vm.selectedMode == mode ? .white : .primary)
-                                .clipShape(Capsule())
                             }
                         }
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                }
 
-                Divider()
+                    Divider().overlay(AppTheme.cardBorder)
 
-                if vm.isLoading {
-                    ProgressView().padding(.top, 40)
-                } else {
-                    List {
-                        ForEach(Array(vm.leaderboard.enumerated()), id: \.element.id) { idx, entry in
-                            LeaderboardRowView(rank: idx + 1, entry: entry)
+                    if vm.isLoading {
+                        Spacer()
+                        ProgressView().tint(AppTheme.accentBright)
+                        Spacer()
+                    } else {
+                        List {
+                            ForEach(Array(vm.leaderboard.enumerated()), id: \.element.id) { idx, entry in
+                                LeaderboardRowView(rank: idx + 1, entry: entry)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparatorTint(AppTheme.cardBorder)
+                            }
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
-                    .listStyle(.plain)
-                }
 
-                if let err = vm.errorMessage {
-                    Text(err).foregroundStyle(.red).padding()
+                    if let err = vm.errorMessage {
+                        Text(err).foregroundStyle(.red).padding()
+                    }
                 }
             }
             .navigationTitle("Leaderboard")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .task { await vm.loadLeaderboard(mode: .sudoku) }
         }
     }
@@ -71,23 +81,23 @@ struct LeaderboardRowView: View {
         HStack(spacing: 12) {
             Text(rankBadge)
                 .font(rank <= 3 ? .title2 : .subheadline)
+                .foregroundStyle(AppTheme.textPrimary)
                 .frame(width: 36)
 
             Circle()
-                .fill(entry.rankTier.color.gradient)
+                .fill(AppTheme.brandGradient)
                 .frame(width: 40, height: 40)
                 .overlay(Text(String(entry.username.prefix(1))).font(.headline).foregroundStyle(.white))
+                .shadow(color: AppTheme.accent.opacity(0.4), radius: 4)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.username).font(.headline)
+                Text(entry.username).font(.headline).foregroundStyle(AppTheme.textPrimary)
                 if let title = entry.equippedTitle {
-                    Text(title)
-                        .font(.caption.italic())
-                        .foregroundStyle(.secondary)
+                    Text(title).font(.caption.italic()).foregroundStyle(AppTheme.accentBright)
                 }
                 HStack(spacing: 4) {
                     RankBadgeView(tier: entry.rankTier)
-                    Text("·").foregroundStyle(.secondary)
+                    Text("·").foregroundStyle(AppTheme.textSecondary)
                     Text("\(entry.wins)W").font(.caption).foregroundStyle(.green)
                 }
             }
@@ -95,10 +105,10 @@ struct LeaderboardRowView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(entry.rankPoints) pts").font(.subheadline.bold())
+                Text("\(entry.rankPoints) pts").font(.subheadline.bold()).foregroundStyle(AppTheme.textPrimary)
                 if let best = entry.bestTime {
-                    Text(String(format: "Best: %d:%02d", best/60, best%60))
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(String(format: "%d:%02d", best/60, best%60))
+                        .font(.caption).foregroundStyle(AppTheme.textSecondary)
                 }
             }
         }

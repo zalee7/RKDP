@@ -9,29 +9,34 @@ struct LoginView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+                AppTheme.backgroundGradient.ignoresSafeArea()
+
                 VStack(spacing: 32) {
                     Spacer()
+
                     // Logo
-                    VStack(spacing: 8) {
-                        Image(systemName: "puzzlepiece.extension.fill")
-                            .font(.system(size: 64))
-                            .foregroundStyle(.blue)
+                    VStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(AppTheme.brandGradient)
+                                .frame(width: 90, height: 90)
+                                .shadow(color: AppTheme.accent.opacity(0.6), radius: 20)
+                            Image(systemName: "puzzlepiece.extension.fill")
+                                .font(.system(size: 38))
+                                .foregroundStyle(.white)
+                        }
                         Text("RKDP")
-                            .font(.largeTitle.bold())
+                            .font(.system(size: 36, weight: .black))
+                            .foregroundStyle(AppTheme.textPrimary)
                         Text("Ranked Puzzle Arena")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.accentBright)
                     }
 
                     // Fields
-                    VStack(spacing: 16) {
-                        TextField("Email", text: $email)
-                            .textFieldStyle(.roundedBorder)
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
-                        SecureField("Password", text: $password)
-                            .textFieldStyle(.roundedBorder)
+                    VStack(spacing: 14) {
+                        StyledTextField(placeholder: "Email", text: $email, keyboardType: .emailAddress)
+                        StyledTextField(placeholder: "Password", text: $password, isSecure: true)
                     }
                     .padding(.horizontal)
 
@@ -39,37 +44,54 @@ struct LoginView: View {
                         Text(err).foregroundStyle(.red).font(.caption)
                     }
 
-                    // Sign in button
                     Button {
                         Task { await auth.signIn(email: email, password: password) }
                     } label: {
                         Group {
-                            if auth.isLoading {
-                                ProgressView()
-                            } else {
-                                Text("Sign In").fontWeight(.semibold)
-                            }
+                            if auth.isLoading { ProgressView().tint(.white) }
+                            else { Text("Sign In").fontWeight(.bold) }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.blue)
+                        .frame(maxWidth: .infinity).padding()
+                        .background(AppTheme.brandGradient)
                         .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .shadow(color: AppTheme.accent.opacity(0.4), radius: 8)
                     }
                     .padding(.horizontal)
                     .disabled(auth.isLoading)
 
-                    Button("Don't have an account? Sign Up") {
-                        showSignUp = true
-                    }
-                    .font(.subheadline)
+                    Button("Don't have an account? Sign Up") { showSignUp = true }
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.accentBright)
 
                     Spacer()
                 }
             }
-            .navigationDestination(isPresented: $showSignUp) {
-                SignUpView()
+            .navigationDestination(isPresented: $showSignUp) { SignUpView() }
+        }
+    }
+}
+
+struct StyledTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
+    var isSecure = false
+
+    var body: some View {
+        Group {
+            if isSecure {
+                SecureField(placeholder, text: $text)
+            } else {
+                TextField(placeholder, text: $text)
+                    .keyboardType(keyboardType)
+                    .autocapitalization(.none)
             }
         }
+        .padding()
+        .background(Color.white.opacity(0.09))
+        .foregroundStyle(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
     }
 }

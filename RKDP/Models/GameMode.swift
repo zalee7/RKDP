@@ -9,7 +9,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var isComingSoon: Bool { self == .anagram }
+    var isComingSoon: Bool { false }
 
     var displayName: String {
         switch self {

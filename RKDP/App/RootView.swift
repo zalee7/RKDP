@@ -28,5 +28,6 @@ struct MainTabView: View {
                     .tabItem { Label("Profile", systemImage: "person.fill") }
             }
         }
+        .tint(AppTheme.accentBright)
     }
 }
