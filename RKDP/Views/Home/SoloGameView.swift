@@ -15,6 +15,9 @@ struct SoloGameView: View {
             KakuroView(difficulty: difficulty, sessionID: nil)
         case .kenken:
             KenKenView(difficulty: difficulty, sessionID: nil)
+        case .anagram:
+            // Placeholder until Anagram is implemented
+            ContentUnavailableView("Coming Soon", systemImage: "textformat.abc", description: Text("Anagram mode is in development."))
         }
     }
 }

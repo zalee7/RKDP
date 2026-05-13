@@ -5,8 +5,11 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
     case minesweeper
     case kakuro
     case kenken
+    case anagram
 
     var id: String { rawValue }
+
+    var isComingSoon: Bool { self == .anagram }
 
     var displayName: String {
         switch self {
@@ -14,6 +17,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .minesweeper: return "Minesweeper"
         case .kakuro:      return "Kakuro"
         case .kenken:      return "KenKen"
+        case .anagram:     return "Anagram"
         }
     }
 
@@ -27,6 +31,8 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
             return "Fill the grid so each run of cells sums to the clue with no repeated digits."
         case .kenken:
             return "Place digits in each row and column; each cage must hit its arithmetic target."
+        case .anagram:
+            return "Unscramble words faster than your opponent in this ranked word battle."
         }
     }
 
@@ -36,6 +42,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .minesweeper: return "scope"
         case .kakuro:      return "plus.forwardslash.minus"
         case .kenken:      return "function"
+        case .anagram:     return "textformat.abc"
         }
     }
 
@@ -45,6 +52,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .minesweeper: return .red
         case .kakuro:      return .green
         case .kenken:      return .orange
+        case .anagram:     return .pink
         }
     }
 }
