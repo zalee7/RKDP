@@ -8,30 +8,28 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Header
-                    if let user = auth.user {
-                        userHeader(user: user)
-                    }
+            VStack(spacing: 20) {
+                if let user = auth.user {
+                    userHeader(user: user)
+                }
 
-                    // Game Mode cards
-                    Text("Choose Your Game")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
+                Text("Choose Your Game")
+                    .font(.title2.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
 
-                    VStack(spacing: 16) {
-                        ForEach(GameMode.allCases) { mode in
-                            GameModeCardView(mode: mode, user: auth.user) {
-                                selectedMode = mode
-                            }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    ForEach(GameMode.allCases) { mode in
+                        GameModeCardView(mode: mode, user: auth.user) {
+                            selectedMode = mode
                         }
                     }
-                    .padding(.horizontal)
                 }
-                .padding(.vertical)
+                .padding(.horizontal)
+
+                Spacer()
             }
+            .padding(.top, 12)
             .navigationTitle("RKDP")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -169,29 +167,33 @@ struct GameModeCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 16) {
-                RoundedRectangle(cornerRadius: 12)
+            VStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 16)
                     .fill(mode.accentColor.gradient)
-                    .frame(width: 56, height: 56)
-                    .overlay(Image(systemName: mode.icon).font(.title2).foregroundStyle(.white))
+                    .frame(width: 72, height: 72)
+                    .overlay(Image(systemName: mode.icon).font(.system(size: 30)).foregroundStyle(.white))
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(mode.displayName).font(.headline)
-                    Text(mode.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
+                Text(mode.displayName)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
 
-                Spacer()
+                Text(mode.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
 
                 if let user {
-                    let rank = user.rank(for: mode)
-                    RankBadgeView(tier: rank.tier, showLabel: false)
+                    RankBadgeView(tier: user.rank(for: mode).tier, showLabel: false)
                 }
-
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
             }
-            .padding()
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aspectRatio(1, contentMode: .fit)
             .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain)
     }
