@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseDatabase
 
 enum MultiplayerState {
     case idle
