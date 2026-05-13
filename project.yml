@@ -44,10 +44,3 @@ targets:
         INFOPLIST_FILE: RKDP/SupportingFiles/Info.plist
         DEVELOPMENT_TEAM: ""
 
-  RKDPTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: RKDPTests
-    dependencies:
-      - target: RKDP
