@@ -56,7 +56,7 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func cancelSearch() async {
-        guard let user, let wager = selectedWager else { return }
+        guard let user, selectedWager != nil else { return }
         matchListener?.remove()
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
         state = .idle
