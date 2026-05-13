@@ -9,4 +9,5 @@ struct LeaderboardEntry: Codable, Identifiable {
     var wins: Int
     var bestTime: Int?      // seconds
     var mode: GameMode
+    var equippedTitle: String?
 }

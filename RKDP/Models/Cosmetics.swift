@@ -3,41 +3,98 @@ import SwiftUI
 // MARK: - Shop item types
 
 enum CosmeticCategory: String, Codable, CaseIterable {
-    case boardTheme   = "Board Theme"
-    case avatar       = "Avatar"
-    case numberFont   = "Number Style"
-    case cellBorder   = "Cell Border"
+    case title       = "Titles"
+    case boardTheme  = "Board Theme"
+    case numberFont  = "Number Style"
+    case cellBorder  = "Cell Border"
 }
 
 struct CosmeticItem: Identifiable, Codable {
     var id: String
     var name: String
     var category: CosmeticCategory
-    var price: Int              // coin cost
+    var price: Int
     var previewImageName: String
     var description: String
 }
 
 struct OwnedCosmetics: Codable {
     var purchasedIDs: Set<String>
+    var equippedTitle: String
     var equippedBoardTheme: String
-    var equippedAvatar: String
     var equippedNumberFont: String
     var equippedCellBorder: String
 
     static let `default` = OwnedCosmetics(
-        purchasedIDs: ["theme_classic", "avatar_default", "font_default", "border_default"],
+        purchasedIDs: ["title_puzzler", "theme_classic", "font_default", "border_default"],
+        equippedTitle: "title_puzzler",
         equippedBoardTheme: "theme_classic",
-        equippedAvatar: "avatar_default",
         equippedNumberFont: "font_default",
         equippedCellBorder: "border_default"
     )
 }
 
+// MARK: - Daily rotation
+
+struct DailyRotation {
+    static let dailySlots = 6
+
+    // Deterministic daily shuffle using day-of-epoch as seed (LCG)
+    static func todaysTitles() -> [CosmeticItem] {
+        let day = Int(Date().timeIntervalSince1970 / 86400)
+        let pool = CosmeticCatalog.allTitles.filter { $0.price > 0 }   // free title never rotates out
+        return seededShuffle(pool, seed: day).prefix(dailySlots).map { $0 }
+    }
+
+    static var nextRotationDate: Date {
+        let day = Int(Date().timeIntervalSince1970 / 86400)
+        return Date(timeIntervalSince1970: Double(day + 1) * 86400)
+    }
+
+    private static func seededShuffle<T>(_ array: [T], seed: Int) -> [T] {
+        var result = array
+        var s = UInt64(bitPattern: Int64(seed &* 6364136223846793005 &+ 1442695040888963407))
+        for i in stride(from: result.count - 1, through: 1, by: -1) {
+            s = s &* 6364136223846793005 &+ 1442695040888963407
+            let j = Int(s >> 33) % (i + 1)
+            result.swapAt(i, j)
+        }
+        return result
+    }
+}
+
 // MARK: - Catalog
 
 struct CosmeticCatalog {
-    static let all: [CosmeticItem] = boardThemes + avatars + numberFonts + cellBorders
+    static let all: [CosmeticItem] = allTitles + boardThemes + numberFonts + cellBorders
+
+    // Full title pool — only `dailySlots` of the paid ones appear in the shop each day
+    static let allTitles: [CosmeticItem] = [
+        CosmeticItem(id: "title_puzzler",      name: "Puzzler",           category: .title, price: 0,    previewImageName: "", description: "Your default title."),
+        CosmeticItem(id: "title_mind_master",  name: "Mind Master",       category: .title, price: 300,  previewImageName: "", description: "For those who bend logic to their will."),
+        CosmeticItem(id: "title_calculator",   name: "The Calculator",    category: .title, price: 300,  previewImageName: "", description: "Cold. Precise. Unstoppable."),
+        CosmeticItem(id: "title_void_walker",  name: "Void Walker",       category: .title, price: 400,  previewImageName: "", description: "Navigates the grid from the dark between cells."),
+        CosmeticItem(id: "title_grid_reaper",  name: "Grid Reaper",       category: .title, price: 400,  previewImageName: "", description: "Leaves no empty cell behind."),
+        CosmeticItem(id: "title_number_god",   name: "Number God",        category: .title, price: 600,  previewImageName: "", description: "Digits bow before them."),
+        CosmeticItem(id: "title_logic_lord",   name: "Logic Lord",        category: .title, price: 500,  previewImageName: "", description: "Reason incarnate."),
+        CosmeticItem(id: "title_phantom",      name: "The Phantom",       category: .title, price: 350,  previewImageName: "", description: "Solves before you blink."),
+        CosmeticItem(id: "title_grandmaster",  name: "Grand Master",      category: .title, price: 1200, previewImageName: "", description: "Earned at the summit."),
+        CosmeticItem(id: "title_oracle",       name: "The Oracle",        category: .title, price: 500,  previewImageName: "", description: "Sees the solution before it's placed."),
+        CosmeticItem(id: "title_iron_mind",    name: "Iron Mind",         category: .title, price: 350,  previewImageName: "", description: "Unshakeable under pressure."),
+        CosmeticItem(id: "title_cascade",      name: "Cascade",           category: .title, price: 400,  previewImageName: "", description: "Solutions flow like water."),
+        CosmeticItem(id: "title_sigma",        name: "Sigma",             category: .title, price: 300,  previewImageName: "", description: "Sum of all puzzles."),
+        CosmeticItem(id: "title_apex",         name: "Apex",              category: .title, price: 600,  previewImageName: "", description: "There is no higher rank."),
+        CosmeticItem(id: "title_ghost",        name: "Ghost",             category: .title, price: 350,  previewImageName: "", description: "Here, then gone."),
+        CosmeticItem(id: "title_anomaly",      name: "Anomaly",           category: .title, price: 400,  previewImageName: "", description: "Defies all expected patterns."),
+        CosmeticItem(id: "title_overlord",     name: "Overlord",          category: .title, price: 700,  previewImageName: "", description: "Commands the board."),
+        CosmeticItem(id: "title_cipher",       name: "Cipher",            category: .title, price: 300,  previewImageName: "", description: "Every grid is just another code."),
+        CosmeticItem(id: "title_theorem",      name: "Living Theorem",    category: .title, price: 450,  previewImageName: "", description: "Proven. Irrefutable."),
+        CosmeticItem(id: "title_nexus",        name: "Nexus",             category: .title, price: 450,  previewImageName: "", description: "Where all solutions converge."),
+        CosmeticItem(id: "title_swift",        name: "Swift",             category: .title, price: 300,  previewImageName: "", description: "Speed is the only metric."),
+        CosmeticItem(id: "title_eternal",      name: "The Eternal",       category: .title, price: 800,  previewImageName: "", description: "Has been solving since before the grid existed."),
+        CosmeticItem(id: "title_obsidian",     name: "Obsidian",          category: .title, price: 500,  previewImageName: "", description: "Hard and flawless."),
+        CosmeticItem(id: "title_zero",         name: "Zero Error",        category: .title, price: 600,  previewImageName: "", description: "Not one mistake. Ever."),
+    ]
 
     static let boardThemes: [CosmeticItem] = [
         CosmeticItem(id: "theme_classic",   name: "Classic",      category: .boardTheme,  price: 0,    previewImageName: "theme_classic",   description: "The default clean look."),
@@ -46,15 +103,6 @@ struct CosmeticCatalog {
         CosmeticItem(id: "theme_forest",    name: "Forest",       category: .boardTheme,  price: 350,  previewImageName: "theme_forest",    description: "Earthy greens and wood-brown cells."),
         CosmeticItem(id: "theme_neon",      name: "Neon",         category: .boardTheme,  price: 600,  previewImageName: "theme_neon",      description: "Vibrant neon glow on dark backgrounds."),
         CosmeticItem(id: "theme_gold",      name: "Gold Edition", category: .boardTheme,  price: 1500, previewImageName: "theme_gold",      description: "Premium gold-leaf grid for Master-tier players."),
-    ]
-
-    static let avatars: [CosmeticItem] = [
-        CosmeticItem(id: "avatar_default",  name: "Puzzler",      category: .avatar, price: 0,    previewImageName: "avatar_default",  description: "Your default puzzle champion."),
-        CosmeticItem(id: "avatar_robot",    name: "Robo",         category: .avatar, price: 300,  previewImageName: "avatar_robot",    description: "A sleek robot solver."),
-        CosmeticItem(id: "avatar_wizard",   name: "Wizard",       category: .avatar, price: 400,  previewImageName: "avatar_wizard",   description: "Masters the arcane arts of logic."),
-        CosmeticItem(id: "avatar_ninja",    name: "Ninja",        category: .avatar, price: 400,  previewImageName: "avatar_ninja",    description: "Swift and silent."),
-        CosmeticItem(id: "avatar_panda",    name: "Panda",        category: .avatar, price: 500,  previewImageName: "avatar_panda",    description: "Deceptively skilled."),
-        CosmeticItem(id: "avatar_master",   name: "Grand Master", category: .avatar, price: 2000, previewImageName: "avatar_master",   description: "Reserved for the elite."),
     ]
 
     static let numberFonts: [CosmeticItem] = [

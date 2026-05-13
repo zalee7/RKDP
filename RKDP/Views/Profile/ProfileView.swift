@@ -17,6 +17,9 @@ struct ProfileView: View {
                             .overlay(Text(String(user.username.prefix(1))).font(.largeTitle.bold()).foregroundStyle(.white))
                         VStack(alignment: .leading, spacing: 4) {
                             Text(user.username).font(.title3.bold())
+                            Text("Puzzler")
+                                .font(.caption.italic())
+                                .foregroundStyle(.orange)
                             Text(user.email).font(.caption).foregroundStyle(.secondary)
                             CoinBadgeView(amount: user.coins)
                         }

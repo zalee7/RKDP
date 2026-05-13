@@ -10,26 +10,37 @@ final class ShopViewModel: ObservableObject {
 
     init(user: AppUser) {
         self.user = user
-        // Load owned cosmetics from user's Firestore doc if available
         self.ownedCosmetics = .default
     }
 
-    var catalog: [CosmeticItem] { CosmeticCatalog.all }
-
+    // For titles: only show today's rotation + already-owned titles
     func items(for category: CosmeticCategory) -> [CosmeticItem] {
-        CosmeticCatalog.all.filter { $0.category == category }
+        if category == .title {
+            let todayIDs = Set(DailyRotation.todaysTitles().map(\.id))
+            return CosmeticCatalog.allTitles.filter { item in
+                item.price == 0 || todayIDs.contains(item.id) || isOwned(item)
+            }
+        }
+        return CosmeticCatalog.all.filter { $0.category == category }
     }
+
+    var nextRotationDate: Date { DailyRotation.nextRotationDate }
 
     func isOwned(_ item: CosmeticItem) -> Bool {
         ownedCosmetics.purchasedIDs.contains(item.id)
     }
 
+    func isInTodaysRotation(_ item: CosmeticItem) -> Bool {
+        guard item.category == .title, item.price > 0 else { return false }
+        return DailyRotation.todaysTitles().contains { $0.id == item.id }
+    }
+
     func isEquipped(_ item: CosmeticItem) -> Bool {
         switch item.category {
-        case .boardTheme:  return ownedCosmetics.equippedBoardTheme  == item.id
-        case .avatar:      return ownedCosmetics.equippedAvatar      == item.id
-        case .numberFont:  return ownedCosmetics.equippedNumberFont  == item.id
-        case .cellBorder:  return ownedCosmetics.equippedCellBorder  == item.id
+        case .title:       return ownedCosmetics.equippedTitle      == item.id
+        case .boardTheme:  return ownedCosmetics.equippedBoardTheme == item.id
+        case .numberFont:  return ownedCosmetics.equippedNumberFont == item.id
+        case .cellBorder:  return ownedCosmetics.equippedCellBorder == item.id
         }
     }
 
@@ -48,10 +59,14 @@ final class ShopViewModel: ObservableObject {
     func equip(_ item: CosmeticItem) {
         guard isOwned(item) else { return }
         switch item.category {
-        case .boardTheme:  ownedCosmetics.equippedBoardTheme  = item.id
-        case .avatar:      ownedCosmetics.equippedAvatar      = item.id
-        case .numberFont:  ownedCosmetics.equippedNumberFont  = item.id
-        case .cellBorder:  ownedCosmetics.equippedCellBorder  = item.id
+        case .title:       ownedCosmetics.equippedTitle      = item.id
+        case .boardTheme:  ownedCosmetics.equippedBoardTheme = item.id
+        case .numberFont:  ownedCosmetics.equippedNumberFont = item.id
+        case .cellBorder:  ownedCosmetics.equippedCellBorder = item.id
         }
+    }
+
+    var equippedTitleName: String {
+        CosmeticCatalog.allTitles.first { $0.id == ownedCosmetics.equippedTitle }?.name ?? "Puzzler"
     }
 }

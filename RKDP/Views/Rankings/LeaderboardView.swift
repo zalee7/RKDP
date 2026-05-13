@@ -80,6 +80,11 @@ struct LeaderboardRowView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.username).font(.headline)
+                if let title = entry.equippedTitle {
+                    Text(title)
+                        .font(.caption.italic())
+                        .foregroundStyle(.secondary)
+                }
                 HStack(spacing: 4) {
                     RankBadgeView(tier: entry.rankTier)
                     Text("·").foregroundStyle(.secondary)
