@@ -179,6 +179,23 @@ struct HowToPlayView: View {
                     "Fastest correct solve wins.",
                 ]),
             ]
+        case .anagram:
+            return [
+                RuleSection(title: "Objective", bullets: [
+                    "You and your opponent receive the same scrambled word.",
+                    "Unscramble it correctly before your opponent does.",
+                    "Longer words and harder difficulties award more rank points.",
+                ]),
+                RuleSection(title: "Controls", bullets: [
+                    "Tap letters to build your answer.",
+                    "Tap your answer to remove the last letter.",
+                    "Submit when you think you have the word.",
+                ]),
+                RuleSection(title: "Ranked Mode", bullets: [
+                    "First correct answer wins the coin pot.",
+                    "Wrong submissions add a 5-second penalty.",
+                ]),
+            ]
         }
     }
 }
