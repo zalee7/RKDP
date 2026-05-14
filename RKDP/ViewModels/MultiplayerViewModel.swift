@@ -21,9 +21,13 @@ final class MultiplayerViewModel: ObservableObject {
     private let store = FirestoreService.shared
     private let rtdb = RealtimeDBService.shared
     private let ranking = RankingService.shared
-    private var matchListener: ListenerRegistration?
+
+    // Firestore listeners
+    private var userDocListener: ListenerRegistration?
+    private var queueListener: ListenerRegistration?
+
+    // Realtime DB handles
     private var rtdbHandles: [DatabaseHandle] = []
-    private var searchTimer: Timer?
     private var gameTimer: Timer?
 
     var user: AppUser?
@@ -43,13 +47,21 @@ final class MultiplayerViewModel: ObservableObject {
         self.selectedWager = wager
         state = .searching
 
-        let tier = user.rank(for: mode).tier
         do {
-            try await store.joinMatchmakingQueue(
-                userID: user.id, mode: mode, difficulty: difficulty,
-                wager: wager.amount, rankTier: tier
-            )
-            listenForMatch(userID: user.id)
+            // 1. Write to queue and try to pair immediately
+            try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount)
+
+            // 2. Listen on our user doc for pendingSessionID (written by the host player)
+            userDocListener = store.listenForMatch(userID: user.id) { [weak self] sessionID in
+                Task { await self?.consumeMatch(sessionID: sessionID) }
+            }
+
+            // 3. Also listen on the queue so that if we're the host we can pair
+            //    any opponent who joins after us
+            queueListener = store.listenForQueueMatch(
+                user: user, mode: mode, difficulty: difficulty, wager: wager.amount
+            ) { _ in /* session creation is handled inside listenForQueueMatch */ }
+
         } catch {
             state = .error(error.localizedDescription)
         }
@@ -57,29 +69,30 @@ final class MultiplayerViewModel: ObservableObject {
 
     func cancelSearch() async {
         guard let user, selectedWager != nil else { return }
-        matchListener?.remove()
+        tearDownListeners()
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
         state = .idle
     }
 
-    private func listenForMatch(userID: String) {
-        matchListener = store.listenForMatch(userID: userID, mode: mode, difficulty: difficulty) { [weak self] sessionID in
-            Task { await self?.joinSession(id: sessionID) }
-        }
-    }
+    /// Called when pendingSessionID appears on our user doc
+    private func consumeMatch(sessionID: String) async {
+        // Remove listeners — match is found
+        tearDownListeners()
 
-    // MARK: - Session
+        // Clear the field so it doesn't re-fire on reconnect
+        try? await store.clearPendingSession(userID: user?.id ?? "")
 
-    private func joinSession(id: String) async {
         do {
-            let session = try await store.fetchSession(id: id)
-            state = .matchFound(sessionID: id)
-            try await rtdb.markReady(sessionID: id, userID: user?.id ?? "")
+            let session = try await store.fetchSession(id: sessionID)
+            state = .matchFound(sessionID: sessionID)
+            try await rtdb.markReady(sessionID: sessionID, userID: user?.id ?? "")
             listenForBothReady(session: session)
         } catch {
             state = .error(error.localizedDescription)
         }
     }
+
+    // MARK: - Session
 
     private func listenForBothReady(session: GameSession) {
         let handle = rtdb.listenForBothReady(sessionID: session.id) { [weak self] in
@@ -123,9 +136,7 @@ final class MultiplayerViewModel: ObservableObject {
             difficulty: session.difficulty,
             winnerID: winnerID,
             players: session.players.map { p in
-                var mp = p
-                mp.finishTime = times[p.userID]
-                return mp
+                var mp = p; mp.finishTime = times[p.userID]; return mp
             }
         )
         do {
@@ -137,6 +148,8 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Helpers
+
     private func startGameTimer() {
         elapsedSeconds = 0
         gameTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -144,8 +157,15 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    private func tearDownListeners() {
+        userDocListener?.remove()
+        userDocListener = nil
+        queueListener?.remove()
+        queueListener = nil
+    }
+
     func reset() {
-        matchListener?.remove()
+        tearDownListeners()
         rtdbHandles.forEach { rtdb.removeObserver(handle: $0, sessionID: "") }
         rtdbHandles = []
         gameTimer?.invalidate()

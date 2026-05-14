@@ -28,6 +28,7 @@ struct GameSession: Codable, Identifiable {
     var difficulty: Difficulty
     var status: SessionStatus
     var players: [MatchPlayer]
+    var seed: Int               // shared puzzle seed — both players get identical puzzle
     var puzzleData: String      // JSON-encoded puzzle snapshot
     var createdAt: Date
     var startedAt: Date?
