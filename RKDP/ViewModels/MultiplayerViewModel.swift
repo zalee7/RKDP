@@ -48,6 +48,9 @@ final class MultiplayerViewModel: ObservableObject {
         state = .searching
 
         do {
+            // 0. Clear any stale pendingSessionID from a previous match
+            try? await store.clearPendingSession(userID: user.id)
+
             // 1. Write to queue and try to pair immediately
             try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount)
 
