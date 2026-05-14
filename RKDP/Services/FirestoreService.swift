@@ -196,6 +196,14 @@ final class FirestoreService {
     }
 
     /// Clear pendingSessionID after it's been consumed so the listener doesn't re-fire on reconnect
+    /// Persist a new best score for a score-based mode (Anagram, Word Hunt).
+    /// Only writes if `score` beats the stored value.
+    func updateBestScore(userID: String, mode: GameMode, score: Int) async throws {
+        try await db.collection("users").document(userID).updateData([
+            "ranks.\(mode.rawValue).bestScore": score
+        ])
+    }
+
     func clearPendingSession(userID: String) async throws {
         try await db.collection("users").document(userID).updateData([
             "pendingSessionID": FieldValue.delete()

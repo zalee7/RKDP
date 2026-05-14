@@ -4,8 +4,12 @@ struct AnagramView: View {
     @StateObject private var vm: AnagramViewModel
     @Environment(\.dismiss) var dismiss
 
-    init(difficulty: Difficulty, sessionID: String? = nil) {
-        _vm = StateObject(wrappedValue: AnagramViewModel(difficulty: difficulty))
+    init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
+        _vm = StateObject(wrappedValue: AnagramViewModel(
+            difficulty: difficulty,
+            userID: user?.id,
+            priorBest: user?.rank(for: .anagram).bestScore
+        ))
     }
 
     var body: some View {
@@ -197,18 +201,18 @@ struct AnagramView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(vm.placed, id: \.id) { tile in
-                                LetterTile(letter: tile.letter, gradient: AppTheme.modeGradient(.anagram), size: 44)
+                                LetterTile(letter: tile.letter, gradient: AppTheme.modeGradient(.anagram), size: 52)
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.25)) { vm.returnToBank(id: tile.id) }
                                     }
                             }
                         }
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 8)
                     }
                 }
             }
-            .frame(height: 64)
+            .frame(height: 72)
             .padding(.horizontal)
         }
     }
@@ -222,9 +226,9 @@ struct AnagramView: View {
                 .foregroundStyle(AppTheme.textSecondary)
                 .tracking(1)
 
-            LetterWrapLayout(spacing: 8) {
+            LetterWrapLayout(spacing: 10) {
                 ForEach(vm.bank, id: \.id) { tile in
-                    LetterTile(letter: tile.letter, gradient: AppTheme.brandGradient, size: 48)
+                    LetterTile(letter: tile.letter, gradient: AppTheme.brandGradient, size: 60)
                         .onTapGesture {
                             withAnimation(.spring(response: 0.25)) { vm.pickFromBank(id: tile.id) }
                         }

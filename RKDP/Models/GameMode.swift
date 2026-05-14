@@ -79,3 +79,16 @@ enum Difficulty: String, Codable, CaseIterable {
         }
     }
 }
+
+extension GameMode {
+    /// Difficulty label customised per mode — Anagram shows letter count instead of Easy/Hard.
+    func difficultyLabel(_ d: Difficulty) -> String {
+        guard self == .anagram else { return d.displayName }
+        switch d {
+        case .easy:   return "6 Letters"
+        case .medium: return "7 Letters"
+        case .hard:   return "8 Letters"
+        case .expert: return "9 Letters"
+        }
+    }
+}

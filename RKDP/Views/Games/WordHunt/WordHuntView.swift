@@ -4,8 +4,12 @@ struct WordHuntView: View {
     @StateObject private var vm: WordHuntViewModel
     @Environment(\.dismiss) var dismiss
 
-    init(difficulty: Difficulty, sessionID: String? = nil) {
-        _vm = StateObject(wrappedValue: WordHuntViewModel(difficulty: difficulty))
+    init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
+        _vm = StateObject(wrappedValue: WordHuntViewModel(
+            difficulty: difficulty,
+            userID: user?.id,
+            priorBest: user?.rank(for: .wordHunt).bestScore
+        ))
     }
 
     var body: some View {

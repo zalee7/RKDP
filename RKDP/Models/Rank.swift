@@ -64,7 +64,8 @@ struct RankInfo: Codable {
     var tier: RankTier
     var wins: Int
     var losses: Int
-    var bestTime: Int?
+    var bestTime: Int?    // best completion time in seconds (time-based modes)
+    var bestScore: Int?   // best points total (score-based modes: Anagram, Word Hunt)
 
     var winRate: Double {
         guard wins + losses > 0 else { return 0 }
@@ -76,5 +77,5 @@ struct RankInfo: Codable {
         return next.pointsRequired - points
     }
 
-    static let empty = RankInfo(points: 0, tier: .bronze, wins: 0, losses: 0, bestTime: nil)
+    static let empty = RankInfo(points: 0, tier: .bronze, wins: 0, losses: 0, bestTime: nil, bestScore: nil)
 }

@@ -4,6 +4,7 @@ import SwiftUI
 struct SoloGameView: View {
     let mode: GameMode
     let difficulty: Difficulty
+    let user: AppUser?
 
     var body: some View {
         switch mode {
@@ -16,9 +17,9 @@ struct SoloGameView: View {
         case .kenken:
             KenKenView(difficulty: difficulty, sessionID: nil)
         case .anagram:
-            AnagramView(difficulty: difficulty, sessionID: nil)
+            AnagramView(difficulty: difficulty, user: user)
         case .wordHunt:
-            WordHuntView(difficulty: difficulty, sessionID: nil)
+            WordHuntView(difficulty: difficulty, user: user)
         }
     }
 }

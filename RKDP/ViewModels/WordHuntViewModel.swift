@@ -15,6 +15,8 @@ final class WordHuntViewModel: ObservableObject {
 
     let difficulty: Difficulty
     let totalSeconds: Int
+    private let userID: String?
+    private let priorBest: Int?
 
     private var timer: AnyCancellable?
 
@@ -24,8 +26,10 @@ final class WordHuntViewModel: ObservableObject {
         case alreadyFound
     }
 
-    init(difficulty: Difficulty, seed: Int? = nil) {
+    init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil) {
         self.difficulty = difficulty
+        self.userID = userID
+        self.priorBest = priorBest
         let s = seed ?? Int.random(in: 0..<Int.max)
         self.game = WordHuntGame.generate(seed: s)
         switch difficulty {
@@ -107,8 +111,14 @@ final class WordHuntViewModel: ObservableObject {
                 if self.elapsedSeconds >= self.totalSeconds {
                     self.isFinished = true
                     self.timer?.cancel()
+                    self.saveBestScoreIfBeaten()
                 }
             }
+    }
+
+    private func saveBestScoreIfBeaten() {
+        guard let uid = userID, score > (priorBest ?? -1) else { return }
+        Task { try? await FirestoreService.shared.updateBestScore(userID: uid, mode: .wordHunt, score: score) }
     }
 
     func stop() { timer?.cancel() }

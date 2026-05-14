@@ -119,7 +119,9 @@ struct GameModeDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Difficulty").font(.headline).foregroundStyle(AppTheme.textPrimary)
                         Picker("Difficulty", selection: $selectedDifficulty) {
-                            ForEach(Difficulty.allCases, id: \.self) { d in Text(d.displayName).tag(d) }
+                            ForEach(Difficulty.allCases, id: \.self) { d in
+                                Text(mode.difficultyLabel(d)).tag(d)
+                            }
                         }
                         .pickerStyle(.segmented)
                     }
@@ -162,7 +164,7 @@ struct GameModeDetailView: View {
             }
             .navigationDestination(for: String.self) { dest in
                 if dest == "solo" {
-                    SoloGameView(mode: mode, difficulty: selectedDifficulty)
+                    SoloGameView(mode: mode, difficulty: selectedDifficulty, user: auth.user)
                 } else if dest == "ranked", let user = auth.user {
                     MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty)
                 }
@@ -240,6 +242,12 @@ struct RankProgressMiniView: View {
             }
             .frame(height: 5)
             Text(pointsLabel).font(.system(size: 9)).foregroundStyle(AppTheme.textSecondary)
+            if let best = info.bestScore {
+                Text("Best: \(best) pts").font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
+            } else if let best = info.bestTime {
+                Text("Best: \(best / 60):\(String(format: "%02d", best % 60))")
+                    .font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
+            }
         }
     }
 }
