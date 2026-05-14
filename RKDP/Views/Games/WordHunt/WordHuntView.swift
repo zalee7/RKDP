@@ -144,20 +144,30 @@ struct WordHuntView: View {
     private func dragGesture(in geo: GeometryProxy, cellSize: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
-                let col = Int(value.location.x / cellSize)
-                let row = Int(value.location.y / cellSize)
-                let clampedRow = max(0, min(WordHuntGame.gridSize - 1, row))
-                let clampedCol = max(0, min(WordHuntGame.gridSize - 1, col))
-
+                let (row, col) = nearestCell(to: value.location, cellSize: cellSize)
                 if vm.currentPath.isEmpty {
-                    vm.startPath(row: clampedRow, col: clampedCol)
+                    vm.startPath(row: row, col: col)
                 } else {
-                    vm.extendPath(row: clampedRow, col: clampedCol)
+                    vm.extendPath(row: row, col: col)
                 }
             }
             .onEnded { _ in
                 vm.submitPath()
             }
+    }
+
+    /// Snap touch position to the nearest cell center — handles fast diagonal drags correctly.
+    private func nearestCell(to location: CGPoint, cellSize: CGFloat) -> (row: Int, col: Int) {
+        var bestRow = 0, bestCol = 0, bestDist = CGFloat.infinity
+        for r in 0..<WordHuntGame.gridSize {
+            for c in 0..<WordHuntGame.gridSize {
+                let cx = CGFloat(c) * cellSize + cellSize / 2
+                let cy = CGFloat(r) * cellSize + cellSize / 2
+                let d = hypot(location.x - cx, location.y - cy)
+                if d < bestDist { bestDist = d; bestRow = r; bestCol = c }
+            }
+        }
+        return (bestRow, bestCol)
     }
 
     // MARK: - Current word display

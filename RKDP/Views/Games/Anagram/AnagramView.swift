@@ -8,9 +8,6 @@ struct AnagramView: View {
         _vm = StateObject(wrappedValue: AnagramViewModel(difficulty: difficulty))
     }
 
-    private let tileSize: CGFloat = 44
-    private let tileSpacing: CGFloat = 8
-
     var body: some View {
         ZStack {
             AppTheme.backgroundGradient.ignoresSafeArea()
@@ -20,29 +17,27 @@ struct AnagramView: View {
                     .padding(.horizontal)
                     .padding(.top, 12)
 
+                resultBanner
+                    .padding(.top, 6)
+
+                foundWordsScroll
+                    .padding(.top, 10)
+
                 Spacer(minLength: 0)
 
-                hintSection
-                    .padding(.horizontal)
-                    .padding(.top, 16)
-
                 placedRow
-                    .padding(.top, 24)
+                    .padding(.top, 12)
 
                 bankSection
-                    .padding(.top, 20)
+                    .padding(.top, 14)
 
-                controlButtons
-                    .padding(.top, 20)
+                controlRow
+                    .padding(.top, 14)
                     .padding(.horizontal)
-
-                submitButton
-                    .padding(.top, 12)
-                    .padding(.horizontal)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, 28)
             }
 
-            if vm.isCorrect { winOverlay }
+            if vm.isFinished { finishedOverlay }
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
@@ -64,45 +59,126 @@ struct AnagramView: View {
                 Text(vm.difficulty.displayName.uppercased())
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.modeAccent(.anagram))
-                TimerView(seconds: vm.effectiveTime)
-                    .foregroundStyle(vm.penaltySeconds > 0 ? .orange : AppTheme.textPrimary)
+                HStack(spacing: 5) {
+                    Image(systemName: "timer")
+                    Text("\(vm.timeRemaining)s")
+                        .monospacedDigit()
+                }
+                .font(.headline)
+                .foregroundStyle(vm.timeRemaining <= 15 ? .red : AppTheme.textPrimary)
+                .animation(.easeInOut, value: vm.timeRemaining)
             }
 
             Spacer()
 
-            Button {
-                withAnimation { vm.showHint.toggle() }
-            } label: {
-                Image(systemName: vm.showHint ? "lightbulb.fill" : "lightbulb")
-                    .font(.title3)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(vm.score)")
+                    .font(.title3.bold())
                     .foregroundStyle(AppTheme.accentBright)
+                Text("pts")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
             }
         }
     }
 
-    // MARK: - Hint
+    // MARK: - Result banner
 
-    private var hintSection: some View {
-        VStack(spacing: 6) {
-            if vm.showHint {
-                Text(vm.puzzle.hint)
-                    .font(.subheadline.italic())
-                    .foregroundStyle(AppTheme.accentBright)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+    @ViewBuilder
+    private var resultBanner: some View {
+        if let result = vm.lastResult {
+            Group {
+                switch result {
+                case .valid(let word, let pts):
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        Text(word).bold()
+                        Text("+\(pts) pts").foregroundStyle(.green)
+                    }
+                case .invalid:
+                    HStack(spacing: 8) {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                        Text("Not a word")
+                    }
+                case .alreadyFound:
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+                        Text("Already found!")
+                    }
+                case .tooShort:
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+                        Text("Need 3+ letters")
+                    }
+                }
             }
-            Text("ANAGRAM")
-                .font(.caption2.bold())
-                .foregroundStyle(AppTheme.textSecondary)
-                .tracking(2)
+            .font(.subheadline.bold())
+            .foregroundStyle(AppTheme.textPrimary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(AppTheme.cardBackground)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(AppTheme.cardBorder, lineWidth: 1))
+            .transition(.opacity.combined(with: .move(edge: .top)))
+            .animation(.easeInOut(duration: 0.25), value: vm.lastResult)
         }
-        .animation(.easeInOut(duration: 0.2), value: vm.showHint)
     }
 
-    // MARK: - Placed row (answer)
+    // MARK: - Found words
+
+    private var foundWordsScroll: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Words Found")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .tracking(1)
+                Spacer()
+                Text("\(vm.foundWords.count) / \(vm.game.validWords.count)")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            .padding(.horizontal)
+
+            if vm.foundWords.isEmpty {
+                Text("Start typing to find words!")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .padding(.horizontal)
+                    .frame(height: 34)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(vm.sortedFoundWords, id: \.self) { word in
+                            HStack(spacing: 4) {
+                                Text(word.capitalized)
+                                    .font(.caption.bold())
+                                Text("+\(AnagramGame.score(for: word))")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.accentBright)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(AppTheme.modeAccent(.anagram).opacity(0.15))
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(AppTheme.modeAccent(.anagram).opacity(0.3), lineWidth: 1))
+                            .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .padding(.horizontal)
+                    .animation(.spring(response: 0.3), value: vm.foundWords)
+                }
+                .frame(height: 34)
+            }
+        }
+    }
+
+    // MARK: - Placed (current word)
 
     private var placedRow: some View {
-        VStack(spacing: 8) {
-            Text("Your Answer")
+        VStack(spacing: 6) {
+            Text("Current Word")
                 .font(.caption.bold())
                 .foregroundStyle(AppTheme.textSecondary)
                 .tracking(1)
@@ -110,23 +186,20 @@ struct AnagramView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(AppTheme.cardBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(vm.isWrong ? Color.red : AppTheme.modeAccent(.anagram).opacity(0.4), lineWidth: vm.isWrong ? 2 : 1)
-                    )
-                    .animation(.easeInOut(duration: 0.2), value: vm.isWrong)
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.modeAccent(.anagram).opacity(0.4), lineWidth: 1))
 
                 if vm.placed.isEmpty {
                     Text("Tap letters below")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
-                        .padding(.vertical, 14)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: tileSpacing) {
+                        HStack(spacing: 8) {
                             ForEach(vm.placed, id: \.id) { tile in
-                                LetterTile(letter: tile.letter, gradient: AppTheme.modeGradient(.anagram), isPlaced: true)
-                                    .onTapGesture { withAnimation(.spring(response: 0.3)) { vm.returnToBank(id: tile.id) } }
+                                LetterTile(letter: tile.letter, gradient: AppTheme.modeGradient(.anagram), size: 44)
+                                    .onTapGesture {
+                                        withAnimation(.spring(response: 0.25)) { vm.returnToBank(id: tile.id) }
+                                    }
                             }
                         }
                         .padding(.horizontal, 12)
@@ -134,7 +207,7 @@ struct AnagramView: View {
                     }
                 }
             }
-            .frame(height: tileSize + 28)
+            .frame(height: 64)
             .padding(.horizontal)
         }
     }
@@ -142,205 +215,251 @@ struct AnagramView: View {
     // MARK: - Bank
 
     private var bankSection: some View {
-        VStack(spacing: 8) {
-            Text("Letters")
+        VStack(spacing: 6) {
+            Text("Your Letters")
                 .font(.caption.bold())
                 .foregroundStyle(AppTheme.textSecondary)
                 .tracking(1)
 
-            WrappingHStack(spacing: tileSpacing) {
+            LetterWrapLayout(spacing: 8) {
                 ForEach(vm.bank, id: \.id) { tile in
-                    LetterTile(letter: tile.letter, gradient: AppTheme.brandGradient, isPlaced: false)
-                        .onTapGesture { withAnimation(.spring(response: 0.3)) { vm.pickFromBank(id: tile.id) } }
+                    LetterTile(letter: tile.letter, gradient: AppTheme.brandGradient, size: 48)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.25)) { vm.pickFromBank(id: tile.id) }
+                        }
                 }
             }
             .padding(.horizontal)
-            .frame(minHeight: tileSize * 2 + tileSpacing)
+            .frame(minHeight: 56)
         }
     }
 
-    // MARK: - Control buttons
+    // MARK: - Controls
 
-    private var controlButtons: some View {
-        HStack(spacing: 12) {
-            Button {
+    private var controlRow: some View {
+        HStack(spacing: 10) {
+            iconButton(label: "Shuffle", icon: "shuffle") {
                 withAnimation(.spring(response: 0.35)) { vm.shuffleBank() }
-            } label: {
-                Label("Shuffle", systemImage: "shuffle")
-                    .font(.subheadline.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppTheme.cardBackground)
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
             }
-
-            Button {
+            iconButton(label: "Clear", icon: "arrow.uturn.backward") {
                 withAnimation(.spring(response: 0.35)) { vm.clearPlaced() }
+            }
+
+            // Hint
+            Button {
+                withAnimation { vm.showHint.toggle() }
             } label: {
-                Label("Clear", systemImage: "arrow.uturn.backward")
-                    .font(.subheadline.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppTheme.cardBackground)
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
-            }
-        }
-    }
-
-    // MARK: - Submit
-
-    private var submitButton: some View {
-        Button {
-            vm.submit()
-        } label: {
-            Text("Submit")
-                .font(.headline.bold())
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(vm.placed.count == vm.puzzle.word.count ? AppTheme.modeGradient(.anagram) : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: AppTheme.modeAccent(.anagram).opacity(vm.placed.count == vm.puzzle.word.count ? 0.5 : 0), radius: 10)
-        }
-        .disabled(vm.placed.count != vm.puzzle.word.count || vm.isCorrect)
-        .animation(.easeInOut(duration: 0.2), value: vm.placed.count)
-    }
-
-    // MARK: - Win overlay
-
-    private var winOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.6).ignoresSafeArea()
-                .transition(.opacity)
-
-            VStack(spacing: 20) {
-                Text("🎉")
-                    .font(.system(size: 72))
-
-                Text("You got it!")
-                    .font(.largeTitle.bold())
-                    .foregroundStyle(AppTheme.textPrimary)
-
-                Text(vm.puzzle.word)
-                    .font(.title.bold())
-                    .foregroundStyle(AppTheme.modeAccent(.anagram))
-
-                VStack(spacing: 6) {
-                    Text("Time: \(vm.elapsedSeconds)s")
-                        .foregroundStyle(AppTheme.textSecondary)
-                    if vm.penaltySeconds > 0 {
-                        Text("+\(vm.penaltySeconds)s penalty")
-                            .foregroundStyle(.orange)
-                    }
-                    Text("Effective: \(vm.effectiveTime)s")
+                VStack(spacing: 2) {
+                    Image(systemName: vm.showHint ? "lightbulb.fill" : "lightbulb")
                         .font(.headline)
-                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("Hint")
+                        .font(.caption2.bold())
                 }
-                .font(.subheadline)
-
-                Button {
-                    vm.stop()
-                    dismiss()
-                } label: {
-                    Text("Done")
-                        .font(.headline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(AppTheme.modeGradient(.anagram))
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-                .padding(.horizontal, 32)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(vm.showHint ? AppTheme.accentBright.opacity(0.2) : AppTheme.cardBackground)
+                .foregroundStyle(vm.showHint ? AppTheme.accentBright : AppTheme.textPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(vm.showHint ? AppTheme.accentBright.opacity(0.5) : AppTheme.cardBorder, lineWidth: 1))
             }
-            .padding(32)
+
+            // Submit
+            Button { vm.submit() } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.headline)
+                    Text("Submit")
+                        .font(.caption2.bold())
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(vm.placed.count >= 3 ? AppTheme.modeGradient(.anagram) : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .disabled(vm.placed.count < 3)
+            .animation(.easeInOut(duration: 0.15), value: vm.placed.count)
+        }
+    }
+
+    @ViewBuilder
+    private func iconButton(label: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: icon).font(.headline)
+                Text(label).font(.caption2.bold())
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(AppTheme.cardBackground)
+            .foregroundStyle(AppTheme.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+        }
+    }
+
+    // MARK: - Hint overlay
+
+    private var hintSection: some View {
+        Group {
+            if vm.showHint, let hint = vm.hintWord {
+                Text("Hint: \(hint.prefix(1))\(String(repeating: "·", count: hint.count - 1))")
+                    .font(.subheadline.italic())
+                    .foregroundStyle(AppTheme.accentBright)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    // MARK: - Finished overlay
+
+    private var finishedOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.7).ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    Text("⏱️ Time's Up!")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    HStack(spacing: 24) {
+                        statBox(value: "\(vm.score)", label: "Points", color: AppTheme.accentBright)
+                        statBox(value: "\(vm.foundWords.count)", label: "Found", color: AppTheme.modeAccent(.anagram))
+                        statBox(value: "\(vm.missedWords.count)", label: "Missed", color: .orange)
+                    }
+                    .padding()
+                    .background(AppTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
+
+                    if !vm.missedWords.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Words you missed:")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(AppTheme.textSecondary)
+                            LetterWrapLayout(spacing: 6) {
+                                ForEach(vm.missedWords.prefix(30), id: \.self) { word in
+                                    Text(word.capitalized)
+                                        .font(.caption)
+                                        .padding(.horizontal, 8).padding(.vertical, 4)
+                                        .background(Color.white.opacity(0.08))
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(AppTheme.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
+                    }
+
+                    Button { vm.stop(); dismiss() } label: {
+                        Text("Done")
+                            .font(.headline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(AppTheme.modeGradient(.anagram))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                }
+                .padding(24)
+            }
             .background(AppTheme.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 28))
             .overlay(RoundedRectangle(cornerRadius: 28).stroke(AppTheme.cardBorder, lineWidth: 1))
-            .padding(32)
-            .transition(.scale.combined(with: .opacity))
+            .padding(20)
         }
-        .animation(.spring(response: 0.4), value: vm.isCorrect)
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.3), value: vm.isFinished)
+    }
+
+    @ViewBuilder
+    private func statBox(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value).font(.title.bold()).foregroundStyle(color)
+            Text(label).font(.caption).foregroundStyle(AppTheme.textSecondary)
+        }
     }
 }
 
-// MARK: - Letter tile
+// MARK: - Shared subviews
 
 private struct LetterTile: View {
     let letter: Character
     let gradient: LinearGradient
-    let isPlaced: Bool
+    var size: CGFloat = 44
 
     var body: some View {
         Text(String(letter))
-            .font(.title2.bold())
-            .frame(width: 44, height: 44)
+            .font(.system(size: size * 0.42, weight: .bold))
+            .frame(width: size, height: size)
             .background(gradient)
             .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
-            .scaleEffect(isPlaced ? 1.05 : 1.0)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+            .shadow(color: .black.opacity(0.22), radius: 3, y: 2)
     }
 }
 
-// MARK: - Wrapping HStack for bank
+// MARK: - Wrapping layout for letter bank
 
-private struct WrappingHStack: Layout {
+private struct LetterWrapLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? UIScreen.main.bounds.width
-        var rows: [[LayoutSubviews.Element]] = [[]]
-        var rowWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth + size.width + (rows.last!.isEmpty ? 0 : spacing) > width {
-                rows.append([subview])
-                rowWidth = size.width
-            } else {
-                rows[rows.count - 1].append(subview)
-                rowWidth += size.width + (rows.last!.count == 1 ? 0 : spacing)
-            }
-        }
-
-        let height = rows.reduce(0.0) { acc, row in
-            let rowH = row.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
-            return acc + rowH + (acc > 0 ? spacing : 0)
-        }
-        return CGSize(width: width, height: height)
+        layout(subviews: subviews, width: proposal.width ?? UIScreen.main.bounds.width).size
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let width = bounds.width
-        var rows: [[LayoutSubviews.Element]] = [[]]
-        var rowWidth: CGFloat = 0
+        let result = layout(subviews: subviews, width: bounds.width)
+        for (subview, origin) in zip(subviews, result.origins) {
+            let size = subview.sizeThatFits(.unspecified)
+            subview.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                          proposal: ProposedViewSize(size))
+        }
+    }
+
+    private struct LayoutResult { var size: CGSize; var origins: [CGPoint] }
+
+    private func layout(subviews: Subviews, width: CGFloat) -> LayoutResult {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0
 
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if rowWidth + size.width + (rows.last!.isEmpty ? 0 : spacing) > width {
-                rows.append([subview])
-                rowWidth = size.width
-            } else {
-                rows[rows.count - 1].append(subview)
-                rowWidth += size.width + (rows.last!.count == 1 ? 0 : spacing)
+            if x + size.width > width && x > 0 {
+                y += rowH + spacing; x = 0; rowH = 0
             }
+            origins.append(CGPoint(x: x, y: y))
+            rowH = max(rowH, size.height)
+            x += size.width + spacing
         }
 
-        var y = bounds.minY
-        for row in rows {
-            let rowH = row.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
-            let totalW = row.reduce(0.0) { $0 + $1.sizeThatFits(.unspecified).width } + CGFloat(row.count - 1) * spacing
-            var x = bounds.minX + (width - totalW) / 2
-            for subview in row {
-                let size = subview.sizeThatFits(.unspecified)
-                subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-                x += size.width + spacing
+        // Centre each row
+        var centred: [CGPoint] = []
+        var rowStart = 0
+        var ry: CGFloat = 0
+        while rowStart < origins.count {
+            var rowEnd = rowStart
+            while rowEnd + 1 < origins.count && origins[rowEnd + 1].y == origins[rowStart].y {
+                rowEnd += 1
             }
-            y += rowH + spacing
+            let lastOrigin = origins[rowEnd]
+            let lastSize = subviews[rowEnd].sizeThatFits(.unspecified)
+            let rowWidth = lastOrigin.x + lastSize.width
+            let offset = (width - rowWidth) / 2
+            let rh = subviews[rowStart...rowEnd].map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+            for i in rowStart...rowEnd {
+                centred.append(CGPoint(x: origins[i].x + offset, y: ry))
+            }
+            ry += rh + spacing
+            rowStart = rowEnd + 1
         }
+
+        let totalH = ry > spacing ? ry - spacing : 0
+        return LayoutResult(size: CGSize(width: width, height: totalH), origins: centred)
     }
 }

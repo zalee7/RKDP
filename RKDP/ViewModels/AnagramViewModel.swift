@@ -3,32 +3,39 @@ import Combine
 
 @MainActor
 final class AnagramViewModel: ObservableObject {
-    // The puzzle
-    @Published private(set) var puzzle: AnagramPuzzle
-    // Letters still in the bank (not yet placed)
-    @Published private(set) var bank: [(id: Int, letter: Character)]
-    // Letters the player has placed as their answer
-    @Published private(set) var placed: [(id: Int, letter: Character)]
-
-    @Published var elapsedSeconds: Int = 0
-    @Published var isCorrect = false
-    @Published var isWrong = false      // flashes red on bad submit
-    @Published var penaltySeconds = 0   // accumulated penalty (ranked)
+    @Published private(set) var game: AnagramGame
+    @Published private(set) var bank: [(id: Int, letter: Character)]   // letters still available
+    @Published private(set) var placed: [(id: Int, letter: Character)] // current word being built
+    @Published private(set) var foundWords: [String] = []
+    @Published private(set) var score = 0
+    @Published var elapsedSeconds = 0
+    @Published var isFinished = false
+    @Published var lastResult: SubmitResult?
     @Published var showHint = false
 
     let difficulty: Difficulty
     private var timer: AnyCancellable?
 
+    enum SubmitResult: Equatable {
+        case valid(String, Int)
+        case invalid
+        case alreadyFound
+        case tooShort
+    }
+
     init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
-        let p = AnagramPuzzle.generate(difficulty: difficulty, seed: seed)
-        self.puzzle = p
-        self.bank = p.scrambled.enumerated().map { ($0.offset, $0.element) }
+        let g = AnagramGame.generate(difficulty: difficulty, seed: seed)
+        self.game = g
+        self.bank = g.letters.enumerated().map { ($0.offset, $0.element) }
         self.placed = []
         startTimer()
     }
 
-    // MARK: - Player actions
+    var timeRemaining: Int { max(0, AnagramGame.totalSeconds(for: difficulty) - elapsedSeconds) }
+    var totalSeconds: Int { AnagramGame.totalSeconds(for: difficulty) }
+
+    // MARK: - Tile actions
 
     func pickFromBank(id: Int) {
         guard let idx = bank.firstIndex(where: { $0.id == id }) else { return }
@@ -51,31 +58,66 @@ final class AnagramViewModel: ObservableObject {
         bank.shuffle()
     }
 
+    // MARK: - Submit current word
+
     func submit() {
-        let attempt = String(placed.map(\.letter))
-        if attempt.uppercased() == puzzle.word.uppercased() {
-            isCorrect = true
-            timer?.cancel()
-        } else {
-            isWrong = true
-            penaltySeconds += 5
-            // Flash wrong state then clear
+        let word = String(placed.map(\.letter)).uppercased()
+
+        defer {
+            clearPlaced()
             Task {
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                isWrong = false
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                lastResult = nil
             }
         }
+
+        if word.count < 3 {
+            lastResult = .tooShort
+            return
+        }
+        if foundWords.contains(word) {
+            lastResult = .alreadyFound
+            return
+        }
+        if game.validWords.contains(word) {
+            foundWords.append(word)
+            let pts = AnagramGame.score(for: word)
+            score += pts
+            lastResult = .valid(word, pts)
+        } else {
+            lastResult = .invalid
+        }
+    }
+
+    // MARK: - Hint: reveal one un-found word
+
+    var hintWord: String? {
+        game.validWords.subtracting(Set(foundWords)).sorted { $0.count > $1.count }.first
     }
 
     // MARK: - Timer
 
     private func startTimer() {
+        let total = AnagramGame.totalSeconds(for: difficulty)
         timer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
-            .sink { [weak self] _ in self?.elapsedSeconds += 1 }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.elapsedSeconds += 1
+                if self.elapsedSeconds >= total {
+                    self.isFinished = true
+                    self.timer?.cancel()
+                }
+            }
     }
 
     func stop() { timer?.cancel() }
 
-    var effectiveTime: Int { elapsedSeconds + penaltySeconds }
+    var sortedFoundWords: [String] {
+        foundWords.sorted { AnagramGame.score(for: $0) > AnagramGame.score(for: $1) }
+    }
+
+    var missedWords: [String] {
+        Array(game.validWords.subtracting(Set(foundWords))).sorted()
+    }
 }

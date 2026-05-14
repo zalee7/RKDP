@@ -1,134 +1,119 @@
 import Foundation
 
-struct AnagramPuzzle {
-    let word: String          // answer
-    let scrambled: [Character] // shuffled letters shown to player
-    let hint: String          // short clue
+struct AnagramGame {
+    let baseWord: String           // the source word whose letters are used
+    let letters: [Character]       // shuffled letters given to the player
+    let validWords: Set<String>    // all words formable from these letters (3+ letters)
     let difficulty: Difficulty
+    let seed: Int
 
-    // Shared seed so both players in a match get identical scrambles
-    static func generate(difficulty: Difficulty, seed: Int? = nil) -> AnagramPuzzle {
+    // MARK: - Generation
+
+    static func generate(difficulty: Difficulty, seed: Int? = nil) -> AnagramGame {
         let pool = wordPool(for: difficulty)
-        let idx: Int
-        if let seed {
-            idx = abs(seed) % pool.count
-        } else {
-            idx = Int.random(in: 0..<pool.count)
-        }
-        let entry = pool[idx]
-        let scrambled = scramble(entry.word, seed: seed ?? Int.random(in: 0..<Int.max))
-        return AnagramPuzzle(word: entry.word, scrambled: scrambled, hint: entry.hint, difficulty: difficulty)
+        let s = seed ?? Int.random(in: 0..<Int.max)
+        let idx = abs(s) % pool.count
+        let base = pool[idx]
+        let shuffled = shuffleLetters(Array(base), seed: s)
+        let words = findValidWords(in: Array(base))
+        return AnagramGame(baseWord: base, letters: shuffled, validWords: words, difficulty: difficulty, seed: s)
     }
 
-    private static func scramble(_ word: String, seed: Int) -> [Character] {
-        var chars = Array(word)
-        // Seeded Fisher-Yates
+    // MARK: - Validation
+
+    /// True if `word` can be spelled using only the available letters (respecting counts).
+    func canForm(_ word: String) -> Bool {
+        Self.canForm(word.uppercased(), from: Array(baseWord))
+    }
+
+    static func canForm(_ word: String, from letters: [Character]) -> Bool {
+        var remaining = letters
+        for ch in word.uppercased() {
+            guard let idx = remaining.firstIndex(of: ch) else { return false }
+            remaining.remove(at: idx)
+        }
+        return true
+    }
+
+    // MARK: - Scoring
+
+    static func score(for word: String) -> Int {
+        switch word.count {
+        case 3:    return 1
+        case 4:    return 2
+        case 5:    return 3
+        case 6:    return 4
+        default:   return 5
+        }
+    }
+
+    // MARK: - Timer per difficulty
+
+    static func totalSeconds(for difficulty: Difficulty) -> Int {
+        switch difficulty {
+        case .easy:   return 120
+        case .medium: return 100
+        case .hard:   return 90
+        case .expert: return 75
+        }
+    }
+
+    // MARK: - Internals
+
+    private static func findValidWords(in letters: [Character]) -> Set<String> {
+        var found = Set<String>()
+        for word in WordDictionary.words where word.count >= 3 {
+            if canForm(word, from: letters) { found.insert(word) }
+        }
+        return found
+    }
+
+    private static func shuffleLetters(_ chars: [Character], seed: Int) -> [Character] {
+        var arr = chars
         var s = UInt64(bitPattern: Int64(seed &* 6364136223846793005 &+ 1442695040888963407))
-        for i in stride(from: chars.count - 1, through: 1, by: -1) {
+        for i in stride(from: arr.count - 1, through: 1, by: -1) {
             s = s &* 6364136223846793005 &+ 1442695040888963407
             let j = Int(s >> 33) % (i + 1)
-            if i != j { chars.swapAt(i, j) }
+            if i != j { arr.swapAt(i, j) }
         }
-        // Make sure it's never identical to the original
-        if String(chars) == word && chars.count > 1 { chars.swapAt(0, 1) }
-        return chars
+        return arr
     }
 
-    private struct Entry { let word: String; let hint: String }
+    // MARK: - Word pools (longer base words → more sub-words)
 
-    private static func wordPool(for difficulty: Difficulty) -> [Entry] {
+    private static func wordPool(for difficulty: Difficulty) -> [String] {
         switch difficulty {
-        case .easy:
+        case .easy:      // 6-letter words
             return [
-                Entry(word: "ANGEL", hint: "Heavenly being"),
-                Entry(word: "BRAVE", hint: "Courageous"),
-                Entry(word: "CLAIM", hint: "To assert"),
-                Entry(word: "DANCE", hint: "Move to music"),
-                Entry(word: "EARTH", hint: "Our planet"),
-                Entry(word: "FAULT", hint: "A mistake"),
-                Entry(word: "GRACE", hint: "Elegance"),
-                Entry(word: "HEART", hint: "Vital organ"),
-                Entry(word: "IMAGE", hint: "A picture"),
-                Entry(word: "JEWEL", hint: "A gem"),
-                Entry(word: "KNIFE", hint: "Cutting tool"),
-                Entry(word: "LEMON", hint: "Sour fruit"),
-                Entry(word: "MAGIC", hint: "Illusion or spell"),
-                Entry(word: "NERVE", hint: "Courage or body signal"),
-                Entry(word: "OCEAN", hint: "Vast body of water"),
-                Entry(word: "PANIC", hint: "Sudden fear"),
-                Entry(word: "QUEEN", hint: "Royal female"),
-                Entry(word: "RIVER", hint: "Flowing water"),
-                Entry(word: "SMILE", hint: "Happy expression"),
-                Entry(word: "TIGER", hint: "Striped big cat"),
+                "CASTLE", "PLANET", "SILVER", "GARDEN",
+                "BRIDGE", "ORANGE", "FINGER", "CANDLE",
+                "HUNTER", "ISLAND", "LANCER", "MIRROR",
+                "ROCKET", "TIMBER", "NEEDLE", "DANGER",
+                "GENTLE", "FLOWER", "SINGLE", "MOTHER"
             ]
-        case .medium:
+        case .medium:    // 7-letter words
             return [
-                Entry(word: "BRIDGE", hint: "Connects two sides"),
-                Entry(word: "CANDLE", hint: "Wax light source"),
-                Entry(word: "CASTLE", hint: "Royal fortress"),
-                Entry(word: "DANGER", hint: "Risk or threat"),
-                Entry(word: "ENGINE", hint: "Powers a machine"),
-                Entry(word: "FINGER", hint: "Part of a hand"),
-                Entry(word: "GARDEN", hint: "Where plants grow"),
-                Entry(word: "HUNTER", hint: "Pursues prey"),
-                Entry(word: "ISLAND", hint: "Land surrounded by water"),
-                Entry(word: "JUNGLE", hint: "Dense tropical forest"),
-                Entry(word: "LANCER", hint: "Knight with a spear"),
-                Entry(word: "MIRROR", hint: "Reflection surface"),
-                Entry(word: "NEEDLE", hint: "Used for sewing"),
-                Entry(word: "ORANGE", hint: "Citrus fruit"),
-                Entry(word: "PLANET", hint: "Orbits a star"),
-                Entry(word: "ROCKET", hint: "Launches into space"),
-                Entry(word: "SILVER", hint: "Precious metal"),
-                Entry(word: "TIMBER", hint: "Wood for building"),
-                Entry(word: "UNFAIR", hint: "Not just"),
-                Entry(word: "WALRUS", hint: "Arctic sea mammal"),
+                "PAINTER", "CAPTAIN", "LANTERN", "MONSTER",
+                "STRANGE", "SHELTER", "THUNDER", "KITCHEN",
+                "MACHINE", "HISTORY", "BALANCE", "NETWORK",
+                "SOLDIER", "PARTNER", "CENTRAL", "MINERAL",
+                "CHAPTER", "MINERAL", "SILENCE", "PLANTER"
             ]
-        case .hard:
+        case .hard:      // 8-letter words
             return [
-                Entry(word: "BALANCE", hint: "Equilibrium"),
-                Entry(word: "CAPTAIN", hint: "Leader of a ship or team"),
-                Entry(word: "DIAMOND", hint: "Precious gem"),
-                Entry(word: "ELEMENT", hint: "Basic substance"),
-                Entry(word: "FANTASY", hint: "Imaginative fiction"),
-                Entry(word: "GARBAGE", hint: "Rubbish or waste"),
-                Entry(word: "HISTORY", hint: "Study of the past"),
-                Entry(word: "INSULTS", hint: "Offensive remarks"),
-                Entry(word: "JUSTICE", hint: "Fairness under law"),
-                Entry(word: "KITCHEN", hint: "Room for cooking"),
-                Entry(word: "LANTERN", hint: "Portable light"),
-                Entry(word: "MACHINE", hint: "Mechanical device"),
-                Entry(word: "NETWORK", hint: "Interconnected system"),
-                Entry(word: "OPINION", hint: "Personal viewpoint"),
-                Entry(word: "PIONEER", hint: "First to explore"),
-                Entry(word: "QUANTUM", hint: "Smallest discrete unit"),
-                Entry(word: "RAMPANT", hint: "Widespread and uncontrolled"),
-                Entry(word: "SHELTER", hint: "Protection from weather"),
-                Entry(word: "THUNDER", hint: "Sound after lightning"),
-                Entry(word: "WHISPER", hint: "Speak very softly"),
+                "ABSOLUTE", "BRANCHES", "STRANGER", "TROUBLES",
+                "ELECTRON", "PRESENTS", "CHILDREN", "TOGETHER",
+                "COMPLETE", "PERSONAL", "SMALLEST", "DAUGHTER",
+                "STANDARD", "STRAIGHT", "STRENGTH", "RELATIVE",
+                "CONSIDER", "POINTING", "SCRAMBLE", "CRIMINAL"
             ]
-        case .expert:
+        case .expert:    // 9-letter words
             return [
-                Entry(word: "ABSOLUTE", hint: "Complete and total"),
-                Entry(word: "BACKBONE", hint: "Spine or core strength"),
-                Entry(word: "CALCULUS", hint: "Branch of mathematics"),
-                Entry(word: "DILEMMAS", hint: "Difficult choices"),
-                Entry(word: "ELECTRON", hint: "Negatively charged particle"),
-                Entry(word: "FEMININE", hint: "Relating to women"),
-                Entry(word: "GRANDEUR", hint: "Splendour and magnificence"),
-                Entry(word: "HAUNTING", hint: "Persistently memorable"),
-                Entry(word: "ILLUSION", hint: "False perception"),
-                Entry(word: "JUDGMENT", hint: "Decision or assessment"),
-                Entry(word: "KINDNESS", hint: "Friendly and generous quality"),
-                Entry(word: "LABYRINTH", hint: "Complex maze"),
-                Entry(word: "MADRIGAL", hint: "Renaissance vocal composition"),
-                Entry(word: "NARCOTIC", hint: "Numbing drug"),
-                Entry(word: "OBSTACLE", hint: "Something in the way"),
-                Entry(word: "PARALLEL", hint: "Side by side, never meeting"),
-                Entry(word: "QUANTIFY", hint: "Measure precisely"),
-                Entry(word: "ROMANTIC", hint: "Relating to love or adventure"),
-                Entry(word: "SCULPTOR", hint: "Creates three-dimensional art"),
-                Entry(word: "TWILIGHT", hint: "Dusk — between day and night"),
+                "CARPENTER", "TRANSLATE", "IMPORTANT", "LANDSCAPE",
+                "CHALLENGE", "STRANGEST", "REMAINDER", "PASSENGER",
+                "YESTERDAY", "UNCERTAIN", "WONDERFUL", "CELEBRATE",
+                "DETECTIVE", "CALCULATE", "BEAUTIFUL", "LISTENING",
+                "NIGHTMARE", "SOMEWHERE", "COMPLAINS", "ALERTNESS"
             ]
         }
     }
