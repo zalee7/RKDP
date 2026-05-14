@@ -117,7 +117,8 @@ struct GameModeDetailView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Difficulty").font(.headline).foregroundStyle(AppTheme.textPrimary)
+                        Text(mode == .anagram ? "Word Length" : "Difficulty")
+                            .font(.headline).foregroundStyle(AppTheme.textPrimary)
                         Picker("Difficulty", selection: $selectedDifficulty) {
                             ForEach(Difficulty.allCases, id: \.self) { d in
                                 Text(mode.difficultyLabel(d)).tag(d)
