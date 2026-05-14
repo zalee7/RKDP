@@ -18,7 +18,9 @@ struct HowToPlayView: View {
                     gameGuide(for: .minesweeper).tag(1)
                     gameGuide(for: .kakuro).tag(2)
                     gameGuide(for: .kenken).tag(3)
-                    RankGuideView().tag(4)
+                    gameGuide(for: .anagram).tag(4)
+                    gameGuide(for: .wordHunt).tag(5)
+                    RankGuideView().tag(6)
                 }
                 .tabViewStyle(.page)
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
@@ -187,13 +189,34 @@ struct HowToPlayView: View {
                     "Longer words and harder difficulties award more rank points.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
-                    "Tap letters to build your answer.",
-                    "Tap your answer to remove the last letter.",
-                    "Submit when you think you have the word.",
+                    "Tap letter tiles in the bank to move them to your answer row.",
+                    "Tap a placed tile to return it to the bank.",
+                    "Use Shuffle to randomise the bank order for a fresh look.",
+                    "Hit Submit when you have your answer — wrong guesses add 5s.",
+                    "Tap the lightbulb to reveal a one-line hint.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "First correct answer wins the coin pot.",
-                    "Wrong submissions add a 5-second penalty.",
+                    "Wrong submissions add a 5-second penalty to your time.",
+                ]),
+            ]
+        case .wordHunt:
+            return [
+                RuleSection(title: "Objective", bullets: [
+                    "Find as many hidden words as you can in the 4×4 letter grid.",
+                    "Words must be 3 or more letters and traced through adjacent tiles.",
+                    "Tiles can only be used once per word; diagonal connections count.",
+                    "Longer words score more points — a 7-letter word earns 5 pts!",
+                ]),
+                RuleSection(title: "Controls", bullets: [
+                    "Drag your finger across adjacent tiles to trace a word.",
+                    "Release to submit — valid words are added to your list.",
+                    "The current path glows as you trace it.",
+                ]),
+                RuleSection(title: "Ranked Mode", bullets: [
+                    "Both players get the same 4×4 grid.",
+                    "After 90 seconds whoever found more total points wins.",
+                    "Ties go to the player who found the most distinct words.",
                 ]),
             ]
         }

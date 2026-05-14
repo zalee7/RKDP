@@ -6,9 +6,11 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
     case kakuro
     case kenken
     case anagram
+    case wordHunt
+
+    var accentColor: Color { AppTheme.modeAccent(self) }
 
     var id: String { rawValue }
-
     var isComingSoon: Bool { false }
 
     var displayName: String {
@@ -18,6 +20,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .kakuro:      return "Kakuro"
         case .kenken:      return "KenKen"
         case .anagram:     return "Anagram"
+        case .wordHunt:    return "Word Hunt"
         }
     }
 
@@ -32,7 +35,9 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .kenken:
             return "Place digits in each row and column; each cage must hit its arithmetic target."
         case .anagram:
-            return "Unscramble words faster than your opponent in this ranked word battle."
+            return "Unscramble the letters to find the hidden word before your opponent."
+        case .wordHunt:
+            return "Find as many words as possible in the letter grid before time runs out."
         }
     }
 
@@ -43,16 +48,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .kakuro:      return "plus.forwardslash.minus"
         case .kenken:      return "function"
         case .anagram:     return "textformat.abc"
-        }
-    }
-
-    var accentColor: Color {
-        switch self {
-        case .sudoku:      return .blue
-        case .minesweeper: return .red
-        case .kakuro:      return .green
-        case .kenken:      return .orange
-        case .anagram:     return .pink
+        case .wordHunt:    return "magnifyingglass"
         }
     }
 }

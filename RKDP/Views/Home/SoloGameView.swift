@@ -16,8 +16,9 @@ struct SoloGameView: View {
         case .kenken:
             KenKenView(difficulty: difficulty, sessionID: nil)
         case .anagram:
-            // Placeholder until Anagram is implemented
-            ContentUnavailableView("Coming Soon", systemImage: "textformat.abc", description: Text("Anagram mode is in development."))
+            AnagramView(difficulty: difficulty, sessionID: nil)
+        case .wordHunt:
+            WordHuntView(difficulty: difficulty, sessionID: nil)
         }
     }
 }

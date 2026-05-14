@@ -4,6 +4,12 @@ struct ProfileView: View {
     let user: AppUser
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) var dismiss
+    @StateObject private var shop: ShopViewModel
+
+    init(user: AppUser) {
+        self.user = user
+        _shop = StateObject(wrappedValue: ShopViewModel(user: user))
+    }
 
     var body: some View {
         NavigationStack {
@@ -21,7 +27,7 @@ struct ProfileView: View {
                                 .shadow(color: AppTheme.accent.opacity(0.6), radius: 12)
 
                             Text(user.username).font(.title2.bold()).foregroundStyle(AppTheme.textPrimary)
-                            Text("Puzzler")
+                            Text(shop.equippedTitleName)
                                 .font(.subheadline.italic())
                                 .foregroundStyle(AppTheme.accentBright)
                             Text(user.email).font(.caption).foregroundStyle(AppTheme.textSecondary)
