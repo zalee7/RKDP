@@ -19,7 +19,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .minesweeper: return "Minesweeper"
         case .kakuro:      return "Kakuro"
         case .kenken:      return "KenKen"
-        case .anagram:     return "Anagram"
+        case .anagram:     return "Anagrams"
         case .wordHunt:    return "Word Hunt"
         }
     }

@@ -77,10 +77,12 @@ final class AnagramViewModel: ObservableObject {
 
         if word.count < 3 {
             lastResult = .tooShort
+            SoundManager.shared.wordInvalid()
             return
         }
         if foundWords.contains(word) {
             lastResult = .alreadyFound
+            SoundManager.shared.wordInvalid()
             return
         }
         if game.validWords.contains(word) {
@@ -88,8 +90,10 @@ final class AnagramViewModel: ObservableObject {
             let pts = AnagramGame.score(for: word)
             score += pts
             lastResult = .valid(word, pts)
+            SoundManager.shared.wordFound(length: word.count)
         } else {
             lastResult = .invalid
+            SoundManager.shared.wordInvalid()
         }
     }
 
@@ -111,6 +115,8 @@ final class AnagramViewModel: ObservableObject {
                 if self.elapsedSeconds >= total {
                     self.isFinished = true
                     self.timer?.cancel()
+                    SoundManager.shared.gameOver()
+                    SoundManager.shared.resetCombo()
                     self.saveBestScoreIfBeaten()
                 }
             }

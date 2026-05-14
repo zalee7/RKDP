@@ -3,6 +3,7 @@ import SwiftUI
 struct WordHuntView: View {
     @StateObject private var vm: WordHuntViewModel
     @Environment(\.dismiss) var dismiss
+    @State private var lastDragLocation: CGPoint?
 
     init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
         _vm = StateObject(wrappedValue: WordHuntViewModel(
@@ -150,18 +151,40 @@ struct WordHuntView: View {
     private func dragGesture(cellSize: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
-                // Round to nearest cell center so diagonals always hit the right tile.
-                let col = Int((value.location.x / cellSize).rounded())
-                    .clamped(to: 0..<WordHuntGame.gridSize)
-                let row = Int((value.location.y / cellSize).rounded())
-                    .clamped(to: 0..<WordHuntGame.gridSize)
+                let loc = value.location
                 if vm.currentPath.isEmpty {
-                    vm.startPath(row: row, col: col)
-                } else {
-                    vm.extendPath(row: row, col: col)
+                    lastDragLocation = loc
+                    let (r, c) = floorCell(loc, cellSize: cellSize)
+                    vm.startPath(row: r, col: c)
+                } else if let prev = lastDragLocation {
+                    interpolatePath(from: prev, to: loc, cellSize: cellSize)
+                    lastDragLocation = loc
                 }
             }
-            .onEnded { _ in vm.submitPath() }
+            .onEnded { _ in
+                vm.submitPath()
+                lastDragLocation = nil
+            }
+    }
+
+    /// Floor-division mapping: point → (row, col). Correct for every position in the cell.
+    private func floorCell(_ p: CGPoint, cellSize: CGFloat) -> (Int, Int) {
+        let col = max(0, min(WordHuntGame.gridSize - 1, Int(p.x / cellSize)))
+        let row = max(0, min(WordHuntGame.gridSize - 1, Int(p.y / cellSize)))
+        return (row, col)
+    }
+
+    /// Walk the straight line prev→current and feed every new cell to extendPath.
+    private func interpolatePath(from prev: CGPoint, to current: CGPoint, cellSize: CGFloat) {
+        let dx = current.x - prev.x
+        let dy = current.y - prev.y
+        let steps = max(1, Int((max(abs(dx), abs(dy)) / (cellSize * 0.4)).rounded(.up)))
+        for i in 1...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let pt = CGPoint(x: prev.x + dx * t, y: prev.y + dy * t)
+            let (r, c) = floorCell(pt, cellSize: cellSize)
+            vm.extendPath(row: r, col: c)
+        }
     }
 
     // MARK: - Current word display
@@ -352,12 +375,6 @@ private struct GridCell: View {
         .padding(3)
         .animation(.spring(response: 0.2), value: isActive)
     }
-}
-
-// MARK: - Helpers
-
-private extension Int {
-    func clamped(to range: Range<Int>) -> Int { Swift.max(range.lowerBound, Swift.min(range.upperBound - 1, self)) }
 }
 
 // MARK: - Flow layout for missed words

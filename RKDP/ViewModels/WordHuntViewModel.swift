@@ -52,11 +52,16 @@ final class WordHuntViewModel: ObservableObject {
 
     func extendPath(row: Int, col: Int) {
         guard !currentPath.isEmpty else { return }
-        guard !currentPath.contains(where: { $0.row == row && $0.col == col }) else { return }
+
+        // Backtrack: dragging back to an earlier cell trims the path to that point
+        if let existingIdx = currentPath.firstIndex(where: { $0.row == row && $0.col == col }) {
+            currentPath = Array(currentPath[...existingIdx])
+            currentWord = String(currentPath.map { game.grid[$0.row][$0.col] })
+            return
+        }
 
         let last = currentPath.last!
-        let isAdjacent = abs(last.row - row) <= 1 && abs(last.col - col) <= 1
-        guard isAdjacent else { return }
+        guard abs(last.row - row) <= 1, abs(last.col - col) <= 1 else { return }
 
         currentPath.append((row, col))
         currentWord.append(game.grid[row][col])
@@ -72,13 +77,16 @@ final class WordHuntViewModel: ObservableObject {
 
         if foundWords.contains(word) {
             lastWordResult = .alreadyFound
+            SoundManager.shared.wordInvalid()
         } else if game.validWords.contains(word) {
             foundWords.append(word)
             let pts = WordHuntGame.score(for: word)
             score += pts
             lastWordResult = .valid(word, pts)
+            SoundManager.shared.wordFound(length: word.count)
         } else {
             lastWordResult = .invalid
+            SoundManager.shared.wordInvalid()
         }
 
         Task {
@@ -111,6 +119,8 @@ final class WordHuntViewModel: ObservableObject {
                 if self.elapsedSeconds >= self.totalSeconds {
                     self.isFinished = true
                     self.timer?.cancel()
+                    SoundManager.shared.gameOver()
+                    SoundManager.shared.resetCombo()
                     self.saveBestScoreIfBeaten()
                 }
             }
