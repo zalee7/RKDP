@@ -151,7 +151,7 @@ struct MatchmakingView: View {
             .background(Color(.secondarySystemBackground))
 
             // Game board
-            SoloGameView(mode: session.mode, difficulty: session.difficulty)
+            SoloGameView(mode: session.mode, difficulty: session.difficulty, user: vm.user)
 
             // Submit button (normally triggered by game completion)
             Button {
