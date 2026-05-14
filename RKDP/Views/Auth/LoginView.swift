@@ -25,7 +25,7 @@ struct LoginView: View {
                                 .font(.system(size: 38))
                                 .foregroundStyle(.white)
                         }
-                        Text("RKDP")
+                        Text("GridDuel")
                             .font(.system(size: 36, weight: .black))
                             .foregroundStyle(AppTheme.textPrimary)
                         Text("Ranked Puzzle Arena")

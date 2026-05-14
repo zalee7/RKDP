@@ -2,7 +2,7 @@ import SwiftUI
 import FirebaseCore
 
 @main
-struct RKDPApp: App {
+struct GridDuelApp: App {
     @StateObject private var auth = AuthViewModel()
 
     init() {

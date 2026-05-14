@@ -42,7 +42,7 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("RKDP").font(.headline.bold()).foregroundStyle(AppTheme.textPrimary)
+                    Text("GridDuel").font(.headline.bold()).foregroundStyle(AppTheme.textPrimary)
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showShop = true } label: {
