@@ -122,28 +122,48 @@ struct WordHuntView: View {
 
     private var letterGrid: some View {
         GeometryReader { geo in
-            // Each cell owns exactly cellSize × cellSize of the drag coordinate space.
-            // Zero spacing means cell[r][c] center = ((c+0.5)*cellSize, (r+0.5)*cellSize).
             let cellSize = geo.size.width / CGFloat(WordHuntGame.gridSize)
-            let gridView = VStack(spacing: 0) {
-                ForEach(0..<WordHuntGame.gridSize, id: \.self) { row in
-                    HStack(spacing: 0) {
-                        ForEach(0..<WordHuntGame.gridSize, id: \.self) { col in
-                            GridCell(
-                                letter: vm.game.grid[row][col],
-                                isActive: vm.isInPath(row: row, col: col),
-                                pathIndex: vm.pathIndex(row: row, col: col),
-                                cellSize: cellSize
-                            )
+            ZStack(alignment: .topLeading) {
+                // Grid cells — each occupies exactly cellSize × cellSize
+                VStack(spacing: 0) {
+                    ForEach(0..<WordHuntGame.gridSize, id: \.self) { row in
+                        HStack(spacing: 0) {
+                            ForEach(0..<WordHuntGame.gridSize, id: \.self) { col in
+                                GridCell(
+                                    letter: vm.game.grid[row][col],
+                                    isActive: vm.isInPath(row: row, col: col),
+                                    pathIndex: vm.pathIndex(row: row, col: col),
+                                    cellSize: cellSize
+                                )
+                            }
                         }
                     }
                 }
+
+                // Finger trace — drawn over cells, doesn't intercept touches
+                Canvas { context, _ in
+                    let path = vm.currentPath
+                    guard path.count >= 2 else { return }
+                    var tracePath = Path()
+                    for (i, cell) in path.enumerated() {
+                        let pt = CGPoint(
+                            x: (CGFloat(cell.col) + 0.5) * cellSize,
+                            y: (CGFloat(cell.row) + 0.5) * cellSize
+                        )
+                        if i == 0 { tracePath.move(to: pt) } else { tracePath.addLine(to: pt) }
+                    }
+                    context.stroke(
+                        tracePath,
+                        with: .color(.white.opacity(0.55)),
+                        style: StrokeStyle(lineWidth: cellSize * 0.28, lineCap: .round, lineJoin: .round)
+                    )
+                }
+                .allowsHitTesting(false)
+                .animation(.none, value: vm.currentPath.count)
             }
             .frame(width: geo.size.width, height: geo.size.width)
             .contentShape(Rectangle())
             .gesture(dragGesture(cellSize: cellSize))
-
-            gridView
         }
         .aspectRatio(1, contentMode: .fit)
     }
@@ -369,10 +389,10 @@ private struct GridCell: View {
                 }
             }
         }
-        // Frame is the full cellSize so drag coordinates align exactly.
-        // Visual gap comes from padding, not a reduced frame.
+        // Padding inside the frame so each cell occupies exactly cellSize in the layout.
+        // This keeps drag coordinate math accurate across all positions.
+        .padding(4)
         .frame(width: cellSize, height: cellSize)
-        .padding(3)
         .animation(.spring(response: 0.2), value: isActive)
     }
 }

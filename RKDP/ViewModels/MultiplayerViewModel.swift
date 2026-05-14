@@ -28,6 +28,7 @@ final class MultiplayerViewModel: ObservableObject {
 
     // Realtime DB handles
     private var rtdbHandles: [DatabaseHandle] = []
+    private var currentSessionID: String?
     private var gameTimer: Timer?
 
     var user: AppUser?
@@ -98,6 +99,7 @@ final class MultiplayerViewModel: ObservableObject {
     // MARK: - Session
 
     private func listenForBothReady(session: GameSession) {
+        currentSessionID = session.id
         let handle = rtdb.listenForBothReady(sessionID: session.id) { [weak self] in
             Task { @MainActor in
                 self?.state = .inMatch(session: session)
@@ -169,8 +171,10 @@ final class MultiplayerViewModel: ObservableObject {
 
     func reset() {
         tearDownListeners()
-        rtdbHandles.forEach { rtdb.removeObserver(handle: $0, sessionID: "") }
+        let sid = currentSessionID ?? ""
+        rtdbHandles.forEach { rtdb.removeObserver(handle: $0, sessionID: sid) }
         rtdbHandles = []
+        currentSessionID = nil
         gameTimer?.invalidate()
         state = .idle
         elapsedSeconds = 0
