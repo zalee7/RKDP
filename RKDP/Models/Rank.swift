@@ -59,6 +59,20 @@ enum RankTier: Int, Codable, CaseIterable, Comparable {
     }
 }
 
+enum RankDivision: Int, Codable, CaseIterable {
+    case three = 1  // entry level within a tier
+    case two   = 2
+    case one   = 3  // top of tier (closest to promotion)
+
+    var label: String {
+        switch self {
+        case .three: return "III"
+        case .two:   return "II"
+        case .one:   return "I"
+        }
+    }
+}
+
 struct RankInfo: Codable {
     var points: Int
     var tier: RankTier
@@ -76,6 +90,22 @@ struct RankInfo: Codable {
         guard let next = RankTier(rawValue: tier.rawValue + 1) else { return nil }
         return next.pointsRequired - points
     }
+
+    /// Division within the current tier (III = entry, I = top).
+    var division: RankDivision {
+        let lo = tier.pointsRequired
+        let hi = RankTier(rawValue: tier.rawValue + 1)?.pointsRequired ?? (lo + 1500)
+        let span = hi - lo
+        let progress = points - lo
+        switch progress * 3 / span {
+        case 0:  return .three
+        case 1:  return .two
+        default: return .one
+        }
+    }
+
+    /// e.g. "Bronze III", "Gold I", "Master I"
+    var fullDisplayName: String { "\(tier.displayName) \(division.label)" }
 
     static let empty = RankInfo(points: 0, tier: .bronze, wins: 0, losses: 0, bestTime: nil, bestScore: nil)
 }

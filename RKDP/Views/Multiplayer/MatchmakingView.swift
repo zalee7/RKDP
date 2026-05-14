@@ -150,8 +150,8 @@ struct MatchmakingView: View {
             .padding(.vertical, 6)
             .background(Color(.secondarySystemBackground))
 
-            // Game board
-            SoloGameView(mode: session.mode, difficulty: session.difficulty, user: vm.user)
+            // Game board — seed ensures both players get identical puzzle
+            SoloGameView(mode: session.mode, difficulty: session.difficulty, user: vm.user, seed: session.seed)
 
             // Submit button (normally triggered by game completion)
             Button {

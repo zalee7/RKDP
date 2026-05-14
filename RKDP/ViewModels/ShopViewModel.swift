@@ -10,7 +10,7 @@ final class ShopViewModel: ObservableObject {
 
     init(user: AppUser) {
         self.user = user
-        self.ownedCosmetics = .default
+        self.ownedCosmetics = user.cosmetics
     }
 
     // For titles: only show today's rotation + already-owned titles
@@ -64,6 +64,12 @@ final class ShopViewModel: ObservableObject {
         case .numberFont:  ownedCosmetics.equippedNumberFont = item.id
         case .cellBorder:  ownedCosmetics.equippedCellBorder = item.id
         }
+        persistCosmetics()
+    }
+
+    private func persistCosmetics() {
+        let snapshot = ownedCosmetics
+        Task { try? await store.updateCosmetics(userID: user.id, cosmetics: snapshot) }
     }
 
     var equippedTitleName: String {

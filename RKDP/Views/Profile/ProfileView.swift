@@ -116,7 +116,7 @@ struct ModeRankRow: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                RankBadgeView(tier: info.tier)
+                RankBadgeView(tier: info.tier, division: info.division)
                 Text("\(info.points) pts").font(.caption).foregroundStyle(AppTheme.textSecondary)
                 if let best = info.bestScore {
                     Text("Best \(best) pts").font(.system(size: 10)).foregroundStyle(AppTheme.accentBright)

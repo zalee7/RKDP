@@ -8,6 +8,7 @@ struct AppUser: Codable, Identifiable {
     var coins: Int
     var createdAt: Date
     var ranks: [GameMode: RankInfo]
+    var cosmetics: OwnedCosmetics = .default
 
     var totalRankPoints: Int { ranks.values.reduce(0) { $0 + $1.points } }
 
@@ -34,7 +35,7 @@ struct AppUser: Codable, Identifiable {
 
 extension AppUser {
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, coins, createdAt, ranks
+        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics
     }
 
     init(from decoder: Decoder) throws {
@@ -45,6 +46,7 @@ extension AppUser {
         avatarURL = try c.decodeIfPresent(String.self, forKey: .avatarURL)
         coins     = try c.decode(Int.self, forKey: .coins)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
+        cosmetics = (try? c.decode(OwnedCosmetics.self, forKey: .cosmetics)) ?? .default
 
         let rawRanks = try c.decode([String: RankInfo].self, forKey: .ranks)
         var decoded: [GameMode: RankInfo] = [:]
@@ -62,6 +64,7 @@ extension AppUser {
         try c.encodeIfPresent(avatarURL, forKey: .avatarURL)
         try c.encode(coins,     forKey: .coins)
         try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(cosmetics, forKey: .cosmetics)
 
         var rawRanks: [String: RankInfo] = [:]
         for (mode, info) in ranks { rawRanks[mode.rawValue] = info }

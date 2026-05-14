@@ -27,6 +27,11 @@ final class FirestoreService {
         ])
     }
 
+    func updateCosmetics(userID: String, cosmetics: OwnedCosmetics) async throws {
+        let encoded = try Firestore.Encoder().encode(cosmetics)
+        try await db.collection("users").document(userID).updateData(["cosmetics": encoded])
+    }
+
     // MARK: - Rankings / Leaderboards
 
     func fetchLeaderboard(mode: GameMode, limit: Int = 50) async throws -> [LeaderboardEntry] {
@@ -94,9 +99,14 @@ final class FirestoreService {
             "rankTier": tier.rawValue
         ])
 
-        // 2. Look for anyone else already in the queue
+        // 2. Look for anyone else in the queue with the same tier AND same wager
         let snapshot = try await queueRef.getDocuments()
-        let others = snapshot.documents.filter { $0.documentID != user.id }
+        let myTier = tier.rawValue
+        let others = snapshot.documents.filter {
+            $0.documentID != user.id &&
+            ($0.data()["rankTier"] as? Int ?? -1) == myTier &&
+            ($0.data()["wager"]    as? Int ?? -1) == wager
+        }
         guard let opponentDoc = others.first else { return }  // alone — wait for queue listener
 
         let opponentID = opponentDoc.documentID
@@ -120,9 +130,14 @@ final class FirestoreService {
     ) -> ListenerRegistration {
         let queueRef = queueCollection(mode: mode, difficulty: difficulty)
 
+        let myTier = user.rank(for: mode).tier.rawValue
         return queueRef.addSnapshotListener { [weak self] snapshot, _ in
             guard let self, let snapshot else { return }
-            let others = snapshot.documents.filter { $0.documentID != user.id }
+            let others = snapshot.documents.filter {
+                $0.documentID != user.id &&
+                ($0.data()["rankTier"] as? Int ?? -1) == myTier &&
+                ($0.data()["wager"]    as? Int ?? -1) == wager
+            }
             guard let opponentDoc = others.first else { return }
 
             // Only the larger-uid player creates

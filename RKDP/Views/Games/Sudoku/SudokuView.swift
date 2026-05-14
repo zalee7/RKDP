@@ -7,10 +7,10 @@ struct SudokuView: View {
     @StateObject private var vm: SudokuViewModel
     @State private var showComplete = false
 
-    init(difficulty: Difficulty, sessionID: String?) {
+    init(difficulty: Difficulty, sessionID: String?, seed: Int? = nil) {
         self.difficulty = difficulty
         self.sessionID = sessionID
-        _vm = StateObject(wrappedValue: SudokuViewModel(difficulty: difficulty))
+        _vm = StateObject(wrappedValue: SudokuViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {

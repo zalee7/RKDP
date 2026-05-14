@@ -14,9 +14,9 @@ final class SudokuViewModel: ObservableObject {
     private let solution: [[Int]]
     private var timer: AnyCancellable?
 
-    init(difficulty: Difficulty) {
+    init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
-        let (puzzle, sol) = SudokuGenerator.generate(difficulty: difficulty)
+        let (puzzle, sol) = SudokuGenerator.generate(difficulty: difficulty, seed: seed)
         self.solution = sol
         self.board = SudokuBoard(given: puzzle)
         startTimer()

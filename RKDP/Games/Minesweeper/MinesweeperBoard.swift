@@ -56,9 +56,11 @@ struct MinesweeperBoard {
         }
     }
 
+    var seed: Int?
+
     // First reveal seeds mines away from firstTap and its neighbours
     mutating func firstReveal(row: Int, col: Int) {
-        placeMines(avoiding: neighbours(row: row, col: col) + [row * config.cols + col])
+        placeMines(avoiding: neighbours(row: row, col: col) + [row * config.cols + col], seed: seed)
         status = .playing
         reveal(row: row, col: col)
     }
@@ -114,9 +116,16 @@ struct MinesweeperBoard {
         }
     }
 
-    private mutating func placeMines(avoiding excluded: [Int]) {
+    private mutating func placeMines(avoiding excluded: [Int], seed: Int?) {
         let excluded = Set(excluded)
-        var positions = (0..<config.rows * config.cols).filter { !excluded.contains($0) }.shuffled()
+        let allPositions = (0..<config.rows * config.cols).filter { !excluded.contains($0) }
+        var positions: [Int]
+        if let s = seed {
+            var rng = SeededRNG(seed: s)
+            positions = rng.shuffled(allPositions)
+        } else {
+            positions = allPositions.shuffled()
+        }
         for _ in 0..<config.mines {
             guard !positions.isEmpty else { break }
             cells[positions.removeFirst()].hasMine = true

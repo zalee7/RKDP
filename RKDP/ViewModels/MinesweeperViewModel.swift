@@ -14,9 +14,11 @@ final class MinesweeperViewModel: ObservableObject {
     var status: MinesweeperStatus { board.status }
     var isFinished: Bool { board.status == .won || board.status == .lost }
 
-    init(difficulty: Difficulty) {
+    init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
-        board = MinesweeperBoard(config: MinesweeperConfig.from(difficulty))
+        var b = MinesweeperBoard(config: MinesweeperConfig.from(difficulty))
+        b.seed = seed
+        board = b
     }
 
     func tap(row: Int, col: Int) {

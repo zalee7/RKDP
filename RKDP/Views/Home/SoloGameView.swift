@@ -1,17 +1,18 @@
 import SwiftUI
 
-// Routes to the correct game view in solo (unranked) mode
+// Routes to the correct game view. In multiplayer, pass seed so both players get identical puzzles.
 struct SoloGameView: View {
     let mode: GameMode
     let difficulty: Difficulty
     let user: AppUser?
+    var seed: Int? = nil
 
     var body: some View {
         switch mode {
         case .sudoku:
-            SudokuView(difficulty: difficulty, sessionID: nil)
+            SudokuView(difficulty: difficulty, sessionID: nil, seed: seed)
         case .minesweeper:
-            MinesweeperView(difficulty: difficulty, sessionID: nil)
+            MinesweeperView(difficulty: difficulty, sessionID: nil, seed: seed)
         case .kakuro:
             KakuroView(difficulty: difficulty, sessionID: nil)
         case .kenken:

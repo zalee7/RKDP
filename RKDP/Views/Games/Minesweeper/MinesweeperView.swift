@@ -6,10 +6,10 @@ struct MinesweeperView: View {
 
     @StateObject private var vm: MinesweeperViewModel
 
-    init(difficulty: Difficulty, sessionID: String?) {
+    init(difficulty: Difficulty, sessionID: String?, seed: Int? = nil) {
         self.difficulty = difficulty
         self.sessionID = sessionID
-        _vm = StateObject(wrappedValue: MinesweeperViewModel(difficulty: difficulty))
+        _vm = StateObject(wrappedValue: MinesweeperViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {

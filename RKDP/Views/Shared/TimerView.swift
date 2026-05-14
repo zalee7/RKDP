@@ -17,15 +17,22 @@ struct TimerView: View {
 
 struct RankBadgeView: View {
     let tier: RankTier
+    var division: RankDivision? = nil
     var showLabel = true
 
     var body: some View {
         HStack(spacing: 4) {
             Text(tier.icon).font(.subheadline)
             if showLabel {
-                Text(tier.displayName)
-                    .font(.caption.bold())
-                    .foregroundStyle(tier.color)
+                if let div = division {
+                    Text("\(tier.displayName) \(div.label)")
+                        .font(.caption.bold())
+                        .foregroundStyle(tier.color)
+                } else {
+                    Text(tier.displayName)
+                        .font(.caption.bold())
+                        .foregroundStyle(tier.color)
+                }
             }
         }
         .padding(.horizontal, 8)
