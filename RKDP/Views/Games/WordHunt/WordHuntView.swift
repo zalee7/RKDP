@@ -117,10 +117,12 @@ struct WordHuntView: View {
 
     private var letterGrid: some View {
         GeometryReader { geo in
-            let cellSize = (geo.size.width - 12) / CGFloat(WordHuntGame.gridSize)
-            let gridView = VStack(spacing: 4) {
+            // Each cell owns exactly cellSize × cellSize of the drag coordinate space.
+            // Zero spacing means cell[r][c] center = ((c+0.5)*cellSize, (r+0.5)*cellSize).
+            let cellSize = geo.size.width / CGFloat(WordHuntGame.gridSize)
+            let gridView = VStack(spacing: 0) {
                 ForEach(0..<WordHuntGame.gridSize, id: \.self) { row in
-                    HStack(spacing: 4) {
+                    HStack(spacing: 0) {
                         ForEach(0..<WordHuntGame.gridSize, id: \.self) { col in
                             GridCell(
                                 letter: vm.game.grid[row][col],
@@ -134,40 +136,28 @@ struct WordHuntView: View {
             }
             .frame(width: geo.size.width, height: geo.size.width)
             .contentShape(Rectangle())
-            .gesture(dragGesture(in: geo, cellSize: cellSize))
+            .gesture(dragGesture(cellSize: cellSize))
 
             gridView
         }
         .aspectRatio(1, contentMode: .fit)
     }
 
-    private func dragGesture(in geo: GeometryProxy, cellSize: CGFloat) -> some Gesture {
+    private func dragGesture(cellSize: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
-                let (row, col) = nearestCell(to: value.location, cellSize: cellSize)
+                // Round to nearest cell center so diagonals always hit the right tile.
+                let col = Int((value.location.x / cellSize).rounded())
+                    .clamped(to: 0..<WordHuntGame.gridSize)
+                let row = Int((value.location.y / cellSize).rounded())
+                    .clamped(to: 0..<WordHuntGame.gridSize)
                 if vm.currentPath.isEmpty {
                     vm.startPath(row: row, col: col)
                 } else {
                     vm.extendPath(row: row, col: col)
                 }
             }
-            .onEnded { _ in
-                vm.submitPath()
-            }
-    }
-
-    /// Snap touch position to the nearest cell center — handles fast diagonal drags correctly.
-    private func nearestCell(to location: CGPoint, cellSize: CGFloat) -> (row: Int, col: Int) {
-        var bestRow = 0, bestCol = 0, bestDist = CGFloat.infinity
-        for r in 0..<WordHuntGame.gridSize {
-            for c in 0..<WordHuntGame.gridSize {
-                let cx = CGFloat(c) * cellSize + cellSize / 2
-                let cy = CGFloat(r) * cellSize + cellSize / 2
-                let d = hypot(location.x - cx, location.y - cy)
-                if d < bestDist { bestDist = d; bestRow = r; bestCol = c }
-            }
-        }
-        return (bestRow, bestCol)
+            .onEnded { _ in vm.submitPath() }
     }
 
     // MARK: - Current word display
@@ -352,9 +342,18 @@ private struct GridCell: View {
                 }
             }
         }
-        .frame(width: cellSize - 4, height: cellSize - 4)
+        // Frame is the full cellSize so drag coordinates align exactly.
+        // Visual gap comes from padding, not a reduced frame.
+        .frame(width: cellSize, height: cellSize)
+        .padding(3)
         .animation(.spring(response: 0.2), value: isActive)
     }
+}
+
+// MARK: - Helpers
+
+private extension Int {
+    func clamped(to range: Range<Int>) -> Int { Swift.max(range.lowerBound, Swift.min(range.upperBound - 1, self)) }
 }
 
 // MARK: - Flow layout for missed words

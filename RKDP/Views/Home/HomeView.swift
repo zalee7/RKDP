@@ -198,9 +198,9 @@ struct GameModeCardView: View {
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .aspectRatio(1, contentMode: .fit)
-            .background(AppTheme.cardBackground)
+            .background(AppTheme.modeGradient(mode).opacity(0.18))
             .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.cardBorder, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.modeAccent(mode).opacity(0.45), lineWidth: 1.5))
         }
         .buttonStyle(.plain)
     }

@@ -124,7 +124,7 @@ struct AnagramView: View {
         }
     }
 
-    // MARK: - Found words
+    // MARK: - Found words (vertical list)
 
     private var foundWordsScroll: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -142,34 +142,35 @@ struct AnagramView: View {
 
             if vm.foundWords.isEmpty {
                 Text("Start typing to find words!")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(AppTheme.textSecondary)
-                    .padding(.horizontal)
-                    .frame(height: 34)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 10)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 6) {
                         ForEach(vm.sortedFoundWords, id: \.self) { word in
-                            HStack(spacing: 4) {
+                            HStack {
                                 Text(word.capitalized)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                Spacer()
+                                Text("+\(AnagramGame.score(for: word)) pt\(AnagramGame.score(for: word) == 1 ? "" : "s")")
                                     .font(.caption.bold())
-                                Text("+\(AnagramGame.score(for: word))")
-                                    .font(.caption2)
                                     .foregroundStyle(AppTheme.accentBright)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(AppTheme.modeAccent(.anagram).opacity(0.15))
-                            .foregroundStyle(AppTheme.textPrimary)
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(AppTheme.modeAccent(.anagram).opacity(0.3), lineWidth: 1))
-                            .transition(.scale.combined(with: .opacity))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(AppTheme.modeAccent(.anagram).opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.modeAccent(.anagram).opacity(0.25), lineWidth: 1))
+                            .transition(.move(edge: .top).combined(with: .opacity))
                         }
                     }
                     .padding(.horizontal)
                     .animation(.spring(response: 0.3), value: vm.foundWords)
                 }
-                .frame(height: 34)
+                .frame(maxHeight: 160)
             }
         }
     }
