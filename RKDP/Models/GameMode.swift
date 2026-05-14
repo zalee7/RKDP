@@ -51,6 +51,19 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .wordHunt:    return "magnifyingglass"
         }
     }
+
+    var isScoreBased: Bool { self == .anagram || self == .wordHunt }
+
+    var winConditionText: String {
+        switch self {
+        case .sudoku:      return "Fastest to complete the puzzle wins"
+        case .minesweeper: return "Most cells uncovered wins (fastest if both finish)"
+        case .kakuro:      return "Fastest to complete the grid wins"
+        case .kenken:      return "Fastest to complete the grid wins"
+        case .anagram:     return "Most points from words wins"
+        case .wordHunt:    return "Most points from found words wins"
+        }
+    }
 }
 
 enum Difficulty: String, Codable, CaseIterable {

@@ -172,42 +172,92 @@ struct MatchmakingView: View {
 
     private func resultView(session: GameSession) -> some View {
         let isWinner = session.winnerID == user.id
+        let isDraw   = session.winnerID == nil
+        let base     = isDraw ? 5 : (isWinner ? 30 : -15)
+        let rankDelta = Int(Double(base) * session.difficulty.pointMultiplier)
+
+        let myTime       = vm.finishTimes[user.id]
+        let opponentID   = session.players.first(where: { $0.userID != user.id })?.userID ?? ""
+        let opponentTime = vm.finishTimes[opponentID]
+
         return VStack(spacing: 20) {
             Spacer()
-            Text(isWinner ? "Victory! 🏆" : "Defeat 😔")
+            Text(isDraw ? "Draw 🤝" : (isWinner ? "Victory! 🏆" : "Defeat 😔"))
                 .font(.largeTitle.bold())
-                .foregroundStyle(isWinner ? .yellow : .secondary)
+                .foregroundStyle(isDraw ? .orange : (isWinner ? .yellow : .secondary))
 
-            let delta = session.rankPointsDelta(for: user.id)
-            VStack(spacing: 8) {
-                Text("Rank Points: \(delta >= 0 ? "+" : "")\(delta)")
-                    .font(.title3.bold())
-                    .foregroundStyle(delta >= 0 ? .green : .red)
-                if let wager = vm.selectedWager {
-                    let coinDelta = isWinner ? wager.amount : -wager.amount
-                    Text("Coins: \(coinDelta >= 0 ? "+" : "")\(coinDelta)")
-                        .font(.headline)
-                        .foregroundStyle(coinDelta >= 0 ? .green : .red)
+            Text(mode.winConditionText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // Performance breakdown
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    performanceColumn(label: "You", time: myTime, highlight: isWinner)
+                    Divider().frame(height: 60)
+                    performanceColumn(label: "Opponent", time: opponentTime, highlight: !isWinner && !isDraw)
                 }
+                .padding(.vertical, 10)
+
+                Divider()
+
+                HStack(spacing: 0) {
+                    VStack(spacing: 2) {
+                        Text("Rank Points").font(.caption).foregroundStyle(.secondary)
+                        Text("\(rankDelta >= 0 ? "+" : "")\(rankDelta)")
+                            .font(.title3.bold())
+                            .foregroundStyle(rankDelta >= 0 ? .green : .red)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    if let wager = vm.selectedWager {
+                        Divider().frame(height: 40)
+                        let coinDelta = isDraw ? 0 : (isWinner ? wager.amount : -wager.amount)
+                        VStack(spacing: 2) {
+                            Text("Coins").font(.caption).foregroundStyle(.secondary)
+                            Text("\(coinDelta >= 0 ? "+" : "")\(coinDelta)")
+                                .font(.title3.bold())
+                                .foregroundStyle(coinDelta >= 0 ? .green : .red)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 10)
             }
-            .padding()
             .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal)
 
             Button { vm.reset() } label: {
                 Text("Play Again")
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                    .frame(maxWidth: .infinity).padding()
                     .background(mode.accentColor)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
 
-            Button("Back to Home") { dismiss() }
-                .foregroundStyle(.secondary)
+            Button("Back to Home") { dismiss() }.foregroundStyle(.secondary)
             Spacer()
         }
+    }
+
+    private func performanceColumn(label: String, time: Int?, highlight: Bool) -> some View {
+        VStack(spacing: 4) {
+            Text(label).font(.caption.bold()).foregroundStyle(.secondary)
+            if let t = time {
+                Text("\(t / 60):\(String(format: "%02d", t % 60))")
+                    .font(.title2.bold())
+                    .foregroundStyle(highlight ? .green : .primary)
+                Text("finished").font(.system(size: 10)).foregroundStyle(.secondary)
+            } else {
+                Text("—").font(.title2.bold()).foregroundStyle(.secondary)
+                Text("unfinished").font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Error
