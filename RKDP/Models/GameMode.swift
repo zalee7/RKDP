@@ -68,7 +68,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .gridlock:    return "Escape in fewer moves, then faster time"
         case .anagram:     return "Most points from words wins"
         case .wordHunt:    return "Most points from found words wins"
-        case .wordle:      return "First to solve the word wins"
+        case .wordle:      return "Best of 3 shared words; guesses and time break ties"
         }
     }
 }
@@ -142,10 +142,12 @@ extension GameMode {
 
     var rankedDifficulties: [Difficulty] {
         switch self {
-        case .anagram, .wordHunt:
+        case .anagram, .wordHunt, .wordle:
             return Difficulty.allCases
-        case .sudoku, .minesweeper, .colorLink, .gridlock, .wordle:
+        case .sudoku, .minesweeper:
             return [.medium]
+        case .colorLink, .gridlock:
+            return [.expert]
         }
     }
 

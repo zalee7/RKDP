@@ -213,7 +213,9 @@ struct GameModeDetailView: View {
                         onHome: { dismiss() }
                     )
                 } else if dest == "ranked", let user = auth.user {
-                    MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty)
+                    MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty) {
+                        Task { await auth.refreshUser() }
+                    }
                 }
             }
         }

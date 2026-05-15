@@ -4,10 +4,12 @@ struct MatchmakingView: View {
     let user: AppUser
     let mode: GameMode
     let difficulty: Difficulty
+    var onMatchFinished: () -> Void = {}
 
     @StateObject private var vm = MultiplayerViewModel()
     @State private var selectedWager: WagerTier?
     @State private var showBreakdown = false
+    @State private var didNotifyFinished = false
     @Environment(\.dismiss) var dismiss
 
     private var wagerOptions: [WagerTier] {
@@ -38,6 +40,11 @@ struct MatchmakingView: View {
         .navigationTitle("Ranked Match")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { vm.reset() }
+        .onChange(of: vm.finishedSessionID) { _, sessionID in
+            guard sessionID != nil, !didNotifyFinished else { return }
+            didNotifyFinished = true
+            onMatchFinished()
+        }
     }
 
     // MARK: - Wager picker
@@ -49,7 +56,7 @@ struct MatchmakingView: View {
                     Image(systemName: mode.icon)
                         .font(.system(size: 40))
                         .foregroundStyle(mode.accentColor)
-                    Text("\(mode.displayName) · \(difficulty.displayName)")
+                    Text("\(mode.displayName) · \(mode.difficultyLabel(difficulty))")
                         .font(.headline)
                     HStack {
                         Text("Your balance:")
@@ -88,6 +95,7 @@ struct MatchmakingView: View {
 
                 Button {
                     guard let wager = selectedWager else { return }
+                    didNotifyFinished = false
                     Task { await vm.startSearch(user: user, mode: mode, difficulty: difficulty, wager: wager) }
                 } label: {
                     Text("Find Match")
@@ -341,7 +349,10 @@ struct MatchmakingView: View {
             }
             .padding(.horizontal)
 
-            Button { vm.reset() } label: {
+            Button {
+                didNotifyFinished = false
+                vm.reset()
+            } label: {
                 Text("Play Again")
                     .frame(maxWidth: .infinity).padding()
                     .background(mode.accentColor)
@@ -371,10 +382,14 @@ struct MatchmakingView: View {
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             } else {
                 Text("—").font(.title2.bold()).foregroundStyle(.secondary)
-                Text("waiting").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(sessionModeMissingResultText).font(.system(size: 10)).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var sessionModeMissingResultText: String {
+        mode == .wordle ? "not finished" : "waiting"
     }
 
     // MARK: - Error
@@ -411,7 +426,7 @@ struct MatchBreakdownView: View {
                         if let result = results[player.userID] {
                             breakdownRows(for: result)
                         } else {
-                            Text("No result submitted yet.")
+                            Text(session.mode == .wordle ? "Not finished before clinch." : "No result submitted yet.")
                                 .foregroundStyle(.secondary)
                         }
                     }

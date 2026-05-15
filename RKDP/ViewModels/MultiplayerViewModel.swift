@@ -19,6 +19,7 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var elapsedSeconds: Int = 0
     @Published var opponentUser: AppUser? = nil
     @Published var matchCountdown: Int = 5
+    @Published var finishedSessionID: String?
     private var countdownTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
@@ -61,6 +62,7 @@ final class MultiplayerViewModel: ObservableObject {
         opponentUser = nil
         elapsedSeconds = 0
         matchCountdown = 5
+        finishedSessionID = nil
 
         self.user = user
         self.mode = mode
@@ -205,6 +207,7 @@ final class MultiplayerViewModel: ObservableObject {
             try await ranking.processOutcome(outcome)
             let updated = try await store.fetchSession(id: session.id)
             state = .finished(session: updated)
+            finishedSessionID = updated.id
         } catch {
             state = .error(error.localizedDescription)
         }
@@ -249,6 +252,7 @@ final class MultiplayerViewModel: ObservableObject {
         playerResults = [:]
         opponentUser = nil
         selectedWager = nil
+        finishedSessionID = nil
     }
 
     private func isCurrentSearch(_ searchID: UUID) -> Bool {

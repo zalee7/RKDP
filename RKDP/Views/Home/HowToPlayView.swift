@@ -233,8 +233,8 @@ struct HowToPlayView: View {
                     "The keyboard updates after each guess so you can track letters.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same shared words.",
-                    "Solve more rounds than your opponent; guesses and time break ties.",
+                    "Both players receive the same shared words in a best-of-3 match.",
+                    "Solving 2 rounds wins immediately; guesses and time break ties if both finish.",
                     "Difficulty controls how many guesses you get (4–7).",
                 ]),
             ]
