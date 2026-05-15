@@ -37,7 +37,7 @@ final class SoundManager {
     }
 
     func playOnlineGameLoop() {
-        playLoop(.inOnlineGame, volume: 0.28)
+        playLoop(.inOnlineGame, volume: 0.14)
     }
 
     func stopOnlineGameLoop() {

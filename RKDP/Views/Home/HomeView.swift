@@ -29,12 +29,25 @@ struct HomeView: View {
                         }
                         .padding(.horizontal)
 
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                            ForEach(GameMode.allCases) { mode in
-                                GameModeCardView(mode: mode, user: auth.user) { selectedMode = mode }
+                        VStack(spacing: 18) {
+                            HomeGameCategorySection(
+                                title: "Grid Games",
+                                subtitle: "Paths, boards, mines, and symmetry",
+                                modes: [.colorLink, .gridlock, .sudoku, .minesweeper],
+                                user: auth.user
+                            ) { mode in
+                                selectedMode = mode
+                            }
+
+                            HomeGameCategorySection(
+                                title: "Word Games",
+                                subtitle: "Guesses, searches, and fast vocabulary plays",
+                                modes: [.wordle, .wordHunt, .anagram],
+                                user: auth.user
+                            ) { mode in
+                                selectedMode = mode
                             }
                         }
-                        .padding(.horizontal)
                         .padding(.bottom, 24)
                     }
                     .padding(.top, 12)
@@ -87,6 +100,41 @@ struct HomeView: View {
             Spacer()
         }
         .padding(.horizontal)
+    }
+}
+
+private struct HomeGameCategorySection: View {
+    let title: String
+    let subtitle: String
+    let modes: [GameMode]
+    let user: AppUser?
+    let onSelect: (GameMode) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            .padding(.horizontal)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(modes) { mode in
+                        GameModeCardView(mode: mode, user: user) {
+                            onSelect(mode)
+                        }
+                        .frame(width: 172, height: 172)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 2)
+            }
+        }
     }
 }
 

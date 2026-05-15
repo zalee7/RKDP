@@ -61,7 +61,8 @@ final class RankingService {
                         }
 
                         let result = outcome.playerResults[player.userID]
-                        if isWinner, result?.completed == true, let time = result?.elapsedSeconds {
+                        let wonByForfeit = result?.status == "Won by forfeit"
+                        if isWinner, !wonByForfeit, result?.completed == true, let time = result?.elapsedSeconds {
                             rankInfo.bestTime = min(rankInfo.bestTime ?? Int.max, time)
                         }
                         if isWinner, outcome.mode.isScoreBased, let score = result?.score {

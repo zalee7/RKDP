@@ -10,10 +10,26 @@ struct MatchmakingView: View {
     @State private var selectedWager: WagerTier?
     @State private var showBreakdown = false
     @State private var didNotifyFinished = false
+    @State private var inMatchMusicEnabled = true
+    @State private var showForfeitWarning = false
     @Environment(\.dismiss) var dismiss
 
     private var wagerOptions: [WagerTier] {
         Wager.options(for: user.rank(for: mode).tier)
+    }
+
+    private var shouldBlockDismiss: Bool {
+        switch vm.state {
+        case .matchFound, .inMatch:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var activeInMatchSession: GameSession? {
+        if case .inMatch(let session) = vm.state { return session }
+        return nil
     }
 
     var body: some View {
@@ -39,14 +55,25 @@ struct MatchmakingView: View {
         .foregroundStyle(AppTheme.textPrimary)
         .navigationTitle("Ranked Match")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(shouldBlockDismiss)
+        .interactiveDismissDisabled(shouldBlockDismiss)
         .onDisappear {
             SoundManager.shared.stopAllLoops()
-            vm.reset()
+            vm.handleViewDisappeared()
         }
         .onChange(of: vm.finishedSessionID) { _, sessionID in
             guard sessionID != nil, !didNotifyFinished else { return }
             didNotifyFinished = true
             onMatchFinished()
+        }
+        .alert("Forfeit ranked match?", isPresented: $showForfeitWarning) {
+            Button("Keep Playing", role: .cancel) {}
+            Button("Forfeit", role: .destructive) {
+                guard let session = activeInMatchSession else { return }
+                Task { await vm.forfeitMatch(session: session) }
+            }
+        } message: {
+            Text("Quitting now counts as a ranked loss and forfeits your wager.")
         }
     }
 
@@ -99,6 +126,7 @@ struct MatchmakingView: View {
                 Button {
                     guard let wager = selectedWager else { return }
                     didNotifyFinished = false
+                    inMatchMusicEnabled = true
                     Task { await vm.startSearch(user: user, mode: mode, difficulty: difficulty, wager: wager) }
                 } label: {
                     Text("Find Match")
@@ -230,7 +258,7 @@ struct MatchmakingView: View {
     private func inMatchView(session: GameSession) -> some View {
         VStack(spacing: 0) {
             // Opponent status bar
-            HStack {
+            HStack(spacing: 10) {
                 Label("Opponent", systemImage: "person.fill")
                 Spacer()
                 if let oppResult = vm.playerResults.first(where: { $0.key != user.id })?.value {
@@ -239,6 +267,24 @@ struct MatchmakingView: View {
                 } else {
                     Text("In progress…").foregroundStyle(AppTheme.textSecondary)
                 }
+                Button {
+                    toggleInMatchMusic()
+                } label: {
+                    Image(systemName: inMatchMusicEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(inMatchMusicEnabled ? AppTheme.accentBright : AppTheme.textSecondary)
+
+                Button {
+                    showForfeitWarning = true
+                } label: {
+                    Label("Quit", systemImage: "flag.slash.fill")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(AppTheme.danger)
             }
             .font(.caption)
             .padding(.horizontal)
@@ -275,9 +321,20 @@ struct MatchmakingView: View {
         }
         .onAppear {
             SoundManager.shared.stopMatchmakingLoop()
-            SoundManager.shared.playOnlineGameLoop()
+            if inMatchMusicEnabled {
+                SoundManager.shared.playOnlineGameLoop()
+            }
         }
         .onDisappear { SoundManager.shared.stopOnlineGameLoop() }
+    }
+
+    private func toggleInMatchMusic() {
+        inMatchMusicEnabled.toggle()
+        if inMatchMusicEnabled {
+            SoundManager.shared.playOnlineGameLoop()
+        } else {
+            SoundManager.shared.stopOnlineGameLoop()
+        }
     }
 
     // MARK: - Result

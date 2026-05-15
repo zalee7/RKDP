@@ -29,12 +29,14 @@ final class MultiplayerViewModel: ObservableObject {
     // Firestore listeners
     private var userDocListener: ListenerRegistration?
     private var queueListener: ListenerRegistration?
+    private var sessionListener: ListenerRegistration?
 
     // Realtime DB handles
     private var rtdbHandles: [DatabaseHandle] = []
     private var currentSessionID: String?
     private var gameTimer: Timer?
     private var activeSearchID: UUID?
+    private var isForfeiting = false
 
     var user: AppUser?
     var mode: GameMode = .sudoku
@@ -158,9 +160,25 @@ final class MultiplayerViewModel: ObservableObject {
                 self?.state = .inMatch(session: session)
                 self?.startGameTimer()
                 self?.listenForResults(session: session)
+                self?.listenForSessionStatus(sessionID: session.id)
             }
         }
         rtdbHandles.append(handle)
+    }
+
+    private func listenForSessionStatus(sessionID: String) {
+        sessionListener?.remove()
+        sessionListener = store.listenForSession(id: sessionID) { [weak self] session in
+            Task { @MainActor in
+                guard let self, session.status == .finished else { return }
+                self.gameTimer?.invalidate()
+                if let results = session.playerResults {
+                    self.playerResults = results
+                }
+                self.state = .finished(session: session)
+                self.finishedSessionID = session.id
+            }
+        }
     }
 
     func submitResult(_ result: MatchPlayerResult, session: GameSession) async {
@@ -213,6 +231,72 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    func forfeitMatch(session: GameSession, resetAfterProcessing: Bool = false) async {
+        guard !isForfeiting,
+              case .inMatch = state,
+              let forfeiter = user,
+              let opponent = session.players.first(where: { $0.userID != forfeiter.id }) else { return }
+
+        isForfeiting = true
+        gameTimer?.invalidate()
+
+        let forfeiterResult = MatchPlayerResult(
+            userID: forfeiter.id,
+            mode: session.mode,
+            completed: false,
+            elapsedSeconds: elapsedSeconds,
+            score: 0,
+            progress: 0,
+            status: "Forfeited",
+            summary: ["forfeit": "true"],
+            details: ["Quit the active ranked match."]
+        )
+
+        let opponentResult = playerResults[opponent.userID] ?? MatchPlayerResult(
+            userID: opponent.userID,
+            mode: session.mode,
+            completed: true,
+            elapsedSeconds: elapsedSeconds,
+            score: 0,
+            progress: 0,
+            status: "Won by forfeit",
+            summary: ["forfeitWin": "true"],
+            details: ["Opponent forfeited before the match was completed."]
+        )
+
+        var results = playerResults
+        results[forfeiter.id] = forfeiterResult
+        results[opponent.userID] = opponentResult
+        playerResults = results
+
+        let outcome = RankingService.MatchOutcome(
+            sessionID: session.id,
+            mode: session.mode,
+            difficulty: session.difficulty,
+            winnerID: opponent.userID,
+            players: session.players.map { p in
+                var mp = p
+                mp.finishTime = results[p.userID]?.elapsedSeconds
+                return mp
+            },
+            playerResults: results,
+            winnerReason: "Opponent forfeited"
+        )
+
+        do {
+            try await ranking.processOutcome(outcome)
+            let updated = try await store.fetchSession(id: session.id)
+            state = .finished(session: updated)
+            finishedSessionID = updated.id
+            if resetAfterProcessing {
+                reset()
+            }
+        } catch {
+            state = .error(error.localizedDescription)
+        }
+        isForfeiting = false
+    }
+
     // MARK: - Helpers
 
     private func startGameTimer() {
@@ -227,6 +311,8 @@ final class MultiplayerViewModel: ObservableObject {
         userDocListener = nil
         queueListener?.remove()
         queueListener = nil
+        sessionListener?.remove()
+        sessionListener = nil
     }
 
     func reset() {
@@ -253,6 +339,15 @@ final class MultiplayerViewModel: ObservableObject {
         opponentUser = nil
         selectedWager = nil
         finishedSessionID = nil
+        isForfeiting = false
+    }
+
+    func handleViewDisappeared() {
+        if case .inMatch(let session) = state, finishedSessionID == nil, !isForfeiting {
+            Task { await forfeitMatch(session: session, resetAfterProcessing: true) }
+        } else {
+            reset()
+        }
     }
 
     private func isCurrentSearch(_ searchID: UUID) -> Bool {

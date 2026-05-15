@@ -70,6 +70,14 @@ final class FirestoreService {
         try await db.collection("sessions").document(id).getDocument(as: GameSession.self)
     }
 
+    func listenForSession(id: String, onChange: @escaping (GameSession) -> Void) -> ListenerRegistration {
+        db.collection("sessions").document(id)
+            .addSnapshotListener { snapshot, _ in
+                guard let snapshot, let session = try? snapshot.data(as: GameSession.self) else { return }
+                onChange(session)
+            }
+    }
+
     func updateSession(_ session: GameSession) async throws {
         try db.collection("sessions").document(session.id).setData(from: session, merge: true)
     }
