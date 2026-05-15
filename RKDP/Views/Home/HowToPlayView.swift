@@ -20,7 +20,8 @@ struct HowToPlayView: View {
                     gameGuide(for: .kenken).tag(3)
                     gameGuide(for: .anagram).tag(4)
                     gameGuide(for: .wordHunt).tag(5)
-                    RankGuideView().tag(6)
+                    gameGuide(for: .wordle).tag(6)
+                    RankGuideView().tag(7)
                 }
                 .tabViewStyle(.page)
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
@@ -217,6 +218,25 @@ struct HowToPlayView: View {
                     "Both players get the same 4×4 grid.",
                     "After 90 seconds whoever found more total points wins.",
                     "Ties go to the player who found the most distinct words.",
+                ]),
+            ]
+        case .wordle:
+            return [
+                RuleSection(title: "Objective", bullets: [
+                    "Guess the secret 5-letter word within your allotted attempts.",
+                    "Each guess must be a valid 5-letter word — tap ENTER to submit.",
+                    "Solo mode is best-of-3 rounds: win 2 rounds to claim victory.",
+                ]),
+                RuleSection(title: "Color Feedback", bullets: [
+                    "🟩 Green — correct letter in the correct position.",
+                    "🟨 Yellow — the letter is in the word but in the wrong spot.",
+                    "⬛ Gray — the letter does not appear in the word at all.",
+                    "The keyboard updates after each guess so you can track letters.",
+                ]),
+                RuleSection(title: "Ranked Mode", bullets: [
+                    "Both players receive the same hidden word.",
+                    "First to solve it wins — faster solves break ties.",
+                    "Difficulty controls how many guesses you get (4–7).",
                 ]),
             ]
         }

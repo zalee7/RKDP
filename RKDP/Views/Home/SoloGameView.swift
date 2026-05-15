@@ -22,6 +22,8 @@ struct SoloGameView: View {
                 AnagramView(difficulty: difficulty, user: user)
             case .wordHunt:
                 WordHuntView(difficulty: difficulty, user: user)
+            case .wordle:
+                WordleView(difficulty: difficulty, user: user, seed: seed)
             }
         }
         .environment(\.boardCosmetics, user?.cosmetics ?? .default)

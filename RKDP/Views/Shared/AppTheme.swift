@@ -41,6 +41,9 @@ enum AppTheme {
         case .wordHunt:
             return LinearGradient(colors: [Color(hex: "4CC9F0"), Color(hex: "4361EE")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .wordle:
+            return LinearGradient(colors: [Color(hex: "538D4E"), Color(hex: "6AAB9C")],
+                                  startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -52,6 +55,7 @@ enum AppTheme {
         case .kenken:      return Color(hex: "FFBE0B").opacity(0.5)
         case .anagram:     return Color(hex: "F72585").opacity(0.5)
         case .wordHunt:    return Color(hex: "4CC9F0").opacity(0.5)
+        case .wordle:      return Color(hex: "538D4E").opacity(0.5)
         }
     }
 
@@ -64,6 +68,7 @@ enum AppTheme {
         case .kenken:      return Color(hex: "FFBE0B")
         case .anagram:     return Color(hex: "F72585")
         case .wordHunt:    return Color(hex: "4361EE")
+        case .wordle:      return Color(hex: "538D4E")
         }
     }
 }
