@@ -64,7 +64,7 @@ struct GridlockBoard: Codable, Equatable {
 
     mutating func move(vehicleID: String, delta: Int) -> Bool {
         guard let index = vehicles.firstIndex(where: { $0.id == vehicleID }) else { return false }
-        guard canMove(vehicle: vehicles[index], delta: delta) else { return false }
+        guard canMove(piece: vehicles[index], delta: delta) else { return false }
         switch vehicles[index].orientation {
         case .horizontal:
             vehicles[index].col += delta
