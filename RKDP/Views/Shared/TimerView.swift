@@ -47,12 +47,24 @@ struct CoinBadgeView: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: "circle.fill")
-                .foregroundStyle(.yellow)
-                .font(.caption)
+            CoinIconView(size: 16)
             Text("\(amount)")
                 .font(.subheadline.bold())
         }
+    }
+}
+
+struct CoinIconView: View {
+    var size: CGFloat = 18
+
+    var body: some View {
+        Image("CoinAsset")
+            .resizable()
+            .scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.white.opacity(0.75), lineWidth: max(1, size * 0.06)))
+            .shadow(color: AppTheme.crownGold.opacity(0.45), radius: size * 0.18, x: 0, y: size * 0.08)
     }
 }
 

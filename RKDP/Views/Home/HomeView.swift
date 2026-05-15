@@ -566,13 +566,6 @@ struct GameModeCardView: View {
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(Color.white.opacity(0.58), lineWidth: 1.2)
             )
-            .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(AppTheme.modeGradient(mode))
-                    .frame(height: 4)
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
-            }
             .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
         }
         .buttonStyle(.plain)
@@ -586,7 +579,7 @@ struct GameModeCardView: View {
                 .fill(AppTheme.cardBackground)
             RoundedRectangle(cornerRadius: 20)
                 .fill(AppTheme.modeGradient(mode))
-                .opacity(0.10)
+                .opacity(0.22)
             RoundedRectangle(cornerRadius: 20)
                 .stroke(AppTheme.modeAccent(mode).opacity(0.55), lineWidth: 1)
                 .padding(1)

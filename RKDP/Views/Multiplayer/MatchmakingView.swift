@@ -609,9 +609,11 @@ struct WagerOptionRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.label).font(.headline)
-                    Text("\(option.amount) coins").font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    CoinIconView(size: 28)
+                    Text("\(option.amount)")
+                        .font(.title3.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
                 }
                 Spacer()
                 if !canAfford {
