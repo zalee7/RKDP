@@ -12,32 +12,33 @@ struct HomeView: View {
             ZStack {
                 AppTheme.backgroundGradient.ignoresSafeArea()
 
-                VStack(spacing: 20) {
-                    if let user = auth.user { userHeader(user: user) }
+                ScrollView {
+                    VStack(spacing: 20) {
+                        if let user = auth.user { userHeader(user: user) }
 
-                    HStack {
-                        Text("Choose Your Game")
-                            .font(.title2.bold())
-                            .foregroundStyle(AppTheme.textPrimary)
-                        Spacer()
-                        Button { showHowToPlay = true } label: {
-                            Image(systemName: "questionmark.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(AppTheme.accentBright)
+                        HStack {
+                            Text("Choose Your Game")
+                                .font(.title2.bold())
+                                .foregroundStyle(AppTheme.textPrimary)
+                            Spacer()
+                            Button { showHowToPlay = true } label: {
+                                Image(systemName: "questionmark.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(AppTheme.accentBright)
+                            }
                         }
-                    }
-                    .padding(.horizontal)
+                        .padding(.horizontal)
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        ForEach(GameMode.allCases) { mode in
-                            GameModeCardView(mode: mode, user: auth.user) { selectedMode = mode }
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                            ForEach(GameMode.allCases) { mode in
+                                GameModeCardView(mode: mode, user: auth.user) { selectedMode = mode }
+                            }
                         }
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
                     }
-                    .padding(.horizontal)
-
-                    Spacer()
+                    .padding(.top, 12)
                 }
-                .padding(.top, 12)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
