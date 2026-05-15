@@ -96,64 +96,92 @@ struct GameModeDetailView: View {
     let mode: GameMode
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) var dismiss
-    @State private var selectedDifficulty: Difficulty = .medium
+    @State private var selectedDifficulty: Difficulty = .easy
     @State private var destination: NavigationPath = .init()
+
+    private var user: AppUser? { auth.user }
+    private var rankInfo: RankInfo { user?.rank(for: mode) ?? .empty }
+    private var soloLockedReason: String? {
+        user?.soloUnlockReason(mode: mode, difficulty: selectedDifficulty)
+    }
+    private var rankedLockedReason: String? {
+        mode.rankedLockReason(for: selectedDifficulty)
+    }
 
     var body: some View {
         NavigationStack(path: $destination) {
             ZStack {
                 AppTheme.backgroundGradient.ignoresSafeArea()
 
-                VStack(spacing: 24) {
-                    VStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(AppTheme.modeGradient(mode))
-                            .frame(width: 80, height: 80)
-                            .overlay(Image(systemName: mode.icon).font(.system(size: 36)).foregroundStyle(.white))
-                            .shadow(color: AppTheme.modeShadow(mode), radius: 14)
-                        Text(mode.displayName).font(.title.bold()).foregroundStyle(AppTheme.textPrimary)
-                        Text(mode.description)
-                            .font(.subheadline).foregroundStyle(AppTheme.textSecondary)
-                            .multilineTextAlignment(.center).padding(.horizontal)
-                    }
+                ScrollView {
+                    VStack(spacing: 18) {
+                        ModeLobbyHeader(mode: mode)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(mode == .anagram ? "Word Length" : "Difficulty")
-                            .font(.headline).foregroundStyle(AppTheme.textPrimary)
-                        Picker("Difficulty", selection: $selectedDifficulty) {
-                            ForEach(Difficulty.allCases, id: \.self) { d in
-                                Text(mode.difficultyLabel(d)).tag(d)
+                        VStack(spacing: 10) {
+                            HStack {
+                                ModeFactRow(icon: "trophy.fill", title: "Rank", value: rankInfo.fullDisplayName, color: rankInfo.tier.color)
+                                ModeFactRow(icon: "flag.checkered.2.crossed", title: "Win", value: mode.winConditionText, color: mode.accentColor)
+                            }
+                            HStack {
+                                ModeFactRow(icon: "timer", title: "Ranked timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
+                                ModeFactRow(icon: "star.fill", title: "Multiplier", value: "x\(String(format: "%.1f", selectedDifficulty.pointMultiplier))", color: .yellow)
                             }
                         }
-                        .pickerStyle(.segmented)
-                    }
-                    .padding(.horizontal)
-
-                    Divider().overlay(Color.white.opacity(0.12))
-
-                    VStack(spacing: 12) {
-                        NavigationLink(value: "solo") {
-                            Label("Play Solo", systemImage: "person.fill")
-                                .frame(maxWidth: .infinity).padding()
-                                .background(AppTheme.brandGradient)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .shadow(color: AppTheme.accent.opacity(0.4), radius: 8)
-                        }
                         .padding(.horizontal)
 
-                        NavigationLink(value: "ranked") {
-                            Label("Ranked Match", systemImage: "flag.checkered.2.crossed")
-                                .frame(maxWidth: .infinity).padding()
-                                .background(Color.white.opacity(0.08))
-                                .foregroundStyle(AppTheme.textPrimary)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.accent, lineWidth: 1.5))
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text(mode == .anagram ? "Word Length" : "Difficulty")
+                                    .font(.headline)
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                Spacer()
+                                Text(bestSummary)
+                                    .font(.caption.bold())
+                                    .foregroundStyle(AppTheme.accentBright)
+                            }
+                            .padding(.horizontal)
+
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                ForEach(Difficulty.allCases, id: \.self) { difficulty in
+                                    DifficultyCardView(
+                                        mode: mode,
+                                        difficulty: difficulty,
+                                        isSelected: selectedDifficulty == difficulty,
+                                        soloLockedReason: user?.soloUnlockReason(mode: mode, difficulty: difficulty),
+                                        rankedLockedReason: mode.rankedLockReason(for: difficulty)
+                                    ) {
+                                        selectedDifficulty = difficulty
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        VStack(spacing: 12) {
+                            LobbyActionButton(
+                                title: soloLockedReason == nil ? "Play Solo" : "Solo Locked",
+                                subtitle: soloLockedReason ?? "Practice \(mode.difficultyLabel(selectedDifficulty))",
+                                icon: soloLockedReason == nil ? "person.fill" : "lock.fill",
+                                gradient: AppTheme.brandGradient,
+                                disabled: soloLockedReason != nil
+                            ) {
+                                destination.append("solo")
+                            }
+
+                            LobbyActionButton(
+                                title: rankedLockedReason == nil ? "Ranked Match" : "Ranked Locked",
+                                subtitle: rankedLockedReason ?? "Queue \(mode.difficultyLabel(selectedDifficulty))",
+                                icon: rankedLockedReason == nil ? "flag.checkered.2.crossed" : "lock.fill",
+                                gradient: AppTheme.modeGradient(mode),
+                                disabled: rankedLockedReason != nil || user == nil
+                            ) {
+                                destination.append("ranked")
+                            }
                         }
                         .padding(.horizontal)
+                        .padding(.bottom, 24)
                     }
-
-                    Spacer()
+                    .padding(.top, 16)
                 }
             }
             .navigationTitle(mode.displayName)
@@ -166,12 +194,248 @@ struct GameModeDetailView: View {
             }
             .navigationDestination(for: String.self) { dest in
                 if dest == "solo" {
-                    SoloGameView(mode: mode, difficulty: selectedDifficulty, user: auth.user)
+                    SoloGameView(
+                        mode: mode,
+                        difficulty: selectedDifficulty,
+                        user: auth.user,
+                        onSoloResult: { result in
+                            Task { await auth.recordSoloResult(result) }
+                        },
+                        onPlayAgain: {},
+                        onChangeDifficulty: { destination.removeLast() },
+                        onTryRanked: {
+                            selectedDifficulty = mode.rankedDifficulties.first ?? .medium
+                            destination.removeLast()
+                            if auth.user != nil {
+                                destination.append("ranked")
+                            }
+                        },
+                        onHome: { dismiss() }
+                    )
                 } else if dest == "ranked", let user = auth.user {
                     MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty)
                 }
             }
         }
+    }
+
+    private var bestSummary: String {
+        switch mode {
+        case .gridlock:
+            if let moves = rankInfo.bestMoves { return "Best \(moves) moves" }
+            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
+        case .wordle:
+            if let guesses = rankInfo.bestGuesses { return "Best \(guesses) guesses" }
+            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
+        case .anagram, .wordHunt:
+            if let score = rankInfo.bestScore { return "Best \(score) pts" }
+        case .colorLink:
+            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))% fill" }
+            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
+        case .minesweeper:
+            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
+            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))%" }
+        case .sudoku:
+            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
+        }
+        return "No solo best yet"
+    }
+}
+
+private struct ModeLobbyHeader: View {
+    let mode: GameMode
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(AppTheme.modeGradient(mode))
+                    .frame(height: 150)
+                    .shadow(color: AppTheme.modeShadow(mode), radius: 18)
+                HStack(spacing: 18) {
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.white.opacity(0.18))
+                        .frame(width: 84, height: 84)
+                        .overlay(Image(systemName: mode.icon).font(.system(size: 38, weight: .bold)).foregroundStyle(.white))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(mode.displayName)
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.white)
+                        Text(mode.description)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(3)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(18)
+            }
+            ModeMiniPreview(mode: mode)
+        }
+        .padding(.horizontal)
+    }
+}
+
+private struct ModeMiniPreview: View {
+    let mode: GameMode
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<18, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(previewColor(index))
+                    .frame(height: 18)
+            }
+        }
+        .padding(10)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private func previewColor(_ index: Int) -> Color {
+        switch mode {
+        case .colorLink:
+            return [.red, .blue, .green, .orange, .purple, .cyan][index % 6].opacity(index % 3 == 0 ? 1 : 0.45)
+        case .gridlock:
+            return index % 5 == 0 ? .red : AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
+        case .wordle:
+            return [Color(hex: "538D4E"), Color(hex: "C9B458"), Color(hex: "3A3A3C")][index % 3]
+        default:
+            return AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
+        }
+    }
+}
+
+private struct ModeFactRow: View {
+    let icon: String
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                Text(value).font(.caption.bold()).foregroundStyle(AppTheme.textPrimary).lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 64)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+}
+
+private struct DifficultyCardView: View {
+    let mode: GameMode
+    let difficulty: Difficulty
+    let isSelected: Bool
+    let soloLockedReason: String?
+    let rankedLockedReason: String?
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(mode.difficultyLabel(difficulty))
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(AppTheme.accentBright)
+                    }
+                }
+
+                Text("x\(String(format: "%.1f", difficulty.pointMultiplier)) reward")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+
+                HStack(spacing: 6) {
+                    availabilityBadge("Solo", locked: soloLockedReason != nil)
+                    availabilityBadge("Ranked", locked: rankedLockedReason != nil)
+                }
+
+                if let soloLockedReason {
+                    Text(soloLockedReason)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                } else if let rankedLockedReason {
+                    Text(rankedLockedReason)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+            .background(isSelected ? AppTheme.modeGradient(mode).opacity(0.32) : AppTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSelected ? AppTheme.accentBright : AppTheme.cardBorder, lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func availabilityBadge(_ label: String, locked: Bool) -> some View {
+        Label(label, systemImage: locked ? "lock.fill" : "checkmark.circle.fill")
+            .font(.caption2.bold())
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background((locked ? Color.white.opacity(0.08) : Color.green.opacity(0.18)))
+            .foregroundStyle(locked ? AppTheme.textSecondary : .green)
+            .clipShape(Capsule())
+    }
+}
+
+private struct LobbyActionButton: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let gradient: LinearGradient
+    let disabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.title3.bold())
+                    .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.headline.bold())
+                    Text(subtitle).font(.caption).opacity(0.8)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+            }
+            .padding()
+            .background(disabled ? AnyShapeStyle(Color.white.opacity(0.08)) : AnyShapeStyle(gradient))
+            .foregroundStyle(disabled ? AppTheme.textSecondary : .white)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(disabled ? AppTheme.cardBorder : Color.white.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+}
+
+extension Difficulty {
+    func rankedTimeLabel(for mode: GameMode) -> String {
+        let seconds = rankedTimeLimit(for: mode)
+        guard seconds > 0 else { return "Untimed" }
+        return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
     }
 }
 

@@ -8,18 +8,34 @@ struct WordHuntView: View {
     private let userID: String?
     private let sessionID: String?
     private let onMatchResult: (MatchPlayerResult) -> Void
+    private let onSoloResult: (SoloGameResult) -> Void
+    private let onPlayAgain: () -> Void
+    private let onChangeDifficulty: () -> Void
+    private let onTryRanked: () -> Void
+    private let onHome: () -> Void
     @State private var didReportMatchResult = false
+    @State private var didReportSoloResult = false
 
     init(
         difficulty: Difficulty,
         user: AppUser? = nil,
         sessionID: String? = nil,
         seed: Int? = nil,
-        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
+        onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
+        onPlayAgain: @escaping () -> Void = {},
+        onChangeDifficulty: @escaping () -> Void = {},
+        onTryRanked: @escaping () -> Void = {},
+        onHome: @escaping () -> Void = {}
     ) {
         self.userID = user?.id
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
+        self.onSoloResult = onSoloResult
+        self.onPlayAgain = onPlayAgain
+        self.onChangeDifficulty = onChangeDifficulty
+        self.onTryRanked = onTryRanked
+        self.onHome = onHome
         _vm = StateObject(wrappedValue: WordHuntViewModel(
             difficulty: difficulty,
             userID: user?.id,
@@ -56,7 +72,10 @@ struct WordHuntView: View {
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
         .onChange(of: vm.isFinished) { _, finished in
-            if finished { reportMatchResult() }
+            if finished {
+                if sessionID == nil { reportSoloResult() }
+                reportMatchResult()
+            }
         }
     }
 
@@ -290,92 +309,44 @@ struct WordHuntView: View {
     // MARK: - Finished overlay
 
     private var finishedOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.7).ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: 20) {
-                    Text("⏱️ Time's Up!")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    HStack(spacing: 24) {
-                        VStack {
-                            Text("\(vm.score)")
-                                .font(.title.bold())
-                                .foregroundStyle(AppTheme.accentBright)
-                            Text("Points")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.textSecondary)
-                        }
-                        VStack {
-                            Text("\(vm.foundWords.count)")
-                                .font(.title.bold())
-                                .foregroundStyle(AppTheme.modeAccent(.wordHunt))
-                            Text("Words")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.textSecondary)
-                        }
-                        VStack {
-                            Text("\(vm.game.validWords.count - vm.foundWords.count)")
-                                .font(.title.bold())
-                                .foregroundStyle(.orange)
-                            Text("Missed")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.textSecondary)
-                        }
-                    }
-                    .padding()
-                    .background(AppTheme.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
-
-                    if !vm.missedWords.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Words you missed:")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(AppTheme.textSecondary)
-                            FlowLayout(spacing: 6) {
-                                ForEach(vm.missedWords.prefix(30), id: \.self) { word in
-                                    Text(word)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.08))
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(AppTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
-                    }
-
-                    Button {
-                        vm.stop()
-                        dismiss()
-                    } label: {
-                        Text("Done")
-                            .font(.headline.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(AppTheme.modeGradient(.wordHunt))
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                }
-                .padding(24)
-            }
-            .background(AppTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 28))
-            .overlay(RoundedRectangle(cornerRadius: 28).stroke(AppTheme.cardBorder, lineWidth: 1))
-            .padding(20)
+        Group {
+            SoloResultOverlay(
+                result: makeSoloResult(),
+                onPlayAgain: onPlayAgain,
+                onChangeDifficulty: onChangeDifficulty,
+                onTryRanked: onTryRanked,
+                onHome: onHome
+            )
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.3), value: vm.isFinished)
+    }
+
+    private func makeSoloResult() -> SoloGameResult {
+        let longest = vm.foundWords.map(\.count).max() ?? 0
+        return SoloGameResult(
+            mode: .wordHunt,
+            difficulty: vm.difficulty,
+            completed: vm.score > 0,
+            title: "Time's Up",
+            message: vm.score > 0 ? "You found \(vm.foundWords.count) words." : "Find at least one word to unlock the next level.",
+            elapsedSeconds: vm.elapsedSeconds,
+            score: vm.score,
+            progress: Double(vm.score),
+            stats: [
+                SoloResultStat(label: "Points", value: "\(vm.score)"),
+                SoloResultStat(label: "Words", value: "\(vm.foundWords.count)"),
+                SoloResultStat(label: "Longest", value: longest > 0 ? "\(longest)" : "-"),
+                SoloResultStat(label: "Missed", value: "\(vm.missedWords.count)")
+            ],
+            details: vm.sortedFoundWords.prefix(8).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
+        )
+    }
+
+    private func reportSoloResult() {
+        guard !didReportSoloResult else { return }
+        didReportSoloResult = true
+        onSoloResult(makeSoloResult())
     }
 
     private func reportMatchResult() {

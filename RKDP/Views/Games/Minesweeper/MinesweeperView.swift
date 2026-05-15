@@ -5,76 +5,90 @@ struct MinesweeperView: View {
     let userID: String?
     let sessionID: String?
     let onMatchResult: (MatchPlayerResult) -> Void
+    let onSoloResult: (SoloGameResult) -> Void
+    let onPlayAgain: () -> Void
+    let onChangeDifficulty: () -> Void
+    let onTryRanked: () -> Void
+    let onHome: () -> Void
 
     @StateObject private var vm: MinesweeperViewModel
     @State private var didReportMatchResult = false
+    @State private var soloResult: SoloGameResult?
 
     init(
         difficulty: Difficulty,
         userID: String? = nil,
         sessionID: String?,
         seed: Int? = nil,
-        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
+        onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
+        onPlayAgain: @escaping () -> Void = {},
+        onChangeDifficulty: @escaping () -> Void = {},
+        onTryRanked: @escaping () -> Void = {},
+        onHome: @escaping () -> Void = {}
     ) {
         self.difficulty = difficulty
         self.userID = userID
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
+        self.onSoloResult = onSoloResult
+        self.onPlayAgain = onPlayAgain
+        self.onChangeDifficulty = onChangeDifficulty
+        self.onTryRanked = onTryRanked
+        self.onHome = onHome
         _vm = StateObject(wrappedValue: MinesweeperViewModel(difficulty: difficulty, seed: seed, ranked: sessionID != nil))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Status bar
-            HStack {
-                Label("\(vm.board.remainingMines)", systemImage: "flag.fill")
-                    .foregroundStyle(.red)
-                    .font(.headline)
-                Spacer()
-                TimerView(seconds: vm.elapsedSeconds)
-                Spacer()
-                Toggle(isOn: $vm.isFlagMode) {
-                    Image(systemName: vm.isFlagMode ? "flag.fill" : "hand.tap.fill")
+        ZStack {
+            VStack(spacing: 0) {
+                // Status bar
+                HStack {
+                    Label("\(vm.board.remainingMines)", systemImage: "flag.fill")
+                        .foregroundStyle(.red)
+                        .font(.headline)
+                    Spacer()
+                    TimerView(seconds: vm.elapsedSeconds)
+                    Spacer()
+                    Toggle(isOn: $vm.isFlagMode) {
+                        Image(systemName: vm.isFlagMode ? "flag.fill" : "hand.tap.fill")
+                    }
+                    .toggleStyle(.button)
+                    .tint(.red)
                 }
-                .toggleStyle(.button)
-                .tint(.red)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
 
-            if vm.status == .won {
-                Text(sessionID == nil ? "You Won! 🎉" : "Board Cleared")
-                    .font(.title.bold()).foregroundStyle(.green).padding()
-            } else if vm.status == .lost {
-                Text(sessionID == nil ? "Game Over 💥" : "Mine Hit")
-                    .font(.title.bold()).foregroundStyle(.red).padding()
-            }
-
-            // Board
-            ScrollView([.horizontal, .vertical]) {
-                MinesweeperGridView(board: vm.board) { row, col in
-                    vm.tap(row: row, col: col)
-                } onLongPress: { row, col in
-                    vm.longPress(row: row, col: col)
+                if vm.status == .won {
+                    Text(sessionID == nil ? "Board Cleared" : "Board Cleared")
+                        .font(.title.bold()).foregroundStyle(.green).padding()
+                } else if vm.status == .lost {
+                    Text(sessionID == nil ? "Mine Hit" : "Mine Hit")
+                        .font(.title.bold()).foregroundStyle(.red).padding()
                 }
-                .padding(8)
+
+                // Board
+                ScrollView([.horizontal, .vertical]) {
+                    MinesweeperGridView(board: vm.board) { row, col in
+                        vm.tap(row: row, col: col)
+                    } onLongPress: { row, col in
+                        vm.longPress(row: row, col: col)
+                    }
+                    .padding(8)
+                }
             }
 
-            if vm.isFinished && sessionID == nil {
-                Button { vm.restart() } label: {
-                    Label("New Game", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .padding()
+            if let soloResult {
+                SoloResultOverlay(result: soloResult, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             }
         }
         .navigationTitle("Minesweeper")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: vm.status) { _, status in
-            if status == .won || status == .lost { reportMatchResult() }
+            if status == .won || status == .lost {
+                if sessionID == nil { showSoloResult() }
+                reportMatchResult()
+            }
         }
         .onChange(of: vm.elapsedSeconds) { _, seconds in
             if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .minesweeper) {
@@ -107,6 +121,31 @@ struct MinesweeperView: View {
                 hitMine ? "Mine hit" : (completed ? "Board cleared" : "No mine hit")
             ]
         ))
+    }
+
+    private func showSoloResult() {
+        guard soloResult == nil else { return }
+        vm.stop()
+        let completed = vm.status == .won
+        let progress = Double(vm.board.revealedCount) / Double(max(1, vm.board.safeCells))
+        let result = SoloGameResult(
+            mode: .minesweeper,
+            difficulty: difficulty,
+            completed: completed,
+            title: completed ? "Board Cleared" : "Mine Hit",
+            message: completed ? "Every safe cell is open." : "You revealed \(vm.board.revealedCount) safe cells.",
+            elapsedSeconds: vm.elapsedSeconds,
+            score: nil,
+            progress: progress,
+            stats: [
+                SoloResultStat(label: "Safe Cells", value: "\(vm.board.revealedCount)/\(vm.board.safeCells)"),
+                SoloResultStat(label: "Progress", value: "\(Int((progress * 100).rounded()))%"),
+                SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
+                SoloResultStat(label: "Result", value: completed ? "Clear" : "Lost")
+            ]
+        )
+        soloResult = result
+        onSoloResult(result)
     }
 }
 

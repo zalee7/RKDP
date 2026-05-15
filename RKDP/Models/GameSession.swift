@@ -94,6 +94,28 @@ struct MatchPlayerResult: Codable, Equatable {
     }
 }
 
+struct SoloResultStat: Identifiable, Equatable {
+    let id = UUID()
+    var label: String
+    var value: String
+}
+
+struct SoloGameResult: Identifiable, Equatable {
+    let id = UUID()
+    var mode: GameMode
+    var difficulty: Difficulty
+    var completed: Bool
+    var title: String
+    var message: String
+    var elapsedSeconds: Int
+    var score: Int? = nil
+    var progress: Double? = nil
+    var moves: Int? = nil
+    var guesses: Int? = nil
+    var stats: [SoloResultStat]
+    var details: [String] = []
+}
+
 struct GameSession: Codable, Identifiable {
     var id: String
     var mode: GameMode

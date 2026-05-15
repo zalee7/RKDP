@@ -224,7 +224,7 @@ struct HowToPlayView: View {
                 RuleSection(title: "Objective", bullets: [
                     "Guess the secret 5-letter word within your allotted attempts.",
                     "Each guess must be a valid 5-letter word — tap ENTER to submit.",
-                    "Solo mode is best-of-3 rounds: win 2 rounds to claim victory.",
+                    "Solo mode is one word: solve it before your guesses run out.",
                 ]),
                 RuleSection(title: "Color Feedback", bullets: [
                     "🟩 Green — correct letter in the correct position.",
@@ -233,8 +233,8 @@ struct HowToPlayView: View {
                     "The keyboard updates after each guess so you can track letters.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same hidden word.",
-                    "First to solve it wins — faster solves break ties.",
+                    "Both players receive the same shared words.",
+                    "Solve more rounds than your opponent; guesses and time break ties.",
                     "Difficulty controls how many guesses you get (4–7).",
                 ]),
             ]

@@ -5,9 +5,14 @@ struct SudokuView: View {
     let userID: String?
     let sessionID: String?
     let onMatchResult: (MatchPlayerResult) -> Void
+    let onSoloResult: (SoloGameResult) -> Void
+    let onPlayAgain: () -> Void
+    let onChangeDifficulty: () -> Void
+    let onTryRanked: () -> Void
+    let onHome: () -> Void
 
     @StateObject private var vm: SudokuViewModel
-    @State private var showComplete = false
+    @State private var soloResult: SoloGameResult?
     @State private var didReportMatchResult = false
 
     init(
@@ -15,57 +20,79 @@ struct SudokuView: View {
         userID: String? = nil,
         sessionID: String?,
         seed: Int? = nil,
-        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
+        onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
+        onPlayAgain: @escaping () -> Void = {},
+        onChangeDifficulty: @escaping () -> Void = {},
+        onTryRanked: @escaping () -> Void = {},
+        onHome: @escaping () -> Void = {}
     ) {
         self.difficulty = difficulty
         self.userID = userID
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
+        self.onSoloResult = onSoloResult
+        self.onPlayAgain = onPlayAgain
+        self.onChangeDifficulty = onChangeDifficulty
+        self.onTryRanked = onTryRanked
+        self.onHome = onHome
         _vm = StateObject(wrappedValue: SudokuViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Top bar
-            HStack {
-                TimerView(seconds: vm.elapsedSeconds)
-                Spacer()
-                Label("\(difficulty.displayName)", systemImage: "star.fill")
-                    .font(.caption)
-                    .foregroundStyle(difficulty == .expert ? .orange : .secondary)
-                Spacer()
-                Button { vm.useHint() } label: {
-                    Label("Hint", systemImage: "lightbulb.fill")
+        ZStack {
+            VStack(spacing: 0) {
+                // Top bar
+                HStack {
+                    TimerView(seconds: vm.elapsedSeconds)
+                    Spacer()
+                    Label("\(difficulty.displayName)", systemImage: "star.fill")
                         .font(.caption)
+                        .foregroundStyle(difficulty == .expert ? .orange : .secondary)
+                    Spacer()
+                    Button { vm.useHint() } label: {
+                        Label("Hint", systemImage: "lightbulb.fill")
+                            .font(.caption)
+                    }
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+
+                // Board
+                SudokuBoardView(board: vm.board, selectedID: vm.selectedID) { id in
+                    vm.selectCell(id: id)
+                }
+                .padding(12)
+                .aspectRatio(1, contentMode: .fit)
+
+                Divider()
+
+                // Number pad
+                NumberPadView(
+                    size: 9,
+                    onDigit: { vm.enterDigit($0) },
+                    onErase: { vm.erase() },
+                    onNote: { vm.isNoteMode.toggle() },
+                    isNoteMode: vm.isNoteMode
+                )
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
 
-            // Board
-            SudokuBoardView(board: vm.board, selectedID: vm.selectedID) { id in
-                vm.selectCell(id: id)
+            if let soloResult {
+                SoloResultOverlay(
+                    result: soloResult,
+                    onPlayAgain: onPlayAgain,
+                    onChangeDifficulty: onChangeDifficulty,
+                    onTryRanked: onTryRanked,
+                    onHome: onHome
+                )
             }
-            .padding(12)
-            .aspectRatio(1, contentMode: .fit)
-
-            Divider()
-
-            // Number pad
-            NumberPadView(
-                size: 9,
-                onDigit: { vm.enterDigit($0) },
-                onErase: { vm.erase() },
-                onNote: { vm.isNoteMode.toggle() },
-                isNoteMode: vm.isNoteMode
-            )
-            .padding(.vertical, 12)
         }
         .navigationTitle("Sudoku")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: vm.isComplete) { _, complete in
             if complete {
-                showComplete = sessionID == nil
+                if sessionID == nil { showSoloResult() }
                 reportMatchResult(status: "Solved")
             }
         }
@@ -74,11 +101,28 @@ struct SudokuView: View {
                 reportMatchResult(status: "Time expired")
             }
         }
-        .alert("Puzzle Complete! 🎉", isPresented: $showComplete) {
-            Button("OK") {}
-        } message: {
-            Text("Solved in \(vm.elapsedSeconds / 60)m \(vm.elapsedSeconds % 60)s")
-        }
+    }
+
+    private func showSoloResult() {
+        guard soloResult == nil else { return }
+        let result = SoloGameResult(
+            mode: .sudoku,
+            difficulty: difficulty,
+            completed: true,
+            title: "Sudoku Solved",
+            message: "Clean solve on \(difficulty.displayName).",
+            elapsedSeconds: vm.elapsedSeconds,
+            score: nil,
+            progress: vm.progress,
+            stats: [
+                SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
+                SoloResultStat(label: "Progress", value: "\(Int((vm.progress * 100).rounded()))%"),
+                SoloResultStat(label: "Difficulty", value: difficulty.displayName),
+                SoloResultStat(label: "Mode", value: "Solo")
+            ]
+        )
+        soloResult = result
+        onSoloResult(result)
     }
 
     private func reportMatchResult(status: String) {

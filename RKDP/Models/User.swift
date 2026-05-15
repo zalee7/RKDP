@@ -9,11 +9,33 @@ struct AppUser: Codable, Identifiable {
     var createdAt: Date
     var ranks: [GameMode: RankInfo]
     var cosmetics: OwnedCosmetics = .default
+    var soloCompletions: [GameMode: [Difficulty]] = [:]
 
     var totalRankPoints: Int { ranks.values.reduce(0) { $0 + $1.points } }
 
     func rank(for mode: GameMode) -> RankInfo {
         ranks[mode] ?? .empty
+    }
+
+    func completedSoloDifficulties(for mode: GameMode) -> Set<Difficulty> {
+        Set(soloCompletions[mode] ?? [])
+    }
+
+    func isSoloDifficultyUnlocked(mode: GameMode, difficulty: Difficulty) -> Bool {
+        guard let prerequisite = difficulty.previous else { return true }
+        return completedSoloDifficulties(for: mode).contains(prerequisite)
+    }
+
+    func soloUnlockReason(mode: GameMode, difficulty: Difficulty) -> String? {
+        guard !isSoloDifficultyUnlocked(mode: mode, difficulty: difficulty),
+              let prerequisite = difficulty.previous else { return nil }
+        return "Complete \(mode.difficultyLabel(prerequisite)) solo first"
+    }
+
+    mutating func recordSoloCompletion(mode: GameMode, difficulty: Difficulty) {
+        var completed = completedSoloDifficulties(for: mode)
+        completed.insert(difficulty)
+        soloCompletions[mode] = Difficulty.allCases.filter { completed.contains($0) }
     }
 
     static func makeNew(id: String, username: String, email: String) -> AppUser {
@@ -35,7 +57,7 @@ struct AppUser: Codable, Identifiable {
 
 extension AppUser {
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics
+        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +76,12 @@ extension AppUser {
             if let mode = GameMode(rawValue: key) { decoded[mode] = value }
         }
         ranks = decoded
+
+        let rawSolo = (try? c.decode([String: [String]].self, forKey: .soloCompletions)) ?? [:]
+        soloCompletions = rawSolo.reduce(into: [GameMode: [Difficulty]]()) { partial, item in
+            guard let mode = GameMode(rawValue: item.key) else { return }
+            partial[mode] = item.value.compactMap { Difficulty(rawValue: $0) }
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -69,5 +97,11 @@ extension AppUser {
         var rawRanks: [String: RankInfo] = [:]
         for (mode, info) in ranks { rawRanks[mode.rawValue] = info }
         try c.encode(rawRanks, forKey: .ranks)
+
+        var rawSolo: [String: [String]] = [:]
+        for (mode, difficulties) in soloCompletions {
+            rawSolo[mode.rawValue] = difficulties.map(\.rawValue)
+        }
+        try c.encode(rawSolo, forKey: .soloCompletions)
     }
 }

@@ -5,9 +5,14 @@ struct ColorLinkView: View {
     let userID: String?
     let sessionID: String?
     let onMatchResult: (MatchPlayerResult) -> Void
+    let onSoloResult: (SoloGameResult) -> Void
+    let onPlayAgain: () -> Void
+    let onChangeDifficulty: () -> Void
+    let onTryRanked: () -> Void
+    let onHome: () -> Void
 
     @StateObject private var vm: ColorLinkViewModel
-    @State private var showComplete = false
+    @State private var soloResult: SoloGameResult?
     @State private var didReportMatchResult = false
 
     init(
@@ -15,64 +20,80 @@ struct ColorLinkView: View {
         userID: String? = nil,
         sessionID: String?,
         seed: Int? = nil,
-        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
+        onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
+        onPlayAgain: @escaping () -> Void = {},
+        onChangeDifficulty: @escaping () -> Void = {},
+        onTryRanked: @escaping () -> Void = {},
+        onHome: @escaping () -> Void = {}
     ) {
         self.difficulty = difficulty
         self.userID = userID
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
+        self.onSoloResult = onSoloResult
+        self.onPlayAgain = onPlayAgain
+        self.onChangeDifficulty = onChangeDifficulty
+        self.onTryRanked = onTryRanked
+        self.onHome = onHome
         _vm = StateObject(wrappedValue: ColorLinkViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack {
-                TimerView(seconds: vm.elapsedSeconds)
-                Spacer()
-                Label("\(Int((vm.fillProgress * 100).rounded()))%", systemImage: "square.grid.3x3.fill")
-                    .font(.headline)
-                Spacer()
-                Label("\(vm.solvedPairCount)/\(vm.board.pairs.count)", systemImage: "link")
-                    .font(.headline)
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-
-            ColorLinkBoardView(
-                board: vm.board,
-                paths: vm.paths,
-                activePairID: vm.activePairID
-            ) { row, col in
-                vm.beginDraw(row: row, col: col)
-            } onContinue: { row, col in
-                vm.continueDraw(row: row, col: col)
-            }
-            .padding(.horizontal)
-            .aspectRatio(1, contentMode: .fit)
-
-            HStack {
-                Text(activeStatus)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button { vm.clearActivePath() } label: {
-                    Label("Clear", systemImage: "eraser.fill")
+        ZStack {
+            VStack(spacing: 14) {
+                HStack {
+                    TimerView(seconds: vm.elapsedSeconds)
+                    Spacer()
+                    Label("\(Int((vm.fillProgress * 100).rounded()))%", systemImage: "square.grid.3x3.fill")
+                        .font(.headline)
+                    Spacer()
+                    Label("\(vm.solvedPairCount)/\(vm.board.pairs.count)", systemImage: "link")
+                        .font(.headline)
                 }
-                .buttonStyle(.bordered)
-                .disabled(vm.activePairID == nil)
-            }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal)
+                .padding(.horizontal)
+                .padding(.top, 8)
 
-            Spacer(minLength: 0)
+                ColorLinkBoardView(
+                    board: vm.board,
+                    paths: vm.paths,
+                    activePairID: vm.activePairID
+                ) { row, col in
+                    vm.beginDraw(row: row, col: col)
+                } onContinue: { row, col in
+                    vm.continueDraw(row: row, col: col)
+                }
+                .padding(.horizontal)
+                .aspectRatio(1, contentMode: .fit)
+
+                HStack {
+                    Text(activeStatus)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button { vm.clearActivePath() } label: {
+                        Label("Clear", systemImage: "eraser.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(vm.activePairID == nil)
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+
+                Spacer(minLength: 0)
+            }
+
+            if let soloResult {
+                SoloResultOverlay(result: soloResult, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+            }
         }
         .navigationTitle("Color Link")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: vm.isComplete) { _, complete in
             if complete {
-                showComplete = sessionID == nil
+                if sessionID == nil { showSoloResult() }
                 reportMatchResult(status: "Board filled")
             }
         }
@@ -81,11 +102,29 @@ struct ColorLinkView: View {
                 reportMatchResult(status: "Time expired")
             }
         }
-        .alert("Color Link Complete", isPresented: $showComplete) {
-            Button("OK") {}
-        } message: {
-            Text("Filled the board in \(vm.elapsedSeconds / 60)m \(vm.elapsedSeconds % 60)s.")
-        }
+    }
+
+    private func showSoloResult() {
+        guard soloResult == nil else { return }
+        let fillPercent = Int((vm.fillProgress * 100).rounded())
+        let result = SoloGameResult(
+            mode: .colorLink,
+            difficulty: difficulty,
+            completed: true,
+            title: "Board Filled",
+            message: "Every color path is connected.",
+            elapsedSeconds: vm.elapsedSeconds,
+            score: vm.filledCellCount,
+            progress: vm.fillProgress,
+            stats: [
+                SoloResultStat(label: "Board Fill", value: "\(fillPercent)%"),
+                SoloResultStat(label: "Pairs", value: "\(vm.solvedPairCount)/\(vm.board.pairs.count)"),
+                SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
+                SoloResultStat(label: "Difficulty", value: difficulty.displayName)
+            ]
+        )
+        soloResult = result
+        onSoloResult(result)
     }
 
     private var activeStatus: String {

@@ -81,6 +81,24 @@ enum Difficulty: String, Codable, CaseIterable {
 
     var displayName: String { rawValue.capitalized }
 
+    var previous: Difficulty? {
+        switch self {
+        case .easy: return nil
+        case .medium: return .easy
+        case .hard: return .medium
+        case .expert: return .hard
+        }
+    }
+
+    var next: Difficulty? {
+        switch self {
+        case .easy: return .medium
+        case .medium: return .hard
+        case .hard: return .expert
+        case .expert: return nil
+        }
+    }
+
     var pointMultiplier: Double {
         switch self {
         case .easy:   return 1.0
@@ -120,5 +138,18 @@ extension GameMode {
             }
         }
         return d.displayName
+    }
+
+    var rankedDifficulties: [Difficulty] {
+        switch self {
+        case .anagram, .wordHunt:
+            return Difficulty.allCases
+        case .sudoku, .minesweeper, .colorLink, .gridlock, .wordle:
+            return [.medium]
+        }
+    }
+
+    func rankedLockReason(for difficulty: Difficulty) -> String? {
+        rankedDifficulties.contains(difficulty) ? nil : "Ranked uses \(rankedDifficulties.map { difficultyLabel($0) }.joined(separator: ", "))"
     }
 }

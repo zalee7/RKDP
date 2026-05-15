@@ -78,4 +78,31 @@ final class AuthViewModel: ObservableObject {
         guard let firebaseUser = Auth.auth().currentUser else { return }
         await loadUser(firebaseUser: firebaseUser)
     }
+
+    func recordSoloResult(_ result: SoloGameResult) async {
+        guard var user else { return }
+        if result.completed {
+            user.recordSoloCompletion(mode: result.mode, difficulty: result.difficulty)
+        }
+
+        var rankInfo = user.ranks[result.mode] ?? .empty
+        if result.completed {
+            rankInfo.bestTime = min(rankInfo.bestTime ?? Int.max, result.elapsedSeconds)
+        }
+        if let score = result.score, result.mode.isScoreBased {
+            rankInfo.bestScore = max(rankInfo.bestScore ?? 0, score)
+        }
+        if let moves = result.moves {
+            rankInfo.bestMoves = min(rankInfo.bestMoves ?? Int.max, moves)
+        }
+        if let progress = result.progress {
+            rankInfo.bestProgress = max(rankInfo.bestProgress ?? 0, progress)
+        }
+        if let guesses = result.guesses, result.completed {
+            rankInfo.bestGuesses = min(rankInfo.bestGuesses ?? Int.max, guesses)
+        }
+        user.ranks[result.mode] = rankInfo
+        self.user = user
+        try? await store.updateUser(user)
+    }
 }

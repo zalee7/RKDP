@@ -5,9 +5,14 @@ struct GridlockView: View {
     let userID: String?
     let sessionID: String?
     let onMatchResult: (MatchPlayerResult) -> Void
+    let onSoloResult: (SoloGameResult) -> Void
+    let onPlayAgain: () -> Void
+    let onChangeDifficulty: () -> Void
+    let onTryRanked: () -> Void
+    let onHome: () -> Void
 
     @StateObject private var vm: GridlockViewModel
-    @State private var showComplete = false
+    @State private var soloResult: SoloGameResult?
     @State private var didReportMatchResult = false
     @State private var dragStepsByVehicle: [String: Int] = [:]
 
@@ -16,49 +21,65 @@ struct GridlockView: View {
         userID: String? = nil,
         sessionID: String?,
         seed: Int? = nil,
-        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
+        onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
+        onPlayAgain: @escaping () -> Void = {},
+        onChangeDifficulty: @escaping () -> Void = {},
+        onTryRanked: @escaping () -> Void = {},
+        onHome: @escaping () -> Void = {}
     ) {
         self.difficulty = difficulty
         self.userID = userID
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
+        self.onSoloResult = onSoloResult
+        self.onPlayAgain = onPlayAgain
+        self.onChangeDifficulty = onChangeDifficulty
+        self.onTryRanked = onTryRanked
+        self.onHome = onHome
         _vm = StateObject(wrappedValue: GridlockViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack {
-                TimerView(seconds: vm.elapsedSeconds)
-                Spacer()
-                Label("\(vm.moveCount)", systemImage: "arrow.left.arrow.right")
-                    .font(.headline)
-                Spacer()
-                Label("\(difficulty.displayName)", systemImage: "star.fill")
-                    .font(.caption)
-                    .foregroundStyle(difficulty == .expert ? .orange : .secondary)
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
+        ZStack {
+            VStack(spacing: 14) {
+                HStack {
+                    TimerView(seconds: vm.elapsedSeconds)
+                    Spacer()
+                    Label("\(vm.moveCount)", systemImage: "arrow.left.arrow.right")
+                        .font(.headline)
+                    Spacer()
+                    Label("\(difficulty.displayName)", systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(difficulty == .expert ? .orange : .secondary)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
 
-            GridlockBoardView(
-                board: vm.board,
-                selectedVehicleID: vm.selectedVehicleID,
-                dragStepsByVehicle: $dragStepsByVehicle
-            ) { vehicleID in
-                vm.selectVehicle(id: vehicleID)
-            } onDrag: { vehicleID, steps in
-                vm.moveVehicle(id: vehicleID, steps: steps)
-            }
-            .padding(.horizontal)
-            .aspectRatio(1, contentMode: .fit)
+                GridlockBoardView(
+                    board: vm.board,
+                    selectedVehicleID: vm.selectedVehicleID,
+                    dragStepsByVehicle: $dragStepsByVehicle
+                ) { vehicleID in
+                    vm.selectVehicle(id: vehicleID)
+                } onDrag: { vehicleID, steps in
+                    vm.moveVehicle(id: vehicleID, steps: steps)
+                }
+                .padding(.horizontal)
+                .aspectRatio(1, contentMode: .fit)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
+
+            if let soloResult {
+                SoloResultOverlay(result: soloResult, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+            }
         }
         .navigationTitle("Gridlock")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: vm.isComplete) { _, complete in
             if complete {
-                showComplete = sessionID == nil
+                if sessionID == nil { showSoloResult() }
                 reportMatchResult(status: "Escaped")
             }
         }
@@ -67,11 +88,29 @@ struct GridlockView: View {
                 reportMatchResult(status: "Time expired")
             }
         }
-        .alert("Gridlock Cleared", isPresented: $showComplete) {
-            Button("OK") {}
-        } message: {
-            Text("Escaped in \(vm.moveCount) moves.")
-        }
+    }
+
+    private func showSoloResult() {
+        guard soloResult == nil else { return }
+        let result = SoloGameResult(
+            mode: .gridlock,
+            difficulty: difficulty,
+            completed: true,
+            title: "Gridlock Cleared",
+            message: "The red car escaped.",
+            elapsedSeconds: vm.elapsedSeconds,
+            score: max(0, 500 - vm.moveCount),
+            progress: vm.progress,
+            moves: vm.moveCount,
+            stats: [
+                SoloResultStat(label: "Moves", value: "\(vm.moveCount)"),
+                SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
+                SoloResultStat(label: "Progress", value: "\(Int((vm.progress * 100).rounded()))%"),
+                SoloResultStat(label: "Difficulty", value: difficulty.displayName)
+            ]
+        )
+        soloResult = result
+        onSoloResult(result)
     }
 
     private func reportMatchResult(status: String) {

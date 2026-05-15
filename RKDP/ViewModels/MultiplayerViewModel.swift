@@ -42,6 +42,10 @@ final class MultiplayerViewModel: ObservableObject {
     // MARK: - Matchmaking
 
     func startSearch(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: WagerTier) async {
+        guard mode.rankedDifficulties.contains(difficulty) else {
+            state = .error("\(mode.displayName) ranked is only available at \(mode.rankedDifficulties.map { mode.difficultyLabel($0) }.joined(separator: ", ")).")
+            return
+        }
         guard user.coins >= wager.amount else {
             state = .error("Not enough coins for this wager.")
             return

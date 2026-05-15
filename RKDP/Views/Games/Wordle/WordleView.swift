@@ -7,19 +7,35 @@ struct WordleView: View {
     private let userID: String?
     private let sessionID: String?
     private let onMatchResult: (MatchPlayerResult) -> Void
+    private let onSoloResult: (SoloGameResult) -> Void
+    private let onPlayAgain: () -> Void
+    private let onChangeDifficulty: () -> Void
+    private let onTryRanked: () -> Void
+    private let onHome: () -> Void
     @State private var didReportMatchResult = false
+    @State private var didReportSoloResult = false
 
     init(
         difficulty: Difficulty,
         user: AppUser? = nil,
         sessionID: String? = nil,
         seed: Int? = nil,
-        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
+        onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
+        onPlayAgain: @escaping () -> Void = {},
+        onChangeDifficulty: @escaping () -> Void = {},
+        onTryRanked: @escaping () -> Void = {},
+        onHome: @escaping () -> Void = {}
     ) {
-        let rounds = 3
+        let rounds = sessionID == nil ? 1 : 3
         self.userID = user?.id
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
+        self.onSoloResult = onSoloResult
+        self.onPlayAgain = onPlayAgain
+        self.onChangeDifficulty = onChangeDifficulty
+        self.onTryRanked = onTryRanked
+        self.onHome = onHome
         _vm = StateObject(wrappedValue: WordleViewModel(
             difficulty: difficulty,
             seed: seed,
@@ -61,7 +77,10 @@ struct WordleView: View {
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
         .onChange(of: vm.isMatchOver) { _, finished in
-            if finished { reportMatchResult() }
+            if finished {
+                if sessionID == nil { reportSoloResult() }
+                reportMatchResult()
+            }
         }
     }
 
@@ -103,7 +122,7 @@ struct WordleView: View {
         }
     }
 
-    // MARK: - Round dots (solo best-of-3)
+    // MARK: - Round dots
 
     private var roundDots: some View {
         HStack(spacing: 10) {
@@ -214,81 +233,40 @@ struct WordleView: View {
     // MARK: - Finished overlay
 
     private var finishedOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.75).ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 20) {
-                    let wins   = vm.playerWins
-                    let losses = vm.roundResults.filter { !$0.solved }.count
-                    let won    = vm.totalRounds == 1
-                        ? vm.roundResults.first?.solved == true
-                        : wins > losses
-
-                    Text(won ? "🏆 You Win!" : "😔 Game Over")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    if vm.totalRounds > 1 {
-                        HStack(spacing: 24) {
-                            statBox("\(wins)",   "Won",  Color(hex: "538D4E"))
-                            statBox("\(losses)", "Lost", Color(hex: "3A3A3C"))
-                        }
-                        .padding()
-                        .background(AppTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(vm.roundResults.indices, id: \.self) { i in
-                            let r = vm.roundResults[i]
-                            HStack {
-                                Text("Round \(i + 1)")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(AppTheme.textSecondary)
-                                Spacer()
-                                if r.solved {
-                                    Text(r.targetWord)
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(Color(hex: "538D4E"))
-                                    Text("· \(r.guessCount) guess\(r.guessCount == 1 ? "" : "es")")
-                                        .font(.caption)
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                } else {
-                                    Text(r.targetWord)
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.red)
-                                    Text("· failed")
-                                        .font(.caption)
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                }
-                            }
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(AppTheme.cardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                    .padding(.horizontal)
-
-                    Button { dismiss() } label: {
-                        Text("Done")
-                            .font(.headline.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(AppTheme.modeGradient(.wordle))
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                    .padding(.horizontal)
-                }
-                .padding(24)
+        Group {
+            if let result = makeSoloResult() {
+                SoloResultOverlay(result: result, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             }
-            .background(Color(hex: "1A1A2E"))
-            .clipShape(RoundedRectangle(cornerRadius: 28))
-            .overlay(RoundedRectangle(cornerRadius: 28).stroke(AppTheme.cardBorder, lineWidth: 1))
-            .padding(20)
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.3), value: vm.isMatchOver)
+    }
+
+    private func makeSoloResult() -> SoloGameResult? {
+        guard let round = vm.roundResults.first else { return nil }
+        return SoloGameResult(
+            mode: .wordle,
+            difficulty: vm.difficulty,
+            completed: round.solved,
+            title: round.solved ? "Word Solved" : "Word Missed",
+            message: "The word was \(round.targetWord).",
+            elapsedSeconds: vm.elapsedSeconds,
+            score: round.solved ? 1 : 0,
+            progress: round.solved ? 1 : 0,
+            guesses: round.guessCount,
+            stats: [
+                SoloResultStat(label: "Guesses", value: "\(round.guessCount)/\(vm.maxGuesses)"),
+                SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
+                SoloResultStat(label: "Word", value: round.targetWord),
+                SoloResultStat(label: "Result", value: round.solved ? "Solved" : "Failed")
+            ]
+        )
+    }
+
+    private func reportSoloResult() {
+        guard !didReportSoloResult, let result = makeSoloResult() else { return }
+        didReportSoloResult = true
+        onSoloResult(result)
     }
 
     private func reportMatchResult() {
