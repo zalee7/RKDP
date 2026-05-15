@@ -19,13 +19,20 @@ final class RankingService {
         // Compute deltas directly from outcome — do NOT rely on the fetched session status,
         // which is still .inProgress until finishSession is called below.
         func delta(for playerID: String) -> Int {
-            let base: Int
             if let winnerID = outcome.winnerID {
-                base = (playerID == winnerID) ? 30 : -15
-            } else {
-                base = 5  // draw
+                let isWinner = playerID == winnerID
+                var base = isWinner ? 30 : -15
+                // Division boost: winner gets +5 if they beat a higher-division player (same tier)
+                if isWinner {
+                    let myPlayer  = outcome.players.first { $0.userID == playerID }
+                    let oppPlayer = outcome.players.first { $0.userID != playerID }
+                    if let myPts = myPlayer?.rankPoints, let oppPts = oppPlayer?.rankPoints, oppPts > myPts {
+                        base += 5
+                    }
+                }
+                return Int(Double(base) * outcome.difficulty.pointMultiplier)
             }
-            return Int(Double(base) * outcome.difficulty.pointMultiplier)
+            return Int(Double(5) * outcome.difficulty.pointMultiplier)  // draw
         }
 
         for player in outcome.players {

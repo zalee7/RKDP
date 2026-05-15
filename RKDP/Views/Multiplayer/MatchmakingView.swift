@@ -20,8 +20,8 @@ struct MatchmakingView: View {
                 wagerPicker
             case .searching:
                 searchingView
-            case .matchFound(let sessionID):
-                matchFoundView(sessionID: sessionID)
+            case .matchFound(let session):
+                matchFoundView(session: session)
             case .inMatch(let session):
                 inMatchView(session: session)
             case .finished(let session):
@@ -119,13 +119,85 @@ struct MatchmakingView: View {
 
     // MARK: - Match found
 
-    private func matchFoundView(sessionID: String) -> some View {
-        VStack(spacing: 16) {
+    private func matchFoundView(session: GameSession) -> some View {
+        let opponent = session.players.first { $0.userID != user.id }
+        let oppUser  = vm.opponentUser
+
+        return VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "person.2.fill").font(.system(size: 48)).foregroundStyle(mode.accentColor)
-            Text("Match Found!").font(.largeTitle.bold())
-            Text("Preparing puzzle…").foregroundStyle(.secondary)
-            ProgressView()
+
+            Text("Match Found!")
+                .font(.largeTitle.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+
+            // Opponent card
+            VStack(spacing: 12) {
+                Circle()
+                    .fill(AppTheme.brandGradient)
+                    .frame(width: 64, height: 64)
+                    .overlay(
+                        Text(String((opponent?.username ?? "?").prefix(1)))
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+                    )
+                    .shadow(color: AppTheme.accent.opacity(0.5), radius: 10)
+
+                VStack(spacing: 4) {
+                    Text(opponent?.username ?? "Opponent")
+                        .font(.title3.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    if let title = oppUser?.cosmetics.equippedTitle,
+                       let item = CosmeticCatalog.allTitles.first(where: { $0.id == title }) {
+                        Text(item.name)
+                            .font(.caption.italic())
+                            .foregroundStyle(AppTheme.accentBright)
+                    }
+
+                    if let opp = opponent {
+                        let oppRank = RankInfo(points: opp.rankPoints, tier: opp.rankTier,
+                                              wins: 0, losses: 0, bestTime: nil, bestScore: nil)
+                        Text(oppRank.fullDisplayName)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(opp.rankTier.color)
+                    }
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .background(AppTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.cardBorder, lineWidth: 1))
+            .padding(.horizontal)
+
+            // Countdown ring
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.12), lineWidth: 6)
+                    .frame(width: 80, height: 80)
+                Circle()
+                    .trim(from: 0, to: CGFloat(vm.matchCountdown) / 5.0)
+                    .stroke(mode.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 1), value: vm.matchCountdown)
+                Text("\(vm.matchCountdown)")
+                    .font(.title.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+            }
+
+            Text("Game starts automatically…")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+
+            Button {
+                Task { await vm.abortMatchFound(session: session) }
+            } label: {
+                Label("Abort (−1 coin)", systemImage: "xmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+            }
+
             Spacer()
         }
     }
@@ -173,8 +245,11 @@ struct MatchmakingView: View {
     private func resultView(session: GameSession) -> some View {
         let isWinner = session.winnerID == user.id
         let isDraw   = session.winnerID == nil
-        let base     = isDraw ? 5 : (isWinner ? 30 : -15)
-        let rankDelta = Int(Double(base) * session.difficulty.pointMultiplier)
+        let myPlayer    = session.players.first { $0.userID == user.id }
+        let oppPlayer   = session.players.first { $0.userID != user.id }
+        let divBonus    = isWinner && (oppPlayer?.rankPoints ?? 0) > (myPlayer?.rankPoints ?? 0) ? 5 : 0
+        let base        = isDraw ? 5 : (isWinner ? 30 + divBonus : -15)
+        let rankDelta   = Int(Double(base) * session.difficulty.pointMultiplier)
 
         let myTime       = vm.finishTimes[user.id]
         let opponentID   = session.players.first(where: { $0.userID != user.id })?.userID ?? ""
@@ -209,6 +284,11 @@ struct MatchmakingView: View {
                         Text("\(rankDelta >= 0 ? "+" : "")\(rankDelta)")
                             .font(.title3.bold())
                             .foregroundStyle(rankDelta >= 0 ? .green : .red)
+                        if divBonus > 0 {
+                            Text("↑ Higher Division Bonus")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.yellow)
+                        }
                     }
                     .frame(maxWidth: .infinity)
 

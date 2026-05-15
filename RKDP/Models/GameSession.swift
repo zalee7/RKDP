@@ -20,6 +20,7 @@ struct MatchPlayer: Codable {
     var wager: Int
     var finishTime: Int?    // seconds from puzzle start; nil = not finished
     var rankTier: RankTier
+    var rankPoints: Int = 0
 }
 
 struct GameSession: Codable, Identifiable {

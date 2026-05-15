@@ -93,10 +93,11 @@ final class FirestoreService {
 
         // 1. Write own entry (merge so a concurrent delete doesn't resurrect us)
         try await queueRef.document(user.id).setData([
-            "userID":   user.id,
-            "username": user.username,
-            "wager":    wager,
-            "rankTier": tier.rawValue
+            "userID":     user.id,
+            "username":   user.username,
+            "wager":      wager,
+            "rankTier":   tier.rawValue,
+            "rankPoints": user.rank(for: mode).points
         ])
 
         // 2. Look for anyone else in the queue with the same tier AND same wager
@@ -173,11 +174,23 @@ final class FirestoreService {
 
         // Derive a deterministic session ID so simultaneous creates are idempotent
         let pair = [hostUser.id, opponentID].sorted().joined(separator: "_")
-        let sessionID = "\(pair)_\(mode.rawValue)_\(difficulty.rawValue)"
+        var sessionID = "\(pair)_\(mode.rawValue)_\(difficulty.rawValue)"
 
-        // Abort if we've already created this session
+        let opponentRankPoints = opponentDoc.data()["rankPoints"] as? Int ?? 0
+
+        // Allow rematches: only block if a session between these players is actively in progress
         let existing = try await db.collection("sessions").document(sessionID).getDocument()
-        guard !existing.exists else { return }
+        if existing.exists {
+            let status = existing.data()?["status"] as? String ?? ""
+            if status == SessionStatus.inProgress.rawValue || status == SessionStatus.waiting.rawValue {
+                return  // concurrent duplicate create — bail
+            }
+            // Previous session is finished/abandoned — use a time-bucketed ID for the rematch
+            let bucket = Int(Date().timeIntervalSince1970 / 300)  // 5-minute window keeps idempotency
+            sessionID = "\(sessionID)_r\(bucket)"
+            let rematchDoc = try await db.collection("sessions").document(sessionID).getDocument()
+            guard !rematchDoc.exists else { return }
+        }
 
         let seed = Int.random(in: 0..<Int.max)
         let session = GameSession(
@@ -186,8 +199,8 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .inProgress,
             players: [
-                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier),
-                MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier)
+                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier, rankPoints: user.rank(for: mode).points),
+                MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints)
             ],
             seed: seed,
             puzzleData: "",

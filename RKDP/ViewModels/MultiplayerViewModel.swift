@@ -5,7 +5,7 @@ import FirebaseDatabase
 enum MultiplayerState {
     case idle
     case searching
-    case matchFound(sessionID: String)
+    case matchFound(session: GameSession)
     case inMatch(session: GameSession)
     case finished(session: GameSession)
     case error(String)
@@ -17,6 +17,9 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var selectedWager: WagerTier?
     @Published var finishTimes: [String: Int] = [:]
     @Published var elapsedSeconds: Int = 0
+    @Published var opponentUser: AppUser? = nil
+    @Published var matchCountdown: Int = 5
+    private var countdownTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
     private let rtdb = RealtimeDBService.shared
@@ -80,17 +83,15 @@ final class MultiplayerViewModel: ObservableObject {
 
     /// Called when pendingSessionID appears on our user doc
     private func consumeMatch(sessionID: String) async {
-        // Remove listeners — match is found
         tearDownListeners()
-
-        // Clear the field so it doesn't re-fire on reconnect
         try? await store.clearPendingSession(userID: user?.id ?? "")
-
         do {
             let session = try await store.fetchSession(id: sessionID)
-            state = .matchFound(sessionID: sessionID)
-            try await rtdb.markReady(sessionID: sessionID, userID: user?.id ?? "")
-            listenForBothReady(session: session)
+            // Fetch opponent for display on the match-found screen
+            let oppID = session.players.first { $0.userID != (user?.id ?? "") }?.userID
+            if let oppID { opponentUser = try? await store.fetchUser(id: oppID) }
+            state = .matchFound(session: session)
+            startMatchCountdown(session: session)
         } catch {
             state = .error(error.localizedDescription)
         }
@@ -171,6 +172,8 @@ final class MultiplayerViewModel: ObservableObject {
 
     func reset() {
         tearDownListeners()
+        countdownTask?.cancel()
+        countdownTask = nil
         let sid = currentSessionID ?? ""
         rtdbHandles.forEach { rtdb.removeObserver(handle: $0, sessionID: sid) }
         rtdbHandles = []
@@ -179,5 +182,39 @@ final class MultiplayerViewModel: ObservableObject {
         state = .idle
         elapsedSeconds = 0
         finishTimes = [:]
+    }
+
+    func startMatchCountdown(session: GameSession) {
+        matchCountdown = 5
+        countdownTask?.cancel()
+        countdownTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for tick in stride(from: 5, through: 1, by: -1) {
+                if Task.isCancelled { return }
+                self.matchCountdown = tick
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            if !Task.isCancelled {
+                await self.confirmReady(session: session)
+            }
+        }
+    }
+
+    func confirmReady(session: GameSession) async {
+        do {
+            try await rtdb.markReady(sessionID: session.id, userID: user?.id ?? "")
+            listenForBothReady(session: session)
+        } catch {
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    func abortMatchFound(session: GameSession) async {
+        countdownTask?.cancel()
+        countdownTask = nil
+        if let userID = user?.id {
+            try? await store.updateCoins(userID: userID, delta: -1)
+        }
+        reset()
     }
 }
