@@ -15,6 +15,7 @@ struct ColorLinkPair: Identifiable, Codable, Equatable {
     var id: Int
     var start: ColorLinkPosition
     var end: ColorLinkPosition
+    var solutionPath: [ColorLinkPosition] = []
 }
 
 struct ColorLinkBoard: Codable, Equatable {

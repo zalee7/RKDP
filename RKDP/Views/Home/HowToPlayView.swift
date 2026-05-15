@@ -153,9 +153,9 @@ struct HowToPlayView: View {
                     "The strongest board fills every cell with a valid color path.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
-                    "Tap a color endpoint to start or restart that color's path.",
-                    "Tap adjacent cells to extend the selected path.",
-                    "Tap an earlier cell in the same path to rewind to that point.",
+                    "Drag from a color endpoint to draw that color's path.",
+                    "Drag through adjacent cells without crossing another color.",
+                    "Drag back over an earlier cell in the same path to rewind to that point.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same seeded board.",
@@ -171,8 +171,8 @@ struct HowToPlayView: View {
                     "Vertical pieces slide up and down.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
-                    "Tap a car or block to select it.",
-                    "Use the arrow controls to slide the selected piece one space.",
+                    "Drag a car or block along its allowed direction.",
+                    "Horizontal pieces only slide left and right; vertical pieces only slide up and down.",
                     "Clear blockers from the red car's row to open the escape lane.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [

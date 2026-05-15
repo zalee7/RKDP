@@ -25,13 +25,17 @@ final class GridlockViewModel: ObservableObject {
         selectedVehicleID = id
     }
 
-    func moveSelected(delta: Int) {
-        guard let selectedVehicleID, !isComplete else { return }
-        if board.move(vehicleID: selectedVehicleID, delta: delta) {
+    func moveVehicle(id vehicleID: String, steps: Int) {
+        guard !isComplete, steps != 0 else { return }
+        selectedVehicleID = vehicleID
+        let direction = steps > 0 ? 1 : -1
+        for _ in 0..<abs(steps) {
+            guard board.move(vehicleID: vehicleID, delta: direction) else { break }
             moveCount += 1
             if board.isSolved {
                 isComplete = true
                 timer?.cancel()
+                break
             }
         }
     }

@@ -43,7 +43,9 @@ struct ColorLinkView: View {
                 paths: vm.paths,
                 activePairID: vm.activePairID
             ) { row, col in
-                vm.tap(row: row, col: col)
+                vm.beginDraw(row: row, col: col)
+            } onContinue: { row, col in
+                vm.continueDraw(row: row, col: col)
             }
             .padding(.horizontal)
             .aspectRatio(1, contentMode: .fit)
@@ -90,7 +92,7 @@ struct ColorLinkView: View {
         if let activePairID = vm.activePairID {
             return "Color \(activePairID + 1) selected"
         }
-        return "Tap an endpoint to start a path"
+        return "Drag from an endpoint to draw a path"
     }
 
     private func reportMatchResult(status: String) {
@@ -125,7 +127,10 @@ struct ColorLinkBoardView: View {
     let board: ColorLinkBoard
     let paths: [Int: [ColorLinkPosition]]
     let activePairID: Int?
-    let onTap: (Int, Int) -> Void
+    let onBegin: (Int, Int) -> Void
+    let onContinue: (Int, Int) -> Void
+
+    @State private var isDragging = false
 
     var body: some View {
         GeometryReader { geo in
@@ -145,10 +150,25 @@ struct ColorLinkBoardView: View {
                             cellSize: cellSize
                         )
                         .offset(x: CGFloat(col) * cellSize, y: CGFloat(row) * cellSize)
-                        .onTapGesture { onTap(row, col) }
                     }
                 }
             }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let col = Int(value.location.x / cellSize)
+                        let row = Int(value.location.y / cellSize)
+                        guard row >= 0, row < board.size, col >= 0, col < board.size else { return }
+                        if isDragging {
+                            onContinue(row, col)
+                        } else {
+                            isDragging = true
+                            onBegin(row, col)
+                        }
+                    }
+                    .onEnded { _ in isDragging = false }
+            )
         }
     }
 

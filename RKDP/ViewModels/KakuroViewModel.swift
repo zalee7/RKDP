@@ -34,16 +34,21 @@ final class ColorLinkViewModel: ObservableObject {
         startTimer()
     }
 
-    func tap(row: Int, col: Int) {
+    func beginDraw(row: Int, col: Int) {
         guard !isComplete else { return }
         let position = ColorLinkPosition(row: row, col: col)
-        guard board.contains(position) else { return }
+        guard board.contains(position), let endpointPairID = board.pairID(at: position) else { return }
+        activePairID = endpointPairID
+        paths[endpointPairID] = [position]
+    }
 
-        if let endpointPairID = board.pairID(at: position) {
-            handleEndpointTap(position, pairID: endpointPairID)
-        } else if let activePairID {
-            extendActivePath(to: position, pairID: activePairID)
-        }
+    func continueDraw(row: Int, col: Int) {
+        guard !isComplete else { return }
+        let position = ColorLinkPosition(row: row, col: col)
+        guard board.contains(position), let activePairID else { return }
+
+        if let endpointPairID = board.pairID(at: position), endpointPairID != activePairID { return }
+        extendActivePath(to: position, pairID: activePairID)
 
         checkCompletion()
     }
@@ -51,28 +56,6 @@ final class ColorLinkViewModel: ObservableObject {
     func clearActivePath() {
         guard let activePairID else { return }
         paths[activePairID] = nil
-    }
-
-    private func handleEndpointTap(_ position: ColorLinkPosition, pairID: Int) {
-        if activePairID != pairID {
-            activePairID = pairID
-            paths[pairID] = [position]
-            return
-        }
-
-        guard var path = paths[pairID], let last = path.last else {
-            paths[pairID] = [position]
-            return
-        }
-
-        if let existingIndex = path.firstIndex(of: position) {
-            paths[pairID] = Array(path.prefix(existingIndex + 1))
-        } else if position.isAdjacent(to: last) {
-            path.append(position)
-            paths[pairID] = path
-        } else {
-            paths[pairID] = [position]
-        }
     }
 
     private func extendActivePath(to position: ColorLinkPosition, pairID: Int) {

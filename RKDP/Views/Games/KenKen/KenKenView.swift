@@ -9,6 +9,7 @@ struct GridlockView: View {
     @StateObject private var vm: GridlockViewModel
     @State private var showComplete = false
     @State private var didReportMatchResult = false
+    @State private var dragStepsByVehicle: [String: Int] = [:]
 
     init(
         difficulty: Difficulty,
@@ -39,16 +40,17 @@ struct GridlockView: View {
             .padding(.horizontal)
             .padding(.top, 8)
 
-            GridlockBoardView(board: vm.board, selectedVehicleID: vm.selectedVehicleID) { vehicleID in
+            GridlockBoardView(
+                board: vm.board,
+                selectedVehicleID: vm.selectedVehicleID,
+                dragStepsByVehicle: $dragStepsByVehicle
+            ) { vehicleID in
                 vm.selectVehicle(id: vehicleID)
+            } onDrag: { vehicleID, steps in
+                vm.moveVehicle(id: vehicleID, steps: steps)
             }
             .padding(.horizontal)
             .aspectRatio(1, contentMode: .fit)
-
-            GridlockControlsView(board: vm.board, selectedVehicleID: vm.selectedVehicleID) { delta in
-                vm.moveSelected(delta: delta)
-            }
-            .padding(.horizontal)
 
             Spacer(minLength: 0)
         }
@@ -101,7 +103,9 @@ struct GridlockView: View {
 struct GridlockBoardView: View {
     let board: GridlockBoard
     let selectedVehicleID: String?
+    @Binding var dragStepsByVehicle: [String: Int]
     let onSelect: (String) -> Void
+    let onDrag: (String, Int) -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -130,6 +134,23 @@ struct GridlockBoardView: View {
                     )
                     .offset(x: CGFloat(vehicle.col) * cellSize, y: CGFloat(vehicle.row) * cellSize)
                     .onTapGesture { onSelect(vehicle.id) }
+                    .gesture(
+                        DragGesture(minimumDistance: 4)
+                            .onChanged { value in
+                                onSelect(vehicle.id)
+                                let translation = vehicle.orientation == .horizontal ? value.translation.width : value.translation.height
+                                let steps = Int(translation / (cellSize * 0.72))
+                                let previous = dragStepsByVehicle[vehicle.id] ?? 0
+                                let delta = steps - previous
+                                if delta != 0 {
+                                    dragStepsByVehicle[vehicle.id] = steps
+                                    onDrag(vehicle.id, delta)
+                                }
+                            }
+                            .onEnded { _ in
+                                dragStepsByVehicle[vehicle.id] = 0
+                            }
+                    )
                 }
             }
         }
@@ -180,48 +201,5 @@ private struct GridlockVehicleView: View {
                 height: cellSize * CGFloat(vehicle.orientation == .vertical ? vehicle.length : 1)
             )
             .shadow(color: vehicleColor.opacity(isSelected ? 0.45 : 0.2), radius: isSelected ? 8 : 3)
-    }
-}
-
-private struct GridlockControlsView: View {
-    let board: GridlockBoard
-    let selectedVehicleID: String?
-    let onMove: (Int) -> Void
-
-    private var selectedVehicle: GridlockVehicle? {
-        guard let selectedVehicleID else { return nil }
-        return board.vehicles.first { $0.id == selectedVehicleID }
-    }
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Text(selectedVehicle?.isTarget == true ? "Red car selected" : "Select a piece, then slide it")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            if let selectedVehicle {
-                HStack(spacing: 16) {
-                    if selectedVehicle.orientation == .horizontal {
-                        moveButton(systemName: "arrow.left", delta: -1)
-                        moveButton(systemName: "arrow.right", delta: 1)
-                    } else {
-                        moveButton(systemName: "arrow.up", delta: -1)
-                        moveButton(systemName: "arrow.down", delta: 1)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func moveButton(systemName: String, delta: Int) -> some View {
-        Button { onMove(delta) } label: {
-            Image(systemName: systemName)
-                .font(.title2.bold())
-                .frame(width: 56, height: 44)
-        }
-        .buttonStyle(.borderedProminent)
     }
 }
