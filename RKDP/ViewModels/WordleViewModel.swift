@@ -52,6 +52,8 @@ final class WordleViewModel: ObservableObject {
     // Match state
     @Published var roundResults: [WordleRoundResult] = []
     @Published var isMatchOver: Bool = false
+    @Published var elapsedSeconds: Int = 0
+    private var timer: AnyCancellable?
 
     var currentRound: Int { roundResults.count }
     var playerWins:   Int { roundResults.filter(\.solved).count }
@@ -74,6 +76,7 @@ final class WordleViewModel: ObservableObject {
             }
         }()
         self.game = WordleGame(seed: self.baseSeed, round: 0)
+        startTimer()
     }
 
     // MARK: - Input
@@ -137,6 +140,7 @@ final class WordleViewModel: ObservableObject {
         if wins >= winThreshold || losses >= winThreshold || roundResults.count >= totalRounds {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 self?.isMatchOver = true
+                self?.timer?.cancel()
             }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
@@ -171,4 +175,12 @@ final class WordleViewModel: ObservableObject {
         shakeRow = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.shakeRow = false }
     }
+
+    private func startTimer() {
+        timer = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.elapsedSeconds += 1 }
+    }
+
+    func stop() { timer?.cancel() }
 }

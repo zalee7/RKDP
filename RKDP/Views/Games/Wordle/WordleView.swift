@@ -4,10 +4,22 @@ struct WordleView: View {
     @StateObject private var vm: WordleViewModel
     @Environment(\.dismiss) var dismiss
     @Environment(\.boardCosmetics) var cosmetics
+    private let userID: String?
+    private let sessionID: String?
+    private let onMatchResult: (MatchPlayerResult) -> Void
+    @State private var didReportMatchResult = false
 
-    init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil, seed: Int? = nil) {
-        // sessionID present → multiplayer: single round, no round UI
-        let rounds = sessionID == nil ? 3 : 1
+    init(
+        difficulty: Difficulty,
+        user: AppUser? = nil,
+        sessionID: String? = nil,
+        seed: Int? = nil,
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+    ) {
+        let rounds = 3
+        self.userID = user?.id
+        self.sessionID = sessionID
+        self.onMatchResult = onMatchResult
         _vm = StateObject(wrappedValue: WordleViewModel(
             difficulty: difficulty,
             seed: seed,
@@ -44,10 +56,13 @@ struct WordleView: View {
                     .padding(.bottom, 24)
             }
 
-            if vm.isMatchOver { finishedOverlay }
+            if vm.isMatchOver && sessionID == nil { finishedOverlay }
         }
         .navigationBarBackButtonHidden()
-        .onDisappear { }
+        .onDisappear { vm.stop() }
+        .onChange(of: vm.isMatchOver) { _, finished in
+            if finished { reportMatchResult() }
+        }
     }
 
     // MARK: - Top bar
@@ -274,6 +289,33 @@ struct WordleView: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.3), value: vm.isMatchOver)
+    }
+
+    private func reportMatchResult() {
+        guard !didReportMatchResult, sessionID != nil, let userID else { return }
+        didReportMatchResult = true
+        let solved = vm.roundResults.filter(\.solved)
+        let totalGuesses = solved.reduce(0) { $0 + $1.guessCount }
+        onMatchResult(MatchPlayerResult(
+            userID: userID,
+            mode: .wordle,
+            completed: solved.count >= 2,
+            elapsedSeconds: vm.elapsedSeconds,
+            score: solved.count,
+            progress: Double(solved.count) / Double(max(1, vm.totalRounds)),
+            status: "\(solved.count)/\(vm.totalRounds) solved",
+            summary: [
+                "solvedRounds": "\(solved.count)",
+                "totalGuesses": "\(totalGuesses)",
+                "failedRounds": "\(vm.roundResults.filter { !$0.solved }.count)"
+            ],
+            details: vm.roundResults.enumerated().map { idx, result in
+                if result.solved {
+                    return "Round \(idx + 1): \(result.targetWord) in \(result.guessCount)"
+                }
+                return "Round \(idx + 1): \(result.targetWord) failed"
+            }
+        ))
     }
 
     @ViewBuilder

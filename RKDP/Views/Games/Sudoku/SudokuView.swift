@@ -2,14 +2,25 @@ import SwiftUI
 
 struct SudokuView: View {
     let difficulty: Difficulty
+    let userID: String?
     let sessionID: String?
+    let onMatchResult: (MatchPlayerResult) -> Void
 
     @StateObject private var vm: SudokuViewModel
     @State private var showComplete = false
+    @State private var didReportMatchResult = false
 
-    init(difficulty: Difficulty, sessionID: String?, seed: Int? = nil) {
+    init(
+        difficulty: Difficulty,
+        userID: String? = nil,
+        sessionID: String?,
+        seed: Int? = nil,
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+    ) {
         self.difficulty = difficulty
+        self.userID = userID
         self.sessionID = sessionID
+        self.onMatchResult = onMatchResult
         _vm = StateObject(wrappedValue: SudokuViewModel(difficulty: difficulty, seed: seed))
     }
 
@@ -53,13 +64,42 @@ struct SudokuView: View {
         .navigationTitle("Sudoku")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: vm.isComplete) { _, complete in
-            if complete { showComplete = true }
+            if complete {
+                showComplete = sessionID == nil
+                reportMatchResult(status: "Solved")
+            }
+        }
+        .onChange(of: vm.elapsedSeconds) { _, seconds in
+            if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .sudoku) {
+                reportMatchResult(status: "Time expired")
+            }
         }
         .alert("Puzzle Complete! 🎉", isPresented: $showComplete) {
             Button("OK") {}
         } message: {
             Text("Solved in \(vm.elapsedSeconds / 60)m \(vm.elapsedSeconds % 60)s")
         }
+    }
+
+    private func reportMatchResult(status: String) {
+        guard !didReportMatchResult, sessionID != nil, let userID else { return }
+        didReportMatchResult = true
+        vm.stop()
+        onMatchResult(MatchPlayerResult(
+            userID: userID,
+            mode: .sudoku,
+            completed: vm.isComplete,
+            elapsedSeconds: vm.elapsedSeconds,
+            score: Int((vm.progress * 100).rounded()),
+            progress: vm.progress,
+            status: status,
+            summary: [
+                "progressPercent": "\(Int((vm.progress * 100).rounded()))"
+            ],
+            details: [
+                vm.isComplete ? "Completed the Sudoku" : "Reached \(Int((vm.progress * 100).rounded()))% progress"
+            ]
+        ))
     }
 }
 

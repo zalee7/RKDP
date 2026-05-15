@@ -5,12 +5,26 @@ struct WordHuntView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.boardCosmetics) var cosmetics
     @State private var lastDragLocation: CGPoint?
+    private let userID: String?
+    private let sessionID: String?
+    private let onMatchResult: (MatchPlayerResult) -> Void
+    @State private var didReportMatchResult = false
 
-    init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
+    init(
+        difficulty: Difficulty,
+        user: AppUser? = nil,
+        sessionID: String? = nil,
+        seed: Int? = nil,
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+    ) {
+        self.userID = user?.id
+        self.sessionID = sessionID
+        self.onMatchResult = onMatchResult
         _vm = StateObject(wrappedValue: WordHuntViewModel(
             difficulty: difficulty,
             userID: user?.id,
-            priorBest: user?.rank(for: .wordHunt).bestScore
+            priorBest: user?.rank(for: .wordHunt).bestScore,
+            seed: seed
         ))
     }
 
@@ -37,10 +51,13 @@ struct WordHuntView: View {
                     .padding(.top, 8)
             }
 
-            if vm.isFinished { finishedOverlay }
+            if vm.isFinished && sessionID == nil { finishedOverlay }
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
+        .onChange(of: vm.isFinished) { _, finished in
+            if finished { reportMatchResult() }
+        }
     }
 
     // MARK: - Top bar
@@ -359,6 +376,27 @@ struct WordHuntView: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.3), value: vm.isFinished)
+    }
+
+    private func reportMatchResult() {
+        guard !didReportMatchResult, sessionID != nil, let userID else { return }
+        didReportMatchResult = true
+        let longest = vm.foundWords.map(\.count).max() ?? 0
+        onMatchResult(MatchPlayerResult(
+            userID: userID,
+            mode: .wordHunt,
+            completed: true,
+            elapsedSeconds: vm.elapsedSeconds,
+            score: vm.score,
+            progress: Double(vm.score),
+            status: "Time expired",
+            summary: [
+                "wordCount": "\(vm.foundWords.count)",
+                "longestWordLength": "\(longest)",
+                "missedWords": "\(vm.missedWords.count)"
+            ],
+            details: vm.sortedFoundWords.prefix(12).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
+        ))
     }
 }
 

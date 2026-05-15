@@ -15,7 +15,7 @@ enum MultiplayerState {
 final class MultiplayerViewModel: ObservableObject {
     @Published var state: MultiplayerState = .idle
     @Published var selectedWager: WagerTier?
-    @Published var finishTimes: [String: Int] = [:]
+    @Published var playerResults: [String: MatchPlayerResult] = [:]
     @Published var elapsedSeconds: Int = 0
     @Published var opponentUser: AppUser? = nil
     @Published var matchCountdown: Int = 5
@@ -49,6 +49,8 @@ final class MultiplayerViewModel: ObservableObject {
         self.mode = mode
         self.difficulty = difficulty
         self.selectedWager = wager
+        playerResults = [:]
+        elapsedSeconds = 0
         state = .searching
 
         do {
@@ -105,49 +107,55 @@ final class MultiplayerViewModel: ObservableObject {
             Task { @MainActor in
                 self?.state = .inMatch(session: session)
                 self?.startGameTimer()
-                self?.listenForFinishTimes(sessionID: session.id)
+                self?.listenForResults(session: session)
             }
         }
         rtdbHandles.append(handle)
     }
 
-    func submitFinish(sessionID: String) async {
-        guard let userID = user?.id else { return }
-        gameTimer?.invalidate()
+    func submitResult(_ result: MatchPlayerResult, session: GameSession) async {
+        guard result.userID == user?.id, playerResults[result.userID] == nil else { return }
         do {
-            try await rtdb.submitFinishTime(sessionID: sessionID, userID: userID, seconds: elapsedSeconds)
+            try await rtdb.submitResult(sessionID: session.id, result: result)
+            playerResults[result.userID] = result
         } catch {
             state = .error(error.localizedDescription)
         }
     }
 
-    private func listenForFinishTimes(sessionID: String) {
-        let handle = rtdb.listenForFinishTimes(sessionID: sessionID) { [weak self] times in
+    private func listenForResults(session: GameSession) {
+        let handle = rtdb.listenForResults(sessionID: session.id) { [weak self] results in
             Task { @MainActor in
-                self?.finishTimes = times
-                if times.count == 2 { await self?.resolveMatch(sessionID: sessionID, times: times) }
+                self?.playerResults = results
+                if results.count >= session.players.count {
+                    await self?.resolveMatch(session: session, results: results)
+                }
             }
         }
         rtdbHandles.append(handle)
     }
 
-    private func resolveMatch(sessionID: String, times: [String: Int]) async {
-        guard case .inMatch(let session) = state else { return }
+    private func resolveMatch(session: GameSession, results: [String: MatchPlayerResult]) async {
+        guard case .inMatch = state else { return }
         gameTimer?.invalidate()
 
-        let winnerID = times.min(by: { $0.value < $1.value })?.key
+        let resolution = MatchResolver.resolve(session: session, results: results)
         let outcome = RankingService.MatchOutcome(
-            sessionID: sessionID,
+            sessionID: session.id,
             mode: session.mode,
             difficulty: session.difficulty,
-            winnerID: winnerID,
+            winnerID: resolution.winnerID,
             players: session.players.map { p in
-                var mp = p; mp.finishTime = times[p.userID]; return mp
-            }
+                var mp = p
+                mp.finishTime = results[p.userID]?.elapsedSeconds
+                return mp
+            },
+            playerResults: results,
+            winnerReason: resolution.reason
         )
         do {
             try await ranking.processOutcome(outcome)
-            let updated = try await store.fetchSession(id: sessionID)
+            let updated = try await store.fetchSession(id: session.id)
             state = .finished(session: updated)
         } catch {
             state = .error(error.localizedDescription)
@@ -181,7 +189,7 @@ final class MultiplayerViewModel: ObservableObject {
         gameTimer?.invalidate()
         state = .idle
         elapsedSeconds = 0
-        finishTimes = [:]
+        playerResults = [:]
     }
 
     func startMatchCountdown(session: GameSession) {
@@ -216,5 +224,101 @@ final class MultiplayerViewModel: ObservableObject {
             try? await store.updateCoins(userID: userID, delta: -1)
         }
         reset()
+    }
+}
+
+struct MatchResolution {
+    let winnerID: String?
+    let reason: String
+}
+
+enum MatchResolver {
+    static func resolve(session: GameSession, results: [String: MatchPlayerResult]) -> MatchResolution {
+        let ordered = session.players.compactMap { results[$0.userID] }
+        guard ordered.count == session.players.count, ordered.count == 2 else {
+            return MatchResolution(winnerID: nil, reason: "Waiting for both players")
+        }
+        let a = ordered[0]
+        let b = ordered[1]
+
+        switch session.mode {
+        case .wordle:
+            return compareWordle(a, b)
+        case .anagram:
+            return compareWordScore(a, b, label: "Anagrams")
+        case .wordHunt:
+            return compareWordScore(a, b, label: "Word Hunt")
+        case .sudoku, .kakuro, .kenken:
+            return compareCompletion(a, b)
+        case .minesweeper:
+            return compareMinesweeper(a, b)
+        }
+    }
+
+    private static func compareWordle(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.solvedRounds != b.solvedRounds {
+            let winner = a.solvedRounds > b.solvedRounds ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Won \(winner.solvedRounds) Wordles")
+        }
+        if a.totalGuesses != b.totalGuesses {
+            let winner = a.totalGuesses < b.totalGuesses ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Solved in fewer guesses")
+        }
+        return compareElapsed(a, b, fallback: "Same Wordle result")
+    }
+
+    private static func compareWordScore(_ a: MatchPlayerResult, _ b: MatchPlayerResult, label: String) -> MatchResolution {
+        if a.score != b.score {
+            let winner = a.score > b.score ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Higher \(label) score")
+        }
+        if a.wordCount != b.wordCount {
+            let winner = a.wordCount > b.wordCount ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Found more words")
+        }
+        if a.longestWordLength != b.longestWordLength {
+            let winner = a.longestWordLength > b.longestWordLength ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Found the longest word")
+        }
+        return MatchResolution(winnerID: nil, reason: "Same score and word count")
+    }
+
+    private static func compareCompletion(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.completed != b.completed {
+            let winner = a.completed ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Completed the puzzle")
+        }
+        if a.completed && b.completed {
+            return compareElapsed(a, b, fallback: "Both completed in the same time")
+        }
+        if a.progress != b.progress {
+            let winner = a.progress > b.progress ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Better puzzle progress")
+        }
+        return compareElapsed(a, b, fallback: "Same puzzle progress")
+    }
+
+    private static func compareMinesweeper(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.hitMine != b.hitMine {
+            let winner = a.hitMine ? b : a
+            return MatchResolution(winnerID: winner.userID, reason: "Avoided the mine")
+        }
+        if a.completed != b.completed {
+            let winner = a.completed ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Cleared the board")
+        }
+        if a.score != b.score {
+            let winner = a.score > b.score ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Revealed more safe cells")
+        }
+        return compareElapsed(a, b, fallback: "Same Minesweeper result")
+    }
+
+    private static func compareElapsed(_ a: MatchPlayerResult, _ b: MatchPlayerResult, fallback: String) -> MatchResolution {
+        if a.elapsedSeconds != b.elapsedSeconds {
+            let winner = a.elapsedSeconds < b.elapsedSeconds ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Faster finish")
+        }
+        return MatchResolution(winnerID: nil, reason: fallback)
     }
 }

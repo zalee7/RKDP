@@ -14,6 +14,13 @@ final class SudokuViewModel: ObservableObject {
     private let solution: [[Int]]
     private var timer: AnyCancellable?
 
+    var progress: Double {
+        let fillable = board.cells.filter { !$0.isGiven }
+        guard !fillable.isEmpty else { return isComplete ? 1 : 0 }
+        let validFilled = fillable.filter { $0.value != 0 && !$0.isInvalid }.count
+        return Double(validFilled) / Double(fillable.count)
+    }
+
     init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
         let (puzzle, sol) = SudokuGenerator.generate(difficulty: difficulty, seed: seed)

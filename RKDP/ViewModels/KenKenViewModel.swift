@@ -12,9 +12,15 @@ final class KenKenViewModel: ObservableObject {
     let difficulty: Difficulty
     private var timer: AnyCancellable?
 
-    init(difficulty: Difficulty) {
+    var progress: Double {
+        guard !board.cells.isEmpty else { return isComplete ? 1 : 0 }
+        let validFilled = board.cells.filter { $0.value != 0 && !$0.isInvalid }.count
+        return Double(validFilled) / Double(board.cells.count)
+    }
+
+    init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
-        self.board = KenKenGenerator.generate(difficulty: difficulty)
+        self.board = KenKenGenerator.generate(difficulty: difficulty, seed: seed)
         startTimer()
     }
 

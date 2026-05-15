@@ -5,7 +5,7 @@ struct KakuroGenerator {
     // Layout key: '#' = black, '.' = white entry, digits in black cells = clue markers
     // For simplicity, we ship a set of hand-crafted layouts per difficulty.
 
-    static func generate(difficulty: Difficulty) -> KakuroBoard {
+    static func generate(difficulty: Difficulty, seed: Int? = nil) -> KakuroBoard {
         switch difficulty {
         case .easy:   return buildBoard(layout: easyLayout)
         case .medium: return buildBoard(layout: mediumLayout)

@@ -7,6 +7,7 @@ struct MatchmakingView: View {
 
     @StateObject private var vm = MultiplayerViewModel()
     @State private var selectedWager: WagerTier?
+    @State private var showBreakdown = false
     @Environment(\.dismiss) var dismiss
 
     private var wagerOptions: [WagerTier] {
@@ -210,8 +211,8 @@ struct MatchmakingView: View {
             HStack {
                 Label("Opponent", systemImage: "person.fill")
                 Spacer()
-                if let oppFinish = vm.finishTimes.first(where: { $0.key != user.id })?.value {
-                    Label("Finished \(oppFinish/60)m\(oppFinish%60)s", systemImage: "checkmark.circle.fill")
+                if let oppResult = vm.playerResults.first(where: { $0.key != user.id })?.value {
+                    Label(oppResult.status, systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {
                     Text("In progress…").foregroundStyle(.secondary)
@@ -222,21 +223,33 @@ struct MatchmakingView: View {
             .padding(.vertical, 6)
             .background(Color(.secondarySystemBackground))
 
-            // Game board — seed ensures both players get identical puzzle
-            SoloGameView(mode: session.mode, difficulty: session.difficulty, user: vm.user, seed: session.seed)
+            ZStack {
+                // Game board — seed ensures both players get identical puzzle
+                SoloGameView(
+                    mode: session.mode,
+                    difficulty: session.difficulty,
+                    user: vm.user,
+                    sessionID: session.id,
+                    seed: session.seed
+                ) { result in
+                    Task { await vm.submitResult(result, session: session) }
+                }
 
-            // Submit button (normally triggered by game completion)
-            Button {
-                Task { await vm.submitFinish(sessionID: session.id) }
-            } label: {
-                Label("Submit Solution", systemImage: "checkmark.seal.fill")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                if let myResult = vm.playerResults[user.id] {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text(myResult.status)
+                            .font(.headline.bold())
+                        Text("Waiting for opponent…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(20)
+                    .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(radius: 12)
+                }
             }
-            .padding()
         }
     }
 
@@ -251,9 +264,10 @@ struct MatchmakingView: View {
         let base        = isDraw ? 5 : (isWinner ? 30 + divBonus : -15)
         let rankDelta   = Int(Double(base) * session.difficulty.pointMultiplier)
 
-        let myTime       = vm.finishTimes[user.id]
+        let results      = session.playerResults ?? vm.playerResults
+        let myResult     = results[user.id]
         let opponentID   = session.players.first(where: { $0.userID != user.id })?.userID ?? ""
-        let opponentTime = vm.finishTimes[opponentID]
+        let opponentResult = results[opponentID]
 
         return VStack(spacing: 20) {
             Spacer()
@@ -261,7 +275,7 @@ struct MatchmakingView: View {
                 .font(.largeTitle.bold())
                 .foregroundStyle(isDraw ? .orange : (isWinner ? .yellow : .secondary))
 
-            Text(mode.winConditionText)
+            Text(session.winnerReason ?? mode.winConditionText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -270,9 +284,9 @@ struct MatchmakingView: View {
             // Performance breakdown
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    performanceColumn(label: "You", time: myTime, highlight: isWinner)
+                    performanceColumn(label: "You", result: myResult, highlight: isWinner)
                     Divider().frame(height: 60)
-                    performanceColumn(label: "Opponent", time: opponentTime, highlight: !isWinner && !isDraw)
+                    performanceColumn(label: "Opponent", result: opponentResult, highlight: !isWinner && !isDraw)
                 }
                 .padding(.vertical, 10)
 
@@ -310,6 +324,16 @@ struct MatchmakingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal)
 
+            Button { showBreakdown = true } label: {
+                Label("Match Breakdown", systemImage: "list.bullet.rectangle")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .foregroundStyle(mode.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .padding(.horizontal)
+
             Button { vm.reset() } label: {
                 Text("Play Again")
                     .frame(maxWidth: .infinity).padding()
@@ -322,19 +346,25 @@ struct MatchmakingView: View {
             Button("Back to Home") { dismiss() }.foregroundStyle(.secondary)
             Spacer()
         }
+        .sheet(isPresented: $showBreakdown) {
+            MatchBreakdownView(session: session, currentUserID: user.id, results: results)
+        }
     }
 
-    private func performanceColumn(label: String, time: Int?, highlight: Bool) -> some View {
+    private func performanceColumn(label: String, result: MatchPlayerResult?, highlight: Bool) -> some View {
         VStack(spacing: 4) {
             Text(label).font(.caption.bold()).foregroundStyle(.secondary)
-            if let t = time {
-                Text("\(t / 60):\(String(format: "%02d", t % 60))")
-                    .font(.title2.bold())
+            if let result {
+                Text(result.status)
+                    .font(.headline.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .foregroundStyle(highlight ? .green : .primary)
-                Text("finished").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("\(result.elapsedSeconds / 60):\(String(format: "%02d", result.elapsedSeconds % 60))")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
             } else {
                 Text("—").font(.title2.bold()).foregroundStyle(.secondary)
-                Text("unfinished").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("waiting").font(.system(size: 10)).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity)
@@ -350,6 +380,74 @@ struct MatchmakingView: View {
             Button("Retry") { vm.reset() }
         }
         .padding()
+    }
+}
+
+struct MatchBreakdownView: View {
+    let session: GameSession
+    let currentUserID: String
+    let results: [String: MatchPlayerResult]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if let reason = session.winnerReason {
+                        Label(reason, systemImage: session.winnerID == nil ? "equal.circle.fill" : "crown.fill")
+                            .foregroundStyle(session.mode.accentColor)
+                    }
+                }
+
+                ForEach(session.players, id: \.userID) { player in
+                    Section(player.userID == currentUserID ? "You" : player.username) {
+                        if let result = results[player.userID] {
+                            breakdownRows(for: result)
+                        } else {
+                            Text("No result submitted yet.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Match Breakdown")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func breakdownRows(for result: MatchPlayerResult) -> some View {
+        LabeledContent("Status", value: result.status)
+        LabeledContent("Time", value: "\(result.elapsedSeconds / 60):\(String(format: "%02d", result.elapsedSeconds % 60))")
+
+        switch session.mode {
+        case .wordle:
+            LabeledContent("Rounds solved", value: "\(result.solvedRounds)")
+            LabeledContent("Solved-round guesses", value: "\(result.totalGuesses)")
+        case .anagram, .wordHunt:
+            LabeledContent("Score", value: "\(result.score)")
+            LabeledContent("Words", value: "\(result.wordCount)")
+            LabeledContent("Longest word", value: "\(result.longestWordLength) letters")
+        case .minesweeper:
+            LabeledContent("Safe cells", value: result.summary["safeCells"] ?? "\(result.score)")
+            LabeledContent("Mine hit", value: result.hitMine ? "Yes" : "No")
+        case .sudoku, .kakuro, .kenken:
+            LabeledContent("Completed", value: result.completed ? "Yes" : "No")
+            LabeledContent("Progress", value: "\(Int((result.progress * 100).rounded()))%")
+        }
+
+        if !result.details.isEmpty {
+            ForEach(result.details, id: \.self) { detail in
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

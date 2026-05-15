@@ -2,15 +2,26 @@ import SwiftUI
 
 struct KakuroView: View {
     let difficulty: Difficulty
+    let userID: String?
     let sessionID: String?
+    let onMatchResult: (MatchPlayerResult) -> Void
 
     @StateObject private var vm: KakuroViewModel
     @State private var showComplete = false
+    @State private var didReportMatchResult = false
 
-    init(difficulty: Difficulty, sessionID: String?) {
+    init(
+        difficulty: Difficulty,
+        userID: String? = nil,
+        sessionID: String?,
+        seed: Int? = nil,
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+    ) {
         self.difficulty = difficulty
+        self.userID = userID
         self.sessionID = sessionID
-        _vm = StateObject(wrappedValue: KakuroViewModel(difficulty: difficulty))
+        self.onMatchResult = onMatchResult
+        _vm = StateObject(wrappedValue: KakuroViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {
@@ -42,8 +53,37 @@ struct KakuroView: View {
         }
         .navigationTitle("Kakuro")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: vm.isComplete) { _, v in if v { showComplete = true } }
+        .onChange(of: vm.isComplete) { _, v in
+            if v {
+                showComplete = sessionID == nil
+                reportMatchResult(status: "Solved")
+            }
+        }
+        .onChange(of: vm.elapsedSeconds) { _, seconds in
+            if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .kakuro) {
+                reportMatchResult(status: "Time expired")
+            }
+        }
         .alert("Kakuro Solved! 🎉", isPresented: $showComplete) { Button("OK") {} }
+    }
+
+    private func reportMatchResult(status: String) {
+        guard !didReportMatchResult, sessionID != nil, let userID else { return }
+        didReportMatchResult = true
+        vm.stop()
+        onMatchResult(MatchPlayerResult(
+            userID: userID,
+            mode: .kakuro,
+            completed: vm.isComplete,
+            elapsedSeconds: vm.elapsedSeconds,
+            score: Int((vm.progress * 100).rounded()),
+            progress: vm.progress,
+            status: status,
+            summary: ["progressPercent": "\(Int((vm.progress * 100).rounded()))"],
+            details: [
+                vm.isComplete ? "Completed the Kakuro" : "Reached \(Int((vm.progress * 100).rounded()))% progress"
+            ]
+        ))
     }
 }
 

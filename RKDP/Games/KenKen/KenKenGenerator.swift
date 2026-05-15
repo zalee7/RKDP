@@ -1,7 +1,7 @@
 import Foundation
 
 struct KenKenGenerator {
-    static func generate(difficulty: Difficulty) -> KenKenBoard {
+    static func generate(difficulty: Difficulty, seed: Int? = nil) -> KenKenBoard {
         let size: Int
         switch difficulty {
         case .easy:   size = 4
@@ -9,12 +9,13 @@ struct KenKenGenerator {
         case .hard:   size = 6
         case .expert: size = 6
         }
-        return generateBoard(size: size, difficulty: difficulty)
+        var rng = SeededRNG(seed: seed ?? Int.random(in: 0..<Int.max))
+        return generateBoard(size: size, difficulty: difficulty, rng: &rng)
     }
 
-    private static func generateBoard(size: Int, difficulty: Difficulty) -> KenKenBoard {
+    private static func generateBoard(size: Int, difficulty: Difficulty, rng: inout SeededRNG) -> KenKenBoard {
         // 1. Generate a valid Latin square solution
-        let solution = latinSquare(size: size)
+        let solution = latinSquare(size: size, rng: &rng)
 
         // 2. Partition cells into cages
         var cageMap = Array(repeating: -1, count: size * size)
@@ -37,14 +38,14 @@ struct KenKenGenerator {
 
             // Grow cage greedily up to maxCageSize
             var frontier = orthogonalNeighbours(of: start, size: size)
-            while cage.count < maxCageSize, let next = frontier.first(where: { unassigned.contains($0) }) {
+            while cage.count < maxCageSize, let next = rng.shuffled(Array(frontier)).first(where: { unassigned.contains($0) }) {
                 cage.append(next)
                 unassigned.remove(next)
                 frontier.formUnion(orthogonalNeighbours(of: next, size: size))
             }
 
             let vals = cage.map { solution[$0 / size][$0 % size] }
-            let op = assignOperation(to: vals, cageSize: cage.count)
+            let op = assignOperation(to: vals, cageSize: cage.count, rng: &rng)
             let target = computeTarget(vals: vals, op: op)!
 
             for id in cage { cageMap[id] = cageID }
@@ -67,14 +68,14 @@ struct KenKenGenerator {
         return KenKenBoard(size: size, cells: cells, cages: cages)
     }
 
-    private static func latinSquare(size: Int) -> [[Int]] {
+    private static func latinSquare(size: Int, rng: inout SeededRNG) -> [[Int]] {
         var base = (0..<size).map { offset in (0..<size).map { (($0 + offset) % size) + 1 } }
         // Shuffle rows and columns for variety
-        base.shuffle()
+        base = rng.shuffled(base)
         var result = base
         for i in 0..<size { for j in 0..<size { result[j][i] = base[j][i] } }
         // Column shuffle
-        let colPerm = (0..<size).shuffled()
+        let colPerm = rng.shuffled(Array(0..<size))
         return result.map { row in colPerm.map { row[$0] } }
     }
 
@@ -88,15 +89,15 @@ struct KenKenGenerator {
         return result
     }
 
-    private static func assignOperation(to vals: [Int], cageSize: Int) -> KenKenOperation {
+    private static func assignOperation(to vals: [Int], cageSize: Int, rng: inout SeededRNG) -> KenKenOperation {
         if cageSize == 1 { return .given }
         if cageSize == 2 {
             let (a, b) = (max(vals[0], vals[1]), min(vals[0], vals[1]))
             // Prefer divide when evenly divisible to keep numbers small
-            if b != 0 && a % b == 0 { return Bool.random() ? .divide : .subtract }
-            return Bool.random() ? .add : .subtract
+            if b != 0 && a % b == 0 { return rng.next() % 2 == 0 ? .divide : .subtract }
+            return rng.next() % 2 == 0 ? .add : .subtract
         }
-        return Bool.random() ? .add : .multiply
+        return rng.next() % 2 == 0 ? .add : .multiply
     }
 
     private static func computeTarget(vals: [Int], op: KenKenOperation) -> Int? {

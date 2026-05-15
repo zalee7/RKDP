@@ -15,7 +15,7 @@ struct MinesweeperCell: Identifiable, Equatable {
     var col: Int
 }
 
-enum MinesweeperStatus {
+enum MinesweeperStatus: Equatable {
     case idle, playing, won, lost
 }
 

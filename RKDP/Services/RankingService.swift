@@ -13,9 +13,14 @@ final class RankingService {
         let difficulty: Difficulty
         let winnerID: String?
         let players: [MatchPlayer]
+        let playerResults: [String: MatchPlayerResult]
+        let winnerReason: String
     }
 
     func processOutcome(_ outcome: MatchOutcome) async throws {
+        let existing = try await firestore.fetchSession(id: outcome.sessionID)
+        guard existing.status != .finished else { return }
+
         // Compute deltas directly from outcome — do NOT rely on the fetched session status,
         // which is still .inProgress until finishSession is called below.
         func delta(for playerID: String) -> Int {
@@ -43,9 +48,15 @@ final class RankingService {
             var rankInfo = user.ranks[outcome.mode] ?? .empty
             rankInfo.points = max(0, rankInfo.points + d)
             rankInfo.tier = RankTier.tier(for: rankInfo.points)
-            if isWinner { rankInfo.wins += 1 } else { rankInfo.losses += 1 }
-            if isWinner, let time = player.finishTime {
+            if let _ = outcome.winnerID {
+                if isWinner { rankInfo.wins += 1 } else { rankInfo.losses += 1 }
+            }
+            let result = outcome.playerResults[player.userID]
+            if isWinner, result?.completed == true, let time = result?.elapsedSeconds {
                 rankInfo.bestTime = min(rankInfo.bestTime ?? Int.max, time)
+            }
+            if isWinner, outcome.mode.isScoreBased, let score = result?.score {
+                rankInfo.bestScore = max(rankInfo.bestScore ?? 0, score)
             }
             user.ranks[outcome.mode] = rankInfo
 
@@ -66,7 +77,9 @@ final class RankingService {
         try await firestore.finishSession(
             id: outcome.sessionID,
             winnerID: outcome.winnerID,
-            finishedAt: Date()
+            finishedAt: Date(),
+            playerResults: outcome.playerResults,
+            winnerReason: outcome.winnerReason
         )
     }
 }

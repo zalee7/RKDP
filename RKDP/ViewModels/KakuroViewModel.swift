@@ -12,9 +12,16 @@ final class KakuroViewModel: ObservableObject {
     let difficulty: Difficulty
     private var timer: AnyCancellable?
 
-    init(difficulty: Difficulty) {
+    var progress: Double {
+        let entries = board.cells.filter { if case .entry = $0.type { return true }; return false }
+        guard !entries.isEmpty else { return isComplete ? 1 : 0 }
+        let validFilled = entries.filter { $0.value != 0 && !$0.isInvalid }.count
+        return Double(validFilled) / Double(entries.count)
+    }
+
+    init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
-        self.board = KakuroGenerator.generate(difficulty: difficulty)
+        self.board = KakuroGenerator.generate(difficulty: difficulty, seed: seed)
         startTimer()
     }
 

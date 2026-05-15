@@ -2,14 +2,25 @@ import SwiftUI
 
 struct MinesweeperView: View {
     let difficulty: Difficulty
+    let userID: String?
     let sessionID: String?
+    let onMatchResult: (MatchPlayerResult) -> Void
 
     @StateObject private var vm: MinesweeperViewModel
+    @State private var didReportMatchResult = false
 
-    init(difficulty: Difficulty, sessionID: String?, seed: Int? = nil) {
+    init(
+        difficulty: Difficulty,
+        userID: String? = nil,
+        sessionID: String?,
+        seed: Int? = nil,
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+    ) {
         self.difficulty = difficulty
+        self.userID = userID
         self.sessionID = sessionID
-        _vm = StateObject(wrappedValue: MinesweeperViewModel(difficulty: difficulty, seed: seed))
+        self.onMatchResult = onMatchResult
+        _vm = StateObject(wrappedValue: MinesweeperViewModel(difficulty: difficulty, seed: seed, ranked: sessionID != nil))
     }
 
     var body: some View {
@@ -32,9 +43,11 @@ struct MinesweeperView: View {
             .padding(.vertical, 8)
 
             if vm.status == .won {
-                Text("You Won! 🎉").font(.title.bold()).foregroundStyle(.green).padding()
+                Text(sessionID == nil ? "You Won! 🎉" : "Board Cleared")
+                    .font(.title.bold()).foregroundStyle(.green).padding()
             } else if vm.status == .lost {
-                Text("Game Over 💥").font(.title.bold()).foregroundStyle(.red).padding()
+                Text(sessionID == nil ? "Game Over 💥" : "Mine Hit")
+                    .font(.title.bold()).foregroundStyle(.red).padding()
             }
 
             // Board
@@ -47,7 +60,7 @@ struct MinesweeperView: View {
                 .padding(8)
             }
 
-            if vm.isFinished {
+            if vm.isFinished && sessionID == nil {
                 Button { vm.restart() } label: {
                     Label("New Game", systemImage: "arrow.clockwise")
                         .frame(maxWidth: .infinity)
@@ -60,6 +73,40 @@ struct MinesweeperView: View {
         }
         .navigationTitle("Minesweeper")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: vm.status) { _, status in
+            if status == .won || status == .lost { reportMatchResult() }
+        }
+        .onChange(of: vm.elapsedSeconds) { _, seconds in
+            if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .minesweeper) {
+                reportMatchResult()
+            }
+        }
+    }
+
+    private func reportMatchResult() {
+        guard !didReportMatchResult, sessionID != nil, let userID else { return }
+        didReportMatchResult = true
+        vm.stop()
+        let hitMine = vm.status == .lost
+        let completed = vm.status == .won
+        onMatchResult(MatchPlayerResult(
+            userID: userID,
+            mode: .minesweeper,
+            completed: completed,
+            elapsedSeconds: vm.elapsedSeconds,
+            score: vm.board.revealedCount,
+            progress: Double(vm.board.revealedCount) / Double(max(1, vm.board.safeCells)),
+            status: completed ? "Cleared board" : (hitMine ? "Hit a mine" : "Time expired"),
+            summary: [
+                "hitMine": hitMine ? "true" : "false",
+                "safeCells": "\(vm.board.revealedCount)",
+                "totalSafeCells": "\(vm.board.safeCells)"
+            ],
+            details: [
+                "\(vm.board.revealedCount) of \(vm.board.safeCells) safe cells revealed",
+                hitMine ? "Mine hit" : (completed ? "Board cleared" : "No mine hit")
+            ]
+        ))
     }
 }
 

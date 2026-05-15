@@ -74,12 +74,30 @@ final class FirestoreService {
         try db.collection("sessions").document(session.id).setData(from: session, merge: true)
     }
 
-    func finishSession(id: String, winnerID: String?, finishedAt: Date) async throws {
-        try await db.collection("sessions").document(id).updateData([
+    func finishSession(
+        id: String,
+        winnerID: String?,
+        finishedAt: Date,
+        playerResults: [String: MatchPlayerResult] = [:],
+        winnerReason: String? = nil
+    ) async throws {
+        let encodedResults = try Firestore.Encoder().encode(playerResults)
+        var data: [String: Any] = [
             "status": SessionStatus.finished.rawValue,
-            "winnerID": winnerID as Any,
-            "finishedAt": Timestamp(date: finishedAt)
-        ])
+            "finishedAt": Timestamp(date: finishedAt),
+            "playerResults": encodedResults
+        ]
+        if let winnerID {
+            data["winnerID"] = winnerID
+        } else {
+            data["winnerID"] = FieldValue.delete()
+        }
+        if let winnerReason {
+            data["winnerReason"] = winnerReason
+        } else {
+            data["winnerReason"] = FieldValue.delete()
+        }
+        try await db.collection("sessions").document(id).updateData(data)
     }
 
     // MARK: - Matchmaking

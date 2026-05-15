@@ -4,12 +4,26 @@ struct AnagramView: View {
     @StateObject private var vm: AnagramViewModel
     @Environment(\.dismiss) var dismiss
     @Environment(\.boardCosmetics) var cosmetics
+    private let userID: String?
+    private let sessionID: String?
+    private let onMatchResult: (MatchPlayerResult) -> Void
+    @State private var didReportMatchResult = false
 
-    init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
+    init(
+        difficulty: Difficulty,
+        user: AppUser? = nil,
+        sessionID: String? = nil,
+        seed: Int? = nil,
+        onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in }
+    ) {
+        self.userID = user?.id
+        self.sessionID = sessionID
+        self.onMatchResult = onMatchResult
         _vm = StateObject(wrappedValue: AnagramViewModel(
             difficulty: difficulty,
             userID: user?.id,
-            priorBest: user?.rank(for: .anagram).bestScore
+            priorBest: user?.rank(for: .anagram).bestScore,
+            seed: seed
         ))
     }
 
@@ -46,10 +60,13 @@ struct AnagramView: View {
                     .padding(.bottom, 28)
             }
 
-            if vm.isFinished { finishedOverlay }
+            if vm.isFinished && sessionID == nil { finishedOverlay }
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
+        .onChange(of: vm.isFinished) { _, finished in
+            if finished { reportMatchResult() }
+        }
     }
 
     // MARK: - Top bar
@@ -389,6 +406,27 @@ struct AnagramView: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.3), value: vm.isFinished)
+    }
+
+    private func reportMatchResult() {
+        guard !didReportMatchResult, sessionID != nil, let userID else { return }
+        didReportMatchResult = true
+        let longest = vm.foundWords.map(\.count).max() ?? 0
+        onMatchResult(MatchPlayerResult(
+            userID: userID,
+            mode: .anagram,
+            completed: true,
+            elapsedSeconds: vm.elapsedSeconds,
+            score: vm.score,
+            progress: Double(vm.score),
+            status: "Time expired",
+            summary: [
+                "wordCount": "\(vm.foundWords.count)",
+                "longestWordLength": "\(longest)",
+                "missedWords": "\(vm.missedWords.count)"
+            ],
+            details: vm.sortedFoundWords.prefix(12).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
+        ))
     }
 
     @ViewBuilder

@@ -26,16 +26,29 @@ final class RealtimeDBService {
         }
     }
 
-    // MARK: - Finish times
+    // MARK: - Match results
 
-    func submitFinishTime(sessionID: String, userID: String, seconds: Int) async throws {
-        try await sessionRef(sessionID).child("finishTimes").child(userID).setValue(seconds)
+    func submitResult(sessionID: String, result: MatchPlayerResult) async throws {
+        try await sessionRef(sessionID)
+            .child("results")
+            .child(result.userID)
+            .setValue(result.realtimeValue)
     }
 
-    func listenForFinishTimes(sessionID: String, onUpdate: @escaping ([String: Int]) -> Void) -> DatabaseHandle {
-        sessionRef(sessionID).child("finishTimes").observe(.value) { snapshot in
-            guard let dict = snapshot.value as? [String: Int] else { return }
-            onUpdate(dict)
+    func listenForResults(sessionID: String, onUpdate: @escaping ([String: MatchPlayerResult]) -> Void) -> DatabaseHandle {
+        sessionRef(sessionID).child("results").observe(.value) { snapshot in
+            guard let dict = snapshot.value as? [String: Any] else {
+                onUpdate([:])
+                return
+            }
+
+            var results: [String: MatchPlayerResult] = [:]
+            for (userID, raw) in dict {
+                if let result = MatchPlayerResult.fromRealtimeValue(raw) {
+                    results[userID] = result
+                }
+            }
+            onUpdate(results)
         }
     }
 

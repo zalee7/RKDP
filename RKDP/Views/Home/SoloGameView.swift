@@ -5,25 +5,27 @@ struct SoloGameView: View {
     let mode: GameMode
     let difficulty: Difficulty
     let user: AppUser?
+    var sessionID: String? = nil
     var seed: Int? = nil
+    var onMatchResult: (MatchPlayerResult) -> Void = { _ in }
 
     var body: some View {
         Group {
             switch mode {
             case .sudoku:
-                SudokuView(difficulty: difficulty, sessionID: nil, seed: seed)
+                SudokuView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .minesweeper:
-                MinesweeperView(difficulty: difficulty, sessionID: nil, seed: seed)
+                MinesweeperView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .kakuro:
-                KakuroView(difficulty: difficulty, sessionID: nil)
+                KakuroView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .kenken:
-                KenKenView(difficulty: difficulty, sessionID: nil)
+                KenKenView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .anagram:
-                AnagramView(difficulty: difficulty, user: user)
+                AnagramView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .wordHunt:
-                WordHuntView(difficulty: difficulty, user: user)
+                WordHuntView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .wordle:
-                WordleView(difficulty: difficulty, user: user, seed: seed)
+                WordleView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             }
         }
         .environment(\.boardCosmetics, user?.cosmetics ?? .default)
