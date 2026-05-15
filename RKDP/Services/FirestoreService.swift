@@ -105,7 +105,7 @@ final class FirestoreService {
     /// Write this player into the queue, then attempt to pair with anyone already waiting.
     /// The player with the lexicographically larger userID always creates the session,
     /// guaranteeing exactly one session even if both arrive simultaneously.
-    func joinAndPair(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: Int) async throws {
+    func joinAndPair(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: Int, searchID: String) async throws {
         let tier = user.rank(for: mode).tier
         let queueRef = queueCollection(mode: mode, difficulty: difficulty)
 
@@ -115,7 +115,8 @@ final class FirestoreService {
             "username":   user.username,
             "wager":      wager,
             "rankTier":   tier.rawValue,
-            "rankPoints": user.rank(for: mode).points
+            "rankPoints": user.rank(for: mode).points,
+            "searchID":   searchID
         ])
 
         // 2. Look for anyone else in the queue with the same tier AND same wager
@@ -134,7 +135,7 @@ final class FirestoreService {
         guard user.id > opponentID else { return }
 
         try await createAndNotify(
-            hostUser: user, wager: wager, tier: tier,
+            hostUser: user, wager: wager, tier: tier, searchID: searchID,
             opponentDoc: opponentDoc,
             mode: mode, difficulty: difficulty,
             queueRef: queueRef
@@ -144,7 +145,7 @@ final class FirestoreService {
     /// Watch the queue; if a second player appears AND this user has the larger uid,
     /// create the session and notify both players.
     func listenForQueueMatch(
-        user: AppUser, mode: GameMode, difficulty: Difficulty, wager: Int,
+        user: AppUser, mode: GameMode, difficulty: Difficulty, wager: Int, searchID: String,
         onPaired: @escaping (String) -> Void
     ) -> ListenerRegistration {
         let queueRef = queueCollection(mode: mode, difficulty: difficulty)
@@ -166,7 +167,7 @@ final class FirestoreService {
             Task {
                 do {
                     try await self.createAndNotify(
-                        hostUser: user, wager: wager, tier: tier,
+                        hostUser: user, wager: wager, tier: tier, searchID: searchID,
                         opponentDoc: opponentDoc,
                         mode: mode, difficulty: difficulty,
                         queueRef: queueRef
@@ -179,22 +180,38 @@ final class FirestoreService {
     }
 
     private func createAndNotify(
-        hostUser: AppUser, wager: Int, tier: RankTier,
+        hostUser: AppUser, wager: Int, tier: RankTier, searchID: String,
         opponentDoc: QueryDocumentSnapshot,
         mode: GameMode, difficulty: Difficulty,
         queueRef: CollectionReference
     ) async throws {
         let opponentID       = opponentDoc.documentID
-        let opponentUsername = opponentDoc.data()["username"] as? String ?? "Opponent"
-        let opponentWager    = opponentDoc.data()["wager"]    as? Int    ?? wager
-        let opponentTierRaw  = opponentDoc.data()["rankTier"] as? Int    ?? 0
+
+        // A listener callback may already be in flight when a player cancels.
+        // Re-read both queue entries and only create a session for the current search.
+        let hostQueueDoc = try await queueRef.document(hostUser.id).getDocument()
+        let opponentQueueDoc = try await queueRef.document(opponentID).getDocument()
+        guard let hostQueue = hostQueueDoc.data(),
+              let opponentQueue = opponentQueueDoc.data(),
+              (hostQueue["searchID"] as? String) == searchID,
+              (hostQueue["wager"] as? Int) == wager,
+              (hostQueue["rankTier"] as? Int) == tier.rawValue,
+              (opponentQueue["wager"] as? Int) == wager,
+              (opponentQueue["rankTier"] as? Int) == tier.rawValue,
+              let opponentSearchID = opponentQueue["searchID"] as? String else {
+            return
+        }
+
+        let opponentUsername = opponentQueue["username"] as? String ?? "Opponent"
+        let opponentWager    = opponentQueue["wager"]    as? Int    ?? wager
+        let opponentTierRaw  = opponentQueue["rankTier"] as? Int    ?? 0
         let opponentTier     = RankTier(rawValue: opponentTierRaw) ?? .bronze
 
         // Derive a deterministic session ID so simultaneous creates are idempotent
         let pair = [hostUser.id, opponentID].sorted().joined(separator: "_")
         var sessionID = "\(pair)_\(mode.rawValue)_\(difficulty.rawValue)"
 
-        let opponentRankPoints = opponentDoc.data()["rankPoints"] as? Int ?? 0
+        let opponentRankPoints = opponentQueue["rankPoints"] as? Int ?? 0
 
         // Allow rematches: only block if a session between these players is actively in progress
         let existing = try await db.collection("sessions").document(sessionID).getDocument()
@@ -229,8 +246,14 @@ final class FirestoreService {
         try db.collection("sessions").document(sessionID).setData(from: session)
 
         // Notify both players by writing pendingSessionID to their user docs
-        try await db.collection("users").document(hostUser.id).updateData(["pendingSessionID": sessionID])
-        try await db.collection("users").document(opponentID).updateData(["pendingSessionID": sessionID])
+        try await db.collection("users").document(hostUser.id).updateData([
+            "pendingSessionID": sessionID,
+            "pendingSearchID": searchID
+        ])
+        try await db.collection("users").document(opponentID).updateData([
+            "pendingSessionID": sessionID,
+            "pendingSearchID": opponentSearchID
+        ])
 
         // Clean up queue
         try await queueRef.document(hostUser.id).delete()
@@ -252,17 +275,18 @@ final class FirestoreService {
 
     func clearPendingSession(userID: String) async throws {
         try await db.collection("users").document(userID).updateData([
-            "pendingSessionID": FieldValue.delete()
+            "pendingSessionID": FieldValue.delete(),
+            "pendingSearchID": FieldValue.delete()
         ])
     }
 
     /// Listen on the user's own doc for pendingSessionID written by the pairing host
-    func listenForMatch(userID: String, onMatch: @escaping (String) -> Void) -> ListenerRegistration {
+    func listenForMatch(userID: String, onMatch: @escaping (String, String?) -> Void) -> ListenerRegistration {
         db.collection("users").document(userID)
             .addSnapshotListener { snapshot, _ in
                 guard let data = snapshot?.data(),
                       let sessionID = data["pendingSessionID"] as? String else { return }
-                onMatch(sessionID)
+                onMatch(sessionID, data["pendingSearchID"] as? String)
             }
     }
 

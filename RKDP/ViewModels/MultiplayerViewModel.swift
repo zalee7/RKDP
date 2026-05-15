@@ -33,6 +33,7 @@ final class MultiplayerViewModel: ObservableObject {
     private var rtdbHandles: [DatabaseHandle] = []
     private var currentSessionID: String?
     private var gameTimer: Timer?
+    private var activeSearchID: UUID?
 
     var user: AppUser?
     var mode: GameMode = .sudoku
@@ -45,6 +46,18 @@ final class MultiplayerViewModel: ObservableObject {
             state = .error("Not enough coins for this wager.")
             return
         }
+
+        let searchID = UUID()
+        activeSearchID = searchID
+        tearDownListeners()
+        countdownTask?.cancel()
+        countdownTask = nil
+        gameTimer?.invalidate()
+        playerResults = [:]
+        opponentUser = nil
+        elapsedSeconds = 0
+        matchCountdown = 5
+
         self.user = user
         self.mode = mode
         self.difficulty = difficulty
@@ -54,47 +67,78 @@ final class MultiplayerViewModel: ObservableObject {
         state = .searching
 
         do {
-            // 0. Clear any stale pendingSessionID from a previous match
+            // 0. Clear any stale state from a previous attempt before listening.
             try? await store.clearPendingSession(userID: user.id)
+            try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+            guard isCurrentSearch(searchID) else { return }
 
-            // 1. Write to queue and try to pair immediately
-            try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount)
-
-            // 2. Listen on our user doc for pendingSessionID (written by the host player)
-            userDocListener = store.listenForMatch(userID: user.id) { [weak self] sessionID in
-                Task { await self?.consumeMatch(sessionID: sessionID) }
+            // 1. Listen on our user doc before entering the queue so a fast pair
+            //    cannot write pendingSessionID before we are watching for it.
+            userDocListener = store.listenForMatch(userID: user.id) { [weak self] sessionID, pendingSearchID in
+                Task { await self?.consumeMatch(sessionID: sessionID, pendingSearchID: pendingSearchID, searchID: searchID) }
             }
 
-            // 3. Also listen on the queue so that if we're the host we can pair
+            // 2. Also listen on the queue so that if we're the host we can pair
             //    any opponent who joins after us
             queueListener = store.listenForQueueMatch(
-                user: user, mode: mode, difficulty: difficulty, wager: wager.amount
+                user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString
             ) { _ in /* session creation is handled inside listenForQueueMatch */ }
 
+            // 3. Write to queue and try to pair immediately
+            try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString)
+
+            if !isCurrentSearch(searchID) {
+                try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+                try? await store.clearPendingSession(userID: user.id)
+            }
         } catch {
+            guard isCurrentSearch(searchID) else { return }
+            tearDownListeners()
+            try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
             state = .error(error.localizedDescription)
         }
     }
 
     func cancelSearch() async {
-        guard let user, selectedWager != nil else { return }
+        guard let user else { return }
+        activeSearchID = nil
         tearDownListeners()
+        countdownTask?.cancel()
+        countdownTask = nil
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+        try? await store.clearPendingSession(userID: user.id)
+        opponentUser = nil
+        playerResults = [:]
+        elapsedSeconds = 0
         state = .idle
     }
 
     /// Called when pendingSessionID appears on our user doc
-    private func consumeMatch(sessionID: String) async {
+    private func consumeMatch(sessionID: String, pendingSearchID: String?, searchID: UUID) async {
+        guard isCurrentSearch(searchID), let user else { return }
+        guard pendingSearchID == searchID.uuidString else {
+            try? await store.clearPendingSession(userID: user.id)
+            return
+        }
         tearDownListeners()
-        try? await store.clearPendingSession(userID: user?.id ?? "")
+        try? await store.clearPendingSession(userID: user.id)
         do {
             let session = try await store.fetchSession(id: sessionID)
+            guard isCurrentSearch(searchID) else { return }
+            guard session.mode == mode,
+                  session.difficulty == difficulty,
+                  session.players.contains(where: { $0.userID == user.id }) else {
+                return
+            }
             // Fetch opponent for display on the match-found screen
-            let oppID = session.players.first { $0.userID != (user?.id ?? "") }?.userID
+            let oppID = session.players.first { $0.userID != user.id }?.userID
             if let oppID { opponentUser = try? await store.fetchUser(id: oppID) }
+            guard isCurrentSearch(searchID) else { return }
+            activeSearchID = nil
             state = .matchFound(session: session)
             startMatchCountdown(session: session)
         } catch {
+            guard isCurrentSearch(searchID) else { return }
             state = .error(error.localizedDescription)
         }
     }
@@ -179,9 +223,18 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func reset() {
+        activeSearchID = nil
         tearDownListeners()
         countdownTask?.cancel()
         countdownTask = nil
+        if let user {
+            let mode = self.mode
+            let difficulty = self.difficulty
+            Task {
+                try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+                try? await store.clearPendingSession(userID: user.id)
+            }
+        }
         let sid = currentSessionID ?? ""
         rtdbHandles.forEach { rtdb.removeObserver(handle: $0, sessionID: sid) }
         rtdbHandles = []
@@ -190,6 +243,12 @@ final class MultiplayerViewModel: ObservableObject {
         state = .idle
         elapsedSeconds = 0
         playerResults = [:]
+        opponentUser = nil
+        selectedWager = nil
+    }
+
+    private func isCurrentSearch(_ searchID: UUID) -> Bool {
+        activeSearchID == searchID
     }
 
     func startMatchCountdown(session: GameSession) {
