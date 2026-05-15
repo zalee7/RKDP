@@ -3,6 +3,7 @@ import SwiftUI
 struct AnagramView: View {
     @StateObject private var vm: AnagramViewModel
     @Environment(\.dismiss) var dismiss
+    @Environment(\.boardCosmetics) var cosmetics
 
     init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
         _vm = StateObject(wrappedValue: AnagramViewModel(
@@ -32,11 +33,15 @@ struct AnagramView: View {
                 placedRow
                     .padding(.top, 12)
 
+                submitButton
+                    .padding(.top, 10)
+                    .padding(.horizontal)
+
                 bankSection
-                    .padding(.top, 14)
+                    .padding(.top, 10)
 
                 controlRow
-                    .padding(.top, 14)
+                    .padding(.top, 12)
                     .padding(.horizontal)
                     .padding(.bottom, 28)
             }
@@ -201,7 +206,7 @@ struct AnagramView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(vm.placed, id: \.id) { tile in
-                                LetterTile(letter: tile.letter, gradient: AppTheme.modeGradient(.anagram), size: 52)
+                                LetterTile(letter: tile.letter, size: 52)
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.25)) { vm.returnToBank(id: tile.id) }
                                     }
@@ -217,7 +222,28 @@ struct AnagramView: View {
         }
     }
 
-    // MARK: - Bank
+    // MARK: - Submit button (above letter bank)
+
+    private var submitButton: some View {
+        Button { vm.submit() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").font(.headline)
+                Text("Enter").font(.headline.bold())
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(vm.placed.count >= 3
+                        ? AnyShapeStyle(cosmetics.themeStyle.tileGradient)
+                        : AnyShapeStyle(AppTheme.cardBackground))
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .shadow(color: vm.placed.count >= 3 ? cosmetics.themeStyle.activeTraceColor.opacity(0.35) : .clear, radius: 8)
+        }
+        .disabled(vm.placed.count < 3)
+        .animation(.easeInOut(duration: 0.15), value: vm.placed.count)
+    }
+
+    // MARK: - Bank (horizontal scroll)
 
     private var bankSection: some View {
         VStack(spacing: 6) {
@@ -226,16 +252,18 @@ struct AnagramView: View {
                 .foregroundStyle(AppTheme.textSecondary)
                 .tracking(1)
 
-            LetterWrapLayout(spacing: 10) {
-                ForEach(vm.bank, id: \.id) { tile in
-                    LetterTile(letter: tile.letter, gradient: AppTheme.brandGradient, size: 60)
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.25)) { vm.pickFromBank(id: tile.id) }
-                        }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(vm.bank, id: \.id) { tile in
+                        LetterTile(letter: tile.letter, size: 62)
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.25)) { vm.pickFromBank(id: tile.id) }
+                            }
+                    }
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
             }
-            .padding(.horizontal)
-            .frame(minHeight: 56)
         }
     }
 
@@ -249,8 +277,6 @@ struct AnagramView: View {
             iconButton(label: "Clear", icon: "arrow.uturn.backward") {
                 withAnimation(.spring(response: 0.35)) { vm.clearPlaced() }
             }
-
-            // Hint
             Button {
                 withAnimation { vm.showHint.toggle() }
             } label: {
@@ -267,23 +293,6 @@ struct AnagramView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(vm.showHint ? AppTheme.accentBright.opacity(0.5) : AppTheme.cardBorder, lineWidth: 1))
             }
-
-            // Submit
-            Button { vm.submit() } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.headline)
-                    Text("Submit")
-                        .font(.caption2.bold())
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(vm.placed.count >= 3 ? AppTheme.modeGradient(.anagram) : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .disabled(vm.placed.count < 3)
-            .animation(.easeInOut(duration: 0.15), value: vm.placed.count)
         }
     }
 
@@ -395,14 +404,15 @@ struct AnagramView: View {
 
 private struct LetterTile: View {
     let letter: Character
-    let gradient: LinearGradient
     var size: CGFloat = 44
+    @Environment(\.boardCosmetics) var cosmetics
 
     var body: some View {
+        let fs = cosmetics.fontStyle
         Text(String(letter))
-            .font(.system(size: size * 0.42, weight: .bold))
+            .font(.system(size: size * 0.42, weight: .bold, design: fs.design))
             .frame(width: size, height: size)
-            .background(gradient)
+            .background(cosmetics.themeStyle.tileGradient)
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
             .shadow(color: .black.opacity(0.22), radius: 3, y: 2)

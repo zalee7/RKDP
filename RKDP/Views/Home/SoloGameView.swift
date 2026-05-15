@@ -8,19 +8,22 @@ struct SoloGameView: View {
     var seed: Int? = nil
 
     var body: some View {
-        switch mode {
-        case .sudoku:
-            SudokuView(difficulty: difficulty, sessionID: nil, seed: seed)
-        case .minesweeper:
-            MinesweeperView(difficulty: difficulty, sessionID: nil, seed: seed)
-        case .kakuro:
-            KakuroView(difficulty: difficulty, sessionID: nil)
-        case .kenken:
-            KenKenView(difficulty: difficulty, sessionID: nil)
-        case .anagram:
-            AnagramView(difficulty: difficulty, user: user)
-        case .wordHunt:
-            WordHuntView(difficulty: difficulty, user: user)
+        Group {
+            switch mode {
+            case .sudoku:
+                SudokuView(difficulty: difficulty, sessionID: nil, seed: seed)
+            case .minesweeper:
+                MinesweeperView(difficulty: difficulty, sessionID: nil, seed: seed)
+            case .kakuro:
+                KakuroView(difficulty: difficulty, sessionID: nil)
+            case .kenken:
+                KenKenView(difficulty: difficulty, sessionID: nil)
+            case .anagram:
+                AnagramView(difficulty: difficulty, user: user)
+            case .wordHunt:
+                WordHuntView(difficulty: difficulty, user: user)
+            }
         }
+        .environment(\.boardCosmetics, user?.cosmetics ?? .default)
     }
 }

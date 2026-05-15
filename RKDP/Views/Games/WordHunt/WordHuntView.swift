@@ -3,6 +3,7 @@ import SwiftUI
 struct WordHuntView: View {
     @StateObject private var vm: WordHuntViewModel
     @Environment(\.dismiss) var dismiss
+    @Environment(\.boardCosmetics) var cosmetics
     @State private var lastDragLocation: CGPoint?
 
     init(difficulty: Difficulty, user: AppUser? = nil, sessionID: String? = nil) {
@@ -141,6 +142,7 @@ struct WordHuntView: View {
                 }
 
                 // Finger trace — drawn over cells, doesn't intercept touches
+                let traceColor = cosmetics.themeStyle.activeTraceColor
                 Canvas { context, _ in
                     let path = vm.currentPath
                     guard path.count >= 2 else { return }
@@ -154,7 +156,7 @@ struct WordHuntView: View {
                     }
                     context.stroke(
                         tracePath,
-                        with: .color(.white.opacity(0.55)),
+                        with: .color(traceColor),
                         style: StrokeStyle(lineWidth: cellSize * 0.28, lineCap: .round, lineJoin: .round)
                     )
                 }
@@ -367,20 +369,25 @@ private struct GridCell: View {
     let isActive: Bool
     let pathIndex: Int?
     let cellSize: CGFloat
+    @Environment(\.boardCosmetics) var cosmetics
 
     var body: some View {
+        let theme = cosmetics.themeStyle
+        let fs = cosmetics.fontStyle
         ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .fill(isActive ? AppTheme.modeGradient(.wordHunt) : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
+                .fill(isActive
+                      ? theme.tileGradient
+                      : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(isActive ? AppTheme.modeAccent(.wordHunt) : AppTheme.cardBorder, lineWidth: isActive ? 2 : 1)
+                        .stroke(isActive ? theme.activeTraceColor : AppTheme.cardBorder, lineWidth: isActive ? 2 : 1)
                 )
-                .shadow(color: isActive ? AppTheme.modeAccent(.wordHunt).opacity(0.5) : .clear, radius: 6)
+                .shadow(color: isActive ? theme.activeTraceColor.opacity(0.5) : .clear, radius: 6)
 
             VStack(spacing: 1) {
                 Text(String(letter))
-                    .font(.system(size: cellSize * 0.38, weight: .bold))
+                    .font(.system(size: cellSize * 0.38, weight: .bold, design: fs.design))
                     .foregroundStyle(AppTheme.textPrimary)
                 if let idx = pathIndex {
                     Text("\(idx + 1)")
@@ -389,8 +396,6 @@ private struct GridCell: View {
                 }
             }
         }
-        // Padding inside the frame so each cell occupies exactly cellSize in the layout.
-        // This keeps drag coordinate math accurate across all positions.
         .padding(4)
         .frame(width: cellSize, height: cellSize)
         .animation(.spring(response: 0.2), value: isActive)

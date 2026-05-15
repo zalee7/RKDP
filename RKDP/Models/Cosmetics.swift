@@ -1,5 +1,118 @@
 import SwiftUI
 
+// MARK: - Applied theme styles (what views actually use)
+
+struct BoardThemeStyle {
+    var cellBackground: Color
+    var selectedCell: Color
+    var highlightedCell: Color
+    var invalidCell: Color
+    var gridLineMajor: Color
+    var gridLineMinor: Color
+    var tileGradient: LinearGradient
+    var activeTraceColor: Color
+}
+
+struct NumberFontStyle {
+    var design: Font.Design
+    var weight: Font.Weight
+}
+
+extension OwnedCosmetics {
+    var themeStyle: BoardThemeStyle {
+        switch equippedBoardTheme {
+        case "theme_dark":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "0A0A1A").opacity(0.6),
+                selectedCell: Color(hex: "5B21B6").opacity(0.5),
+                highlightedCell: Color(hex: "312E81").opacity(0.3),
+                invalidCell: Color.red.opacity(0.25),
+                gridLineMajor: Color.white.opacity(0.5),
+                gridLineMinor: Color.white.opacity(0.12),
+                tileGradient: LinearGradient(colors: [Color(hex: "374151"), Color(hex: "1F2937")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "A78BFA")
+            )
+        case "theme_ocean":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "0077B6").opacity(0.15),
+                selectedCell: Color(hex: "0096C7").opacity(0.5),
+                highlightedCell: Color(hex: "ADE8F4").opacity(0.15),
+                invalidCell: Color.red.opacity(0.25),
+                gridLineMajor: Color(hex: "0096C7"),
+                gridLineMinor: Color(hex: "ADE8F4").opacity(0.4),
+                tileGradient: LinearGradient(colors: [Color(hex: "0077B6"), Color(hex: "00B4D8")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "90E0EF")
+            )
+        case "theme_forest":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "1B4332").opacity(0.2),
+                selectedCell: Color(hex: "52B788").opacity(0.45),
+                highlightedCell: Color(hex: "95D5B2").opacity(0.15),
+                invalidCell: Color.red.opacity(0.25),
+                gridLineMajor: Color(hex: "40916C"),
+                gridLineMinor: Color(hex: "95D5B2").opacity(0.35),
+                tileGradient: LinearGradient(colors: [Color(hex: "2D6A4F"), Color(hex: "52B788")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "B7E4C7")
+            )
+        case "theme_neon":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "0D0221").opacity(0.5),
+                selectedCell: Color(hex: "FF00FF").opacity(0.4),
+                highlightedCell: Color(hex: "BC00DD").opacity(0.2),
+                invalidCell: Color.red.opacity(0.35),
+                gridLineMajor: Color(hex: "FF00FF").opacity(0.8),
+                gridLineMinor: Color(hex: "7B00D4").opacity(0.4),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF0099"), Color(hex: "7700FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "00FFFF")
+            )
+        case "theme_gold":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "78350F").opacity(0.15),
+                selectedCell: Color(hex: "F59E0B").opacity(0.45),
+                highlightedCell: Color(hex: "FDE68A").opacity(0.15),
+                invalidCell: Color.red.opacity(0.25),
+                gridLineMajor: Color(hex: "F59E0B"),
+                gridLineMinor: Color(hex: "FDE68A").opacity(0.4),
+                tileGradient: LinearGradient(colors: [Color(hex: "D97706"), Color(hex: "F59E0B")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FDE68A")
+            )
+        default: // theme_classic
+            return BoardThemeStyle(
+                cellBackground: .clear,
+                selectedCell: Color.blue.opacity(0.35),
+                highlightedCell: Color.blue.opacity(0.1),
+                invalidCell: Color.red.opacity(0.2),
+                gridLineMajor: Color.primary,
+                gridLineMinor: Color.primary.opacity(0.3),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF6B35"), Color(hex: "F72585")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color.white.opacity(0.55)
+            )
+        }
+    }
+
+    var fontStyle: NumberFontStyle {
+        switch equippedNumberFont {
+        case "font_pixel":   return NumberFontStyle(design: .monospaced, weight: .medium)
+        case "font_bold":    return NumberFontStyle(design: .default,    weight: .heavy)
+        case "font_elegant": return NumberFontStyle(design: .serif,      weight: .light)
+        default:             return NumberFontStyle(design: .default,    weight: .regular)
+        }
+    }
+}
+
+// MARK: - SwiftUI Environment
+
+struct BoardCosmeticsKey: EnvironmentKey {
+    static let defaultValue: OwnedCosmetics = .default
+}
+
+extension EnvironmentValues {
+    var boardCosmetics: OwnedCosmetics {
+        get { self[BoardCosmeticsKey.self] }
+        set { self[BoardCosmeticsKey.self] = newValue }
+    }
+}
+
 // MARK: - Shop item types
 
 enum CosmeticCategory: String, Codable, CaseIterable {
