@@ -223,10 +223,17 @@ struct WordleView: View {
 
     private func handleKey(_ key: String) {
         switch key {
-        case "ENTER": vm.submitGuess()
-        case "⌫":    vm.deleteLetter()
+        case "ENTER":
+            SoundManager.shared.wordleTileClick()
+            vm.submitGuess()
+        case "⌫":
+            SoundManager.shared.wordleTileClick()
+            vm.deleteLetter()
         default:
-            if let c = key.first { vm.addLetter(c) }
+            if let c = key.first {
+                SoundManager.shared.wordleTileClick()
+                vm.addLetter(c)
+            }
         }
     }
 

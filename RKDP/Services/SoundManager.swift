@@ -1,12 +1,61 @@
 import AudioToolbox
+import AVFoundation
 import UIKit
 
-/// Plays system sounds and haptics for word-finding events.
-/// Uses AudioToolbox only — no audio files required.
+/// Plays bundled audio, system sounds, and haptics for game events.
 @MainActor
 final class SoundManager {
     static let shared = SoundManager()
-    private init() {}
+
+    enum AudioAsset: String, Hashable {
+        case gameFound = "GameFound"
+        case inOnlineGame = "InOnlineGame"
+        case matchmaking = "Matchmaking"
+        case otherKeyboardPress = "OtherKeyboardPress"
+        case wordleTileClick = "WordleTileClick"
+    }
+
+    private var oneShotPlayers: [AudioAsset: AVAudioPlayer] = [:]
+    private var loopPlayers: [AudioAsset: AVAudioPlayer] = [:]
+
+    private init() {
+        configureSession()
+    }
+
+    // MARK: - Bundled audio
+
+    func playGameFound() {
+        playOneShot(.gameFound, volume: 0.9)
+    }
+
+    func playMatchmakingLoop() {
+        playLoop(.matchmaking, volume: 0.35)
+    }
+
+    func stopMatchmakingLoop() {
+        stopLoop(.matchmaking)
+    }
+
+    func playOnlineGameLoop() {
+        playLoop(.inOnlineGame, volume: 0.28)
+    }
+
+    func stopOnlineGameLoop() {
+        stopLoop(.inOnlineGame)
+    }
+
+    func stopAllLoops() {
+        stopMatchmakingLoop()
+        stopOnlineGameLoop()
+    }
+
+    func keyboardPress() {
+        playOneShot(.otherKeyboardPress, volume: 0.75)
+    }
+
+    func wordleTileClick() {
+        playOneShot(.wordleTileClick, volume: 0.85)
+    }
 
     // MARK: - Combo state
 
@@ -83,5 +132,59 @@ final class SoundManager {
     func resetCombo() {
         comboCount = 0
         lastWordTime = nil
+    }
+
+    private func configureSession() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.ambient, options: [.mixWithOthers])
+        try? session.setActive(true)
+    }
+
+    private func playOneShot(_ asset: AudioAsset, volume: Float) {
+        guard let player = player(for: asset, looping: false) else { return }
+        player.volume = volume
+        player.currentTime = 0
+        player.play()
+    }
+
+    private func playLoop(_ asset: AudioAsset, volume: Float) {
+        guard let player = player(for: asset, looping: true) else { return }
+        player.volume = volume
+        if !player.isPlaying {
+            player.currentTime = 0
+            player.play()
+        }
+    }
+
+    private func stopLoop(_ asset: AudioAsset) {
+        guard let player = loopPlayers[asset] else { return }
+        player.stop()
+        player.currentTime = 0
+    }
+
+    private func player(for asset: AudioAsset, looping: Bool) -> AVAudioPlayer? {
+        if looping, let player = loopPlayers[asset] { return player }
+        if !looping, let player = oneShotPlayers[asset] { return player }
+
+        do {
+            let player: AVAudioPlayer
+            if let data = NSDataAsset(name: asset.rawValue)?.data {
+                player = try AVAudioPlayer(data: data)
+            } else if let url = Bundle.main.url(forResource: asset.rawValue, withExtension: "mp3") {
+                player = try AVAudioPlayer(contentsOf: url)
+            } else {
+                return nil
+            }
+            player.numberOfLoops = looping ? -1 : 0
+            player.prepareToPlay()
+            if looping {
+                loopPlayers[asset] = player
+            } else {
+                oneShotPlayers[asset] = player
+            }
+            return player
+        } catch {
+            return nil
+        }
     }
 }

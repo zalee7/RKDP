@@ -46,6 +46,7 @@ final class WordHuntViewModel: ObservableObject {
     // MARK: - Path tracing
 
     func startPath(row: Int, col: Int) {
+        SoundManager.shared.keyboardPress()
         currentPath = [(row, col)]
         currentWord = String(game.grid[row][col])
     }
@@ -63,6 +64,7 @@ final class WordHuntViewModel: ObservableObject {
         let last = currentPath.last!
         guard abs(last.row - row) <= 1, abs(last.col - col) <= 1 else { return }
 
+        SoundManager.shared.keyboardPress()
         currentPath.append((row, col))
         currentWord.append(game.grid[row][col])
     }

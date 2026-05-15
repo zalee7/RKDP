@@ -43,22 +43,26 @@ final class AnagramViewModel: ObservableObject {
 
     func pickFromBank(id: Int) {
         guard let idx = bank.firstIndex(where: { $0.id == id }) else { return }
+        SoundManager.shared.keyboardPress()
         let tile = bank.remove(at: idx)
         placed.append(tile)
     }
 
     func returnToBank(id: Int) {
         guard let idx = placed.firstIndex(where: { $0.id == id }) else { return }
+        SoundManager.shared.keyboardPress()
         let tile = placed.remove(at: idx)
         bank.append(tile)
     }
 
     func clearPlaced() {
+        if !placed.isEmpty { SoundManager.shared.keyboardPress() }
         bank.append(contentsOf: placed)
         placed = []
     }
 
     func shuffleBank() {
+        SoundManager.shared.keyboardPress()
         bank.shuffle()
     }
 

@@ -39,7 +39,10 @@ struct MatchmakingView: View {
         .foregroundStyle(AppTheme.textPrimary)
         .navigationTitle("Ranked Match")
         .navigationBarTitleDisplayMode(.inline)
-        .onDisappear { vm.reset() }
+        .onDisappear {
+            SoundManager.shared.stopAllLoops()
+            vm.reset()
+        }
         .onChange(of: vm.finishedSessionID) { _, sessionID in
             guard sessionID != nil, !didNotifyFinished else { return }
             didNotifyFinished = true
@@ -129,6 +132,8 @@ struct MatchmakingView: View {
                 .foregroundStyle(.red)
             Spacer()
         }
+        .onAppear { SoundManager.shared.playMatchmakingLoop() }
+        .onDisappear { SoundManager.shared.stopMatchmakingLoop() }
     }
 
     // MARK: - Match found
@@ -214,6 +219,10 @@ struct MatchmakingView: View {
 
             Spacer()
         }
+        .onAppear {
+            SoundManager.shared.stopMatchmakingLoop()
+            SoundManager.shared.playGameFound()
+        }
     }
 
     // MARK: - In match
@@ -264,6 +273,11 @@ struct MatchmakingView: View {
                 }
             }
         }
+        .onAppear {
+            SoundManager.shared.stopMatchmakingLoop()
+            SoundManager.shared.playOnlineGameLoop()
+        }
+        .onDisappear { SoundManager.shared.stopOnlineGameLoop() }
     }
 
     // MARK: - Result
@@ -364,6 +378,7 @@ struct MatchmakingView: View {
             Button("Back to Home") { dismiss() }.foregroundStyle(.secondary)
             Spacer()
         }
+        .onAppear { SoundManager.shared.stopAllLoops() }
         .sheet(isPresented: $showBreakdown) {
             MatchBreakdownView(session: session, currentUserID: user.id, results: results)
         }
