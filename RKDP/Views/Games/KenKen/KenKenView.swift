@@ -1,12 +1,12 @@
 import SwiftUI
 
-struct KenKenView: View {
+struct GridlockView: View {
     let difficulty: Difficulty
     let userID: String?
     let sessionID: String?
     let onMatchResult: (MatchPlayerResult) -> Void
 
-    @StateObject private var vm: KenKenViewModel
+    @StateObject private var vm: GridlockViewModel
     @State private var showComplete = false
     @State private var didReportMatchResult = false
 
@@ -21,186 +21,207 @@ struct KenKenView: View {
         self.userID = userID
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult
-        _vm = StateObject(wrappedValue: KenKenViewModel(difficulty: difficulty, seed: seed))
+        _vm = StateObject(wrappedValue: GridlockViewModel(difficulty: difficulty, seed: seed))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 14) {
             HStack {
                 TimerView(seconds: vm.elapsedSeconds)
                 Spacer()
-                Text("KenKen \(vm.board.size)×\(vm.board.size) · \(difficulty.displayName)")
-                    .font(.caption).foregroundStyle(.secondary)
+                Label("\(vm.moveCount)", systemImage: "arrow.left.arrow.right")
+                    .font(.headline)
+                Spacer()
+                Label("\(difficulty.displayName)", systemImage: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(difficulty == .expert ? .orange : .secondary)
             }
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.top, 8)
 
-            KenKenBoardView(board: vm.board, selectedID: vm.selectedID) { id in
-                vm.selectCell(id: id)
+            GridlockBoardView(board: vm.board, selectedVehicleID: vm.selectedVehicleID) { vehicleID in
+                vm.selectVehicle(id: vehicleID)
             }
-            .padding(12)
+            .padding(.horizontal)
             .aspectRatio(1, contentMode: .fit)
 
-            Divider()
+            GridlockControlsView(board: vm.board, selectedVehicleID: vm.selectedVehicleID) { delta in
+                vm.moveSelected(delta: delta)
+            }
+            .padding(.horizontal)
 
-            NumberPadView(
-                size: vm.board.size,
-                onDigit: { vm.enterDigit($0) },
-                onErase: { vm.erase() },
-                onNote: { vm.isNoteMode.toggle() },
-                isNoteMode: vm.isNoteMode
-            )
-            .padding(.vertical, 12)
+            Spacer(minLength: 0)
         }
-        .navigationTitle("KenKen")
+        .navigationTitle("Gridlock")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: vm.isComplete) { _, v in
-            if v {
+        .onChange(of: vm.isComplete) { _, complete in
+            if complete {
                 showComplete = sessionID == nil
-                reportMatchResult(status: "Solved")
+                reportMatchResult(status: "Escaped")
             }
         }
         .onChange(of: vm.elapsedSeconds) { _, seconds in
-            if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .kenken) {
+            if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .gridlock) {
                 reportMatchResult(status: "Time expired")
             }
         }
-        .alert("KenKen Solved! 🎉", isPresented: $showComplete) { Button("OK") {} }
+        .alert("Gridlock Cleared", isPresented: $showComplete) {
+            Button("OK") {}
+        } message: {
+            Text("Escaped in \(vm.moveCount) moves.")
+        }
     }
 
     private func reportMatchResult(status: String) {
         guard !didReportMatchResult, sessionID != nil, let userID else { return }
         didReportMatchResult = true
         vm.stop()
+        let progressPercent = Int((vm.progress * 100).rounded())
         onMatchResult(MatchPlayerResult(
             userID: userID,
-            mode: .kenken,
+            mode: .gridlock,
             completed: vm.isComplete,
             elapsedSeconds: vm.elapsedSeconds,
-            score: Int((vm.progress * 100).rounded()),
+            score: max(0, 500 - vm.moveCount),
             progress: vm.progress,
             status: status,
-            summary: ["progressPercent": "\(Int((vm.progress * 100).rounded()))"],
+            summary: [
+                "moves": "\(vm.moveCount)",
+                "escapeProgressPercent": "\(progressPercent)",
+                "blockers": "\(vm.board.blockerCount)"
+            ],
             details: [
-                vm.isComplete ? "Completed the KenKen" : "Reached \(Int((vm.progress * 100).rounded()))% progress"
+                vm.isComplete ? "Escaped in \(vm.moveCount) moves" : "Reached \(progressPercent)% escape progress",
+                "\(vm.board.blockerCount) blocker cells in the escape lane"
             ]
         ))
     }
 }
 
-struct KenKenBoardView: View {
-    let board: KenKenBoard
-    let selectedID: Int?
-    let onSelect: (Int) -> Void
+struct GridlockBoardView: View {
+    let board: GridlockBoard
+    let selectedVehicleID: String?
+    let onSelect: (String) -> Void
 
     var body: some View {
         GeometryReader { geo in
             let cellSize = geo.size.width / CGFloat(board.size)
-            ZStack {
-                // Cells
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: board.size),
-                    spacing: 0
-                ) {
-                    ForEach(board.cells) { cell in
-                        KenKenCellView(
-                            cell: cell,
-                            cage: board.cages[cell.cageID],
-                            cellSize: cellSize,
-                            isSelected: cell.id == selectedID
-                        )
-                        .onTapGesture { onSelect(cell.id) }
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.secondarySystemBackground))
+
+                ForEach(0..<board.size, id: \.self) { row in
+                    ForEach(0..<board.size, id: \.self) { col in
+                        Rectangle()
+                            .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                            .frame(width: cellSize, height: cellSize)
+                            .offset(x: CGFloat(col) * cellSize, y: CGFloat(row) * cellSize)
                     }
                 }
 
-                // Thick cage borders drawn on top
-                CageBordersView(board: board, cellSize: cellSize)
+                ExitMarker(cellSize: cellSize)
+                    .offset(x: CGFloat(board.size) * cellSize - 4, y: CGFloat(board.exitRow) * cellSize)
+
+                ForEach(board.vehicles) { vehicle in
+                    GridlockVehicleView(
+                        vehicle: vehicle,
+                        cellSize: cellSize,
+                        isSelected: vehicle.id == selectedVehicleID
+                    )
+                    .offset(x: CGFloat(vehicle.col) * cellSize, y: CGFloat(vehicle.row) * cellSize)
+                    .onTapGesture { onSelect(vehicle.id) }
+                }
             }
         }
     }
 }
 
-struct KenKenCellView: View {
-    let cell: KenKenCell
-    let cage: KenKenCage
+private struct ExitMarker: View {
+    let cellSize: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color.green.opacity(0.7))
+            .frame(width: 8, height: cellSize)
+            .overlay(
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+            )
+    }
+}
+
+private struct GridlockVehicleView: View {
+    let vehicle: GridlockVehicle
     let cellSize: CGFloat
     let isSelected: Bool
 
-    private var bg: Color {
-        if isSelected    { return .orange.opacity(0.35) }
-        if cell.isInvalid { return .red.opacity(0.2) }
-        return .white
+    private var vehicleColor: Color {
+        if vehicle.isTarget { return .red }
+        let palette: [Color] = [.blue, .green, .orange, .purple, .cyan, .pink, .mint, .indigo]
+        return palette[vehicle.colorIndex % palette.count]
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            bg
-            // Thin inner border
-            Rectangle().stroke(Color(.systemGray4), lineWidth: 0.5)
-
-            if cell.isTopLeft {
-                Text("\(cage.target)\(cage.operation.rawValue)")
-                    .font(.system(size: cellSize * 0.22, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(2)
-            }
-
-            if cell.value != 0 {
-                Text("\(cell.value)")
-                    .font(.system(size: cellSize * 0.5, weight: .medium))
-                    .foregroundStyle(cell.isInvalid ? .red : .primary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .frame(width: cellSize, height: cellSize)
+        RoundedRectangle(cornerRadius: 8)
+            .fill(vehicleColor.gradient)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.white : Color.black.opacity(0.16), lineWidth: isSelected ? 3 : 1)
+            )
+            .overlay(
+                Image(systemName: vehicle.isTarget ? "car.fill" : "capsule.fill")
+                    .foregroundStyle(.white.opacity(0.9))
+                    .rotationEffect(vehicle.orientation == .vertical ? .degrees(90) : .zero)
+            )
+            .padding(3)
+            .frame(
+                width: cellSize * CGFloat(vehicle.orientation == .horizontal ? vehicle.length : 1),
+                height: cellSize * CGFloat(vehicle.orientation == .vertical ? vehicle.length : 1)
+            )
+            .shadow(color: vehicleColor.opacity(isSelected ? 0.45 : 0.2), radius: isSelected ? 8 : 3)
     }
 }
 
-// Draws thick borders around cage boundaries
-struct CageBordersView: View {
-    let board: KenKenBoard
-    let cellSize: CGFloat
+private struct GridlockControlsView: View {
+    let board: GridlockBoard
+    let selectedVehicleID: String?
+    let onMove: (Int) -> Void
 
-    var body: some View {
-        Canvas { context, _ in
-            for cage in board.cages {
-                let path = cageBorderPath(cage: cage)
-                context.stroke(path, with: .color(.primary), lineWidth: 2.5)
-            }
-        }
-        .allowsHitTesting(false)
+    private var selectedVehicle: GridlockVehicle? {
+        guard let selectedVehicleID else { return nil }
+        return board.vehicles.first { $0.id == selectedVehicleID }
     }
 
-    private func cageBorderPath(cage: KenKenCage) -> Path {
-        let ids = Set(cage.cellIDs)
-        var path = Path()
-        let s = board.size
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(selectedVehicle?.isTarget == true ? "Red car selected" : "Select a piece, then slide it")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
 
-        for id in cage.cellIDs {
-            let r = id / s, c = id % s
-            let x = CGFloat(c) * cellSize, y = CGFloat(r) * cellSize
-
-            // Top edge
-            if !ids.contains((r-1)*s+c) {
-                path.move(to: CGPoint(x: x, y: y))
-                path.addLine(to: CGPoint(x: x + cellSize, y: y))
-            }
-            // Bottom edge
-            if !ids.contains((r+1)*s+c) {
-                path.move(to: CGPoint(x: x, y: y + cellSize))
-                path.addLine(to: CGPoint(x: x + cellSize, y: y + cellSize))
-            }
-            // Left edge
-            if !ids.contains(r*s+(c-1)) {
-                path.move(to: CGPoint(x: x, y: y))
-                path.addLine(to: CGPoint(x: x, y: y + cellSize))
-            }
-            // Right edge
-            if !ids.contains(r*s+(c+1)) {
-                path.move(to: CGPoint(x: x + cellSize, y: y))
-                path.addLine(to: CGPoint(x: x + cellSize, y: y + cellSize))
+            if let selectedVehicle {
+                HStack(spacing: 16) {
+                    if selectedVehicle.orientation == .horizontal {
+                        moveButton(systemName: "arrow.left", delta: -1)
+                        moveButton(systemName: "arrow.right", delta: 1)
+                    } else {
+                        moveButton(systemName: "arrow.up", delta: -1)
+                        moveButton(systemName: "arrow.down", delta: 1)
+                    }
+                }
             }
         }
-        return path
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func moveButton(systemName: String, delta: Int) -> some View {
+        Button { onMove(delta) } label: {
+            Image(systemName: systemName)
+                .font(.title2.bold())
+                .frame(width: 56, height: 44)
+        }
+        .buttonStyle(.borderedProminent)
     }
 }

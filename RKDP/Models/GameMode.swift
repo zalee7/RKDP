@@ -3,8 +3,8 @@ import SwiftUI
 enum GameMode: String, Codable, CaseIterable, Identifiable {
     case sudoku
     case minesweeper
-    case kakuro
-    case kenken
+    case colorLink
+    case gridlock
     case anagram
     case wordHunt
     case wordle
@@ -18,8 +18,8 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .sudoku:      return "Sudoku"
         case .minesweeper: return "Minesweeper"
-        case .kakuro:      return "Kakuro"
-        case .kenken:      return "KenKen"
+        case .colorLink:   return "Color Link"
+        case .gridlock:    return "Gridlock"
         case .anagram:     return "Anagrams"
         case .wordHunt:    return "Word Hunt"
         case .wordle:      return "Wordle"
@@ -32,10 +32,10 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
             return "Fill the 9×9 grid so every row, column, and 3×3 box contains digits 1–9."
         case .minesweeper:
             return "Uncover every safe cell without triggering a mine."
-        case .kakuro:
-            return "Fill the grid so each run of cells sums to the clue with no repeated digits."
-        case .kenken:
-            return "Place digits in each row and column; each cage must hit its arithmetic target."
+        case .colorLink:
+            return "Connect matching colors with paths that cover the board."
+        case .gridlock:
+            return "Slide cars and blocks out of the way so the red car can escape."
         case .anagram:
             return "Unscramble the letters to find the hidden word before your opponent."
         case .wordHunt:
@@ -49,8 +49,8 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .sudoku:      return "grid"
         case .minesweeper: return "scope"
-        case .kakuro:      return "plus.forwardslash.minus"
-        case .kenken:      return "function"
+        case .colorLink:   return "point.3.connected.trianglepath.dotted"
+        case .gridlock:    return "car.fill"
         case .anagram:     return "textformat.abc"
         case .wordHunt:    return "magnifyingglass"
         case .wordle:      return "character.cursor.ibeam"
@@ -64,8 +64,8 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .sudoku:      return "Fastest to complete the puzzle wins"
         case .minesweeper: return "Most cells uncovered wins (fastest if both finish)"
-        case .kakuro:      return "Fastest to complete the grid wins"
-        case .kenken:      return "Fastest to complete the grid wins"
+        case .colorLink:   return "Fill more of the board with completed color paths"
+        case .gridlock:    return "Escape in fewer moves, then faster time"
         case .anagram:     return "Most points from words wins"
         case .wordHunt:    return "Most points from found words wins"
         case .wordle:      return "First to solve the word wins"

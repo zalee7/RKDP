@@ -16,8 +16,8 @@ struct HowToPlayView: View {
                 TabView(selection: $selectedTab) {
                     gameGuide(for: .sudoku).tag(0)
                     gameGuide(for: .minesweeper).tag(1)
-                    gameGuide(for: .kakuro).tag(2)
-                    gameGuide(for: .kenken).tag(3)
+                    gameGuide(for: .colorLink).tag(2)
+                    gameGuide(for: .gridlock).tag(3)
                     gameGuide(for: .anagram).tag(4)
                     gameGuide(for: .wordHunt).tag(5)
                     gameGuide(for: .wordle).tag(6)
@@ -145,41 +145,40 @@ struct HowToPlayView: View {
                     "Higher grid sizes award more rank points.",
                 ]),
             ]
-        case .kakuro:
+        case .colorLink:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Fill every white cell with a digit from 1 to 9.",
-                    "Each horizontal run of cells must sum to the clue shown to its left.",
-                    "Each vertical run must sum to the clue shown above it.",
-                    "No digit may repeat within a single run.",
+                    "Connect each pair of matching color endpoints.",
+                    "Paths cannot overlap or pass through another color's endpoint.",
+                    "The strongest board fills every cell with a valid color path.",
                 ]),
-                RuleSection(title: "Reading Clues", bullets: [
-                    "Black cells with a diagonal line carry two clues.",
-                    "Bottom-right number = the across (horizontal) sum.",
-                    "Top-left number = the down (vertical) sum.",
+                RuleSection(title: "Controls", bullets: [
+                    "Tap a color endpoint to start or restart that color's path.",
+                    "Tap adjacent cells to extend the selected path.",
+                    "Tap an earlier cell in the same path to rewind to that point.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Same grid, same clues for both opponents.",
-                    "Fastest valid solution wins.",
+                    "Both players get the same seeded board.",
+                    "A completed full board wins.",
+                    "If neither player finishes, higher board fill wins before solved pair count.",
                 ]),
             ]
-        case .kenken:
+        case .gridlock:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Fill an N×N grid (4×4 to 6×6) with digits 1 to N.",
-                    "Each row and each column must contain every digit exactly once.",
-                    "Cells are grouped into cages. The result of applying the cage's operator (+, −, ×, ÷) to its cells must equal the target shown.",
+                    "Move the red car to the exit on the right side of the grid.",
+                    "Horizontal pieces slide left and right.",
+                    "Vertical pieces slide up and down.",
                 ]),
-                RuleSection(title: "Operations", bullets: [
-                    "+ cage: the digits must add up to the target.",
-                    "− cage (always 2 cells): one digit minus the other equals the target.",
-                    "× cage: the digits must multiply to the target.",
-                    "÷ cage (always 2 cells): the larger divided by the smaller equals the target.",
-                    "Single-cell cage: just enter the given value.",
+                RuleSection(title: "Controls", bullets: [
+                    "Tap a car or block to select it.",
+                    "Use the arrow controls to slide the selected piece one space.",
+                    "Clear blockers from the red car's row to open the escape lane.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same generated puzzle.",
-                    "Fastest correct solve wins.",
+                    "Both players receive the same seeded traffic puzzle.",
+                    "Escaping wins; if both escape, fewer moves wins before time.",
+                    "If neither player escapes, better escape progress wins.",
                 ]),
             ]
         case .anagram:

@@ -39,6 +39,8 @@ struct MatchPlayerResult: Codable, Equatable {
     var solvedRounds: Int { Int(summary["solvedRounds"] ?? "0") ?? 0 }
     var totalGuesses: Int { Int(summary["totalGuesses"] ?? "0") ?? 0 }
     var hitMine: Bool { summary["hitMine"] == "true" }
+    var moveCount: Int { Int(summary["moves"] ?? "0") ?? 0 }
+    var solvedPairs: Int { Int(summary["solvedPairs"] ?? "0") ?? 0 }
 
     var realtimeValue: [String: Any] {
         [
@@ -139,12 +141,19 @@ extension Difficulty {
             case .hard: return 900
             case .expert: return 1_200
             }
-        case .kakuro, .kenken:
+        case .gridlock:
             switch self {
             case .easy: return 300
             case .medium: return 420
             case .hard: return 600
             case .expert: return 780
+            }
+        case .colorLink:
+            switch self {
+            case .easy: return 240
+            case .medium: return 300
+            case .hard: return 420
+            case .expert: return 540
             }
         case .minesweeper:
             switch self {

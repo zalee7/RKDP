@@ -1,106 +1,119 @@
 import Foundation
 
-struct KenKenGenerator {
-    static func generate(difficulty: Difficulty, seed: Int? = nil) -> KenKenBoard {
-        let size: Int
-        switch difficulty {
-        case .easy:   size = 4
-        case .medium: size = 5
-        case .hard:   size = 6
-        case .expert: size = 6
-        }
+struct GridlockGenerator {
+    static func generate(difficulty: Difficulty, seed: Int? = nil) -> GridlockBoard {
         var rng = SeededRNG(seed: seed ?? Int.random(in: 0..<Int.max))
-        return generateBoard(size: size, difficulty: difficulty, rng: &rng)
+        let boards = puzzles(for: difficulty)
+        let index = Int(rng.next()) % boards.count
+        return boards[index]
     }
 
-    private static func generateBoard(size: Int, difficulty: Difficulty, rng: inout SeededRNG) -> KenKenBoard {
-        // 1. Generate a valid Latin square solution
-        let solution = latinSquare(size: size, rng: &rng)
-
-        // 2. Partition cells into cages
-        var cageMap = Array(repeating: -1, count: size * size)
-        var cages: [KenKenCage] = []
-        var unassigned = Set((0..<size * size))
-        var cageID = 0
-
-        let maxCageSize: Int
+    private static func puzzles(for difficulty: Difficulty) -> [GridlockBoard] {
         switch difficulty {
-        case .easy:   maxCageSize = 2
-        case .medium: maxCageSize = 3
-        case .hard:   maxCageSize = 4
-        case .expert: maxCageSize = 5
+        case .easy:
+            return [
+                board([
+                    car("A", 2, 0, 2, .horizontal, true, 0),
+                    car("B", 1, 3, 2, .vertical, false, 1),
+                    car("C", 0, 0, 2, .horizontal, false, 2),
+                    car("D", 4, 1, 3, .horizontal, false, 3),
+                    car("E", 3, 5, 2, .vertical, false, 4)
+                ]),
+                board([
+                    car("A", 2, 1, 2, .horizontal, true, 0),
+                    car("B", 0, 4, 3, .vertical, false, 1),
+                    car("C", 0, 0, 3, .horizontal, false, 2),
+                    car("D", 4, 2, 2, .horizontal, false, 3),
+                    car("E", 3, 0, 2, .vertical, false, 4)
+                ])
+            ]
+        case .medium:
+            return [
+                board([
+                    car("A", 2, 0, 2, .horizontal, true, 0),
+                    car("B", 0, 2, 3, .vertical, false, 1),
+                    car("C", 1, 4, 3, .vertical, false, 2),
+                    car("D", 0, 0, 2, .horizontal, false, 3),
+                    car("E", 3, 2, 2, .horizontal, false, 4),
+                    car("F", 4, 5, 2, .vertical, false, 5)
+                ]),
+                board([
+                    car("A", 2, 0, 2, .horizontal, true, 0),
+                    car("B", 1, 3, 2, .vertical, false, 1),
+                    car("C", 0, 4, 3, .vertical, false, 2),
+                    car("D", 3, 0, 3, .horizontal, false, 3),
+                    car("E", 4, 2, 2, .vertical, false, 4),
+                    car("F", 5, 3, 2, .horizontal, false, 5)
+                ])
+            ]
+        case .hard:
+            return [
+                board([
+                    car("A", 2, 0, 2, .horizontal, true, 0),
+                    car("B", 0, 2, 3, .vertical, false, 1),
+                    car("C", 0, 3, 2, .horizontal, false, 2),
+                    car("D", 1, 5, 3, .vertical, false, 3),
+                    car("E", 3, 1, 2, .horizontal, false, 4),
+                    car("F", 3, 4, 2, .vertical, false, 5),
+                    car("G", 5, 0, 3, .horizontal, false, 6)
+                ]),
+                board([
+                    car("A", 2, 1, 2, .horizontal, true, 0),
+                    car("B", 0, 3, 3, .vertical, false, 1),
+                    car("C", 0, 0, 2, .vertical, false, 2),
+                    car("D", 0, 4, 2, .horizontal, false, 3),
+                    car("E", 3, 1, 3, .horizontal, false, 4),
+                    car("F", 3, 5, 3, .vertical, false, 5),
+                    car("G", 5, 2, 2, .horizontal, false, 6)
+                ])
+            ]
+        case .expert:
+            return [
+                board([
+                    car("A", 2, 0, 2, .horizontal, true, 0),
+                    car("B", 0, 2, 3, .vertical, false, 1),
+                    car("C", 0, 3, 2, .horizontal, false, 2),
+                    car("D", 1, 5, 3, .vertical, false, 3),
+                    car("E", 3, 0, 2, .horizontal, false, 4),
+                    car("F", 3, 3, 2, .vertical, false, 5),
+                    car("G", 4, 1, 3, .horizontal, false, 6),
+                    car("H", 5, 4, 2, .horizontal, false, 7)
+                ]),
+                board([
+                    car("A", 2, 0, 2, .horizontal, true, 0),
+                    car("B", 1, 2, 2, .vertical, false, 1),
+                    car("C", 0, 3, 3, .vertical, false, 2),
+                    car("D", 0, 4, 2, .horizontal, false, 3),
+                    car("E", 3, 0, 2, .vertical, false, 4),
+                    car("F", 3, 2, 3, .horizontal, false, 5),
+                    car("G", 4, 5, 2, .vertical, false, 6),
+                    car("H", 5, 1, 3, .horizontal, false, 7)
+                ])
+            ]
         }
-
-        while !unassigned.isEmpty {
-            let start = unassigned.min()!
-            var cage = [start]
-            unassigned.remove(start)
-
-            // Grow cage greedily up to maxCageSize
-            var frontier = orthogonalNeighbours(of: start, size: size)
-            while cage.count < maxCageSize, let next = rng.shuffled(Array(frontier)).first(where: { unassigned.contains($0) }) {
-                cage.append(next)
-                unassigned.remove(next)
-                frontier.formUnion(orthogonalNeighbours(of: next, size: size))
-            }
-
-            let vals = cage.map { solution[$0 / size][$0 % size] }
-            let op = assignOperation(to: vals, cageSize: cage.count, rng: &rng)
-            let target = computeTarget(vals: vals, op: op)!
-
-            for id in cage { cageMap[id] = cageID }
-            cages.append(KenKenCage(id: cageID, target: target, operation: op, cellIDs: cage))
-            cageID += 1
-        }
-
-        // 3. Build cells
-        let cells: [KenKenCell] = (0..<size * size).map { idx in
-            let cage = cageMap[idx]
-            let isTopLeft = cages[cage].cellIDs.min() == idx
-            return KenKenCell(
-                id: idx, row: idx / size, col: idx % size,
-                value: 0, cageID: cage,
-                isSelected: false, isInvalid: false, notes: [],
-                isTopLeft: isTopLeft
-            )
-        }
-
-        return KenKenBoard(size: size, cells: cells, cages: cages)
     }
 
-    private static func latinSquare(size: Int, rng: inout SeededRNG) -> [[Int]] {
-        var base = (0..<size).map { offset in (0..<size).map { (($0 + offset) % size) + 1 } }
-        // Shuffle rows and columns for variety
-        base = rng.shuffled(base)
-        var result = base
-        for i in 0..<size { for j in 0..<size { result[j][i] = base[j][i] } }
-        // Column shuffle
-        let colPerm = rng.shuffled(Array(0..<size))
-        return result.map { row in colPerm.map { row[$0] } }
+    private static func board(_ vehicles: [GridlockVehicle]) -> GridlockBoard {
+        GridlockBoard(size: 6, exitRow: 2, vehicles: vehicles)
     }
 
-    private static func orthogonalNeighbours(of idx: Int, size: Int) -> Set<Int> {
-        let r = idx / size, c = idx % size
-        var result: Set<Int> = []
-        if r > 0        { result.insert((r-1) * size + c) }
-        if r < size - 1 { result.insert((r+1) * size + c) }
-        if c > 0        { result.insert(r * size + (c-1)) }
-        if c < size - 1 { result.insert(r * size + (c+1)) }
-        return result
-    }
-
-    private static func assignOperation(to vals: [Int], cageSize: Int, rng: inout SeededRNG) -> KenKenOperation {
-        if cageSize == 1 { return .given }
-        if cageSize == 2 {
-            let (a, b) = (max(vals[0], vals[1]), min(vals[0], vals[1]))
-            // Prefer divide when evenly divisible to keep numbers small
-            if b != 0 && a % b == 0 { return rng.next() % 2 == 0 ? .divide : .subtract }
-            return rng.next() % 2 == 0 ? .add : .subtract
-        }
-        return rng.next() % 2 == 0 ? .add : .multiply
-    }
-
-    private static func computeTarget(vals: [Int], op: KenKenOperation) -> Int? {
-        op.apply(vals)
+    private static func car(
+        _ id: String,
+        _ row: Int,
+        _ col: Int,
+        _ length: Int,
+        _ orientation: GridlockOrientation,
+        _ isTarget: Bool,
+        _ colorIndex: Int
+    ) -> GridlockVehicle {
+        GridlockVehicle(
+            id: id,
+            row: row,
+            col: col,
+            length: length,
+            orientation: orientation,
+            isTarget: isTarget,
+            colorIndex: colorIndex
+        )
     }
 }

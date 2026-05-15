@@ -57,7 +57,7 @@ struct CoinBadgeView: View {
 }
 
 struct NumberPadView: View {
-    let size: Int        // max digit (9 for Sudoku/Kakuro, board size for KenKen)
+    let size: Int        // max digit or board size for number-pad games
     let onDigit: (Int) -> Void
     let onErase: () -> Void
     let onNote: () -> Void

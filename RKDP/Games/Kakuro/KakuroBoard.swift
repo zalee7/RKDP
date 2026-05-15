@@ -1,66 +1,39 @@
 import Foundation
 
-// A run of cells sharing a sum constraint
-struct KakuroClue: Identifiable {
-    var id: Int
-    var sum: Int
-    var cellIDs: [Int]      // indices into KakuroBoard.cells
-    var isAcross: Bool
-}
-
-enum KakuroCellType: Codable, Equatable {
-    case black                          // wall / clue cell
-    case white(acrossClue: Int?, downClue: Int?)   // playable cell; carries the sum labels
-    case entry                          // user-enterable white cell (no clue label)
-}
-
-struct KakuroCell: Identifiable {
-    var id: Int
+struct ColorLinkPosition: Codable, Hashable, Identifiable {
     var row: Int
     var col: Int
-    var type: KakuroCellType
-    var value: Int          // 0 = empty (only meaningful for entry cells)
-    var isSelected: Bool
-    var isInvalid: Bool
-    var notes: Set<Int>
+
+    var id: String { "\(row)-\(col)" }
+
+    func isAdjacent(to other: ColorLinkPosition) -> Bool {
+        abs(row - other.row) + abs(col - other.col) == 1
+    }
 }
 
-struct KakuroBoard {
-    var cells: [KakuroCell]
-    var clues: [KakuroClue]
-    let rows: Int
-    let cols: Int
+struct ColorLinkPair: Identifiable, Codable, Equatable {
+    var id: Int
+    var start: ColorLinkPosition
+    var end: ColorLinkPosition
+}
 
-    var isSolved: Bool {
-        clues.allSatisfy { clue in
-            let vals = clue.cellIDs.map { cells[$0].value }
-            return !vals.contains(0)
-                && vals.reduce(0, +) == clue.sum
-                && vals.count == Set(vals).count
-        }
+struct ColorLinkBoard: Codable, Equatable {
+    var size: Int
+    var pairs: [ColorLinkPair]
+
+    var totalCells: Int { size * size }
+
+    func contains(_ position: ColorLinkPosition) -> Bool {
+        position.row >= 0 && position.row < size && position.col >= 0 && position.col < size
     }
 
-    mutating func setValue(_ value: Int, at id: Int) {
-        cells[id].value = value
-        validateClues(containing: id)
+    func pairID(at position: ColorLinkPosition) -> Int? {
+        pairs.first { pair in
+            pair.start == position || pair.end == position
+        }?.id
     }
 
-    private mutating func validateClues(containing cellID: Int) {
-        let affected = clues.filter { $0.cellIDs.contains(cellID) }
-        var invalidCells = Set<Int>()
-
-        for clue in affected {
-            let vals = clue.cellIDs.map { cells[$0].value }.filter { $0 != 0 }
-            let hasDuplicates = vals.count != Set(vals).count
-            let overSum = vals.reduce(0, +) > clue.sum
-
-            if hasDuplicates || overSum {
-                clue.cellIDs.forEach { invalidCells.insert($0) }
-            }
-        }
-
-        for i in 0..<cells.count {
-            cells[i].isInvalid = invalidCells.contains(i)
-        }
+    func pair(for id: Int) -> ColorLinkPair? {
+        pairs.first { $0.id == id }
     }
 }

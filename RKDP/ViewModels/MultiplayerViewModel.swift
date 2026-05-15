@@ -307,8 +307,12 @@ enum MatchResolver {
             return compareWordScore(a, b, label: "Anagrams")
         case .wordHunt:
             return compareWordScore(a, b, label: "Word Hunt")
-        case .sudoku, .kakuro, .kenken:
+        case .sudoku:
             return compareCompletion(a, b)
+        case .gridlock:
+            return compareGridlock(a, b)
+        case .colorLink:
+            return compareColorLink(a, b)
         case .minesweeper:
             return compareMinesweeper(a, b)
         }
@@ -355,6 +359,48 @@ enum MatchResolver {
             return MatchResolution(winnerID: winner.userID, reason: "Better puzzle progress")
         }
         return compareElapsed(a, b, fallback: "Same puzzle progress")
+    }
+
+    private static func compareGridlock(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.completed != b.completed {
+            let winner = a.completed ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Escaped the gridlock")
+        }
+        if a.completed && b.completed {
+            if a.moveCount != b.moveCount {
+                let winner = a.moveCount < b.moveCount ? a : b
+                return MatchResolution(winnerID: winner.userID, reason: "Escaped in fewer moves")
+            }
+            return compareElapsed(a, b, fallback: "Same Gridlock result")
+        }
+        if a.progress != b.progress {
+            let winner = a.progress > b.progress ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Better escape progress")
+        }
+        if a.moveCount != b.moveCount {
+            let winner = a.moveCount < b.moveCount ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Used fewer moves")
+        }
+        return compareElapsed(a, b, fallback: "Same Gridlock progress")
+    }
+
+    private static func compareColorLink(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.completed != b.completed {
+            let winner = a.completed ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Filled the Color Link board")
+        }
+        if a.completed && b.completed {
+            return compareElapsed(a, b, fallback: "Both filled the board")
+        }
+        if a.progress != b.progress {
+            let winner = a.progress > b.progress ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Higher board fill")
+        }
+        if a.solvedPairs != b.solvedPairs {
+            let winner = a.solvedPairs > b.solvedPairs ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Connected more color pairs")
+        }
+        return compareElapsed(a, b, fallback: "Same Color Link fill")
     }
 
     private static func compareMinesweeper(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {

@@ -29,10 +29,10 @@ enum AppTheme {
         case .minesweeper:
             return LinearGradient(colors: [Color(hex: "FF6B35"), Color(hex: "FF9F1C")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .kakuro:
-            return LinearGradient(colors: [Color(hex: "06D6A0"), Color(hex: "1B998B")],
+        case .colorLink:
+            return LinearGradient(colors: [Color(hex: "06D6A0"), Color(hex: "8338EC")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .kenken:
+        case .gridlock:
             return LinearGradient(colors: [Color(hex: "FFBE0B"), Color(hex: "FB5607")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .anagram:
@@ -51,8 +51,8 @@ enum AppTheme {
         switch mode {
         case .sudoku:      return Color(hex: "3A86FF").opacity(0.5)
         case .minesweeper: return Color(hex: "FF6B35").opacity(0.5)
-        case .kakuro:      return Color(hex: "06D6A0").opacity(0.5)
-        case .kenken:      return Color(hex: "FFBE0B").opacity(0.5)
+        case .colorLink:   return Color(hex: "06D6A0").opacity(0.5)
+        case .gridlock:    return Color(hex: "FFBE0B").opacity(0.5)
         case .anagram:     return Color(hex: "F72585").opacity(0.5)
         case .wordHunt:    return Color(hex: "4CC9F0").opacity(0.5)
         case .wordle:      return Color(hex: "538D4E").opacity(0.5)
@@ -64,8 +64,8 @@ enum AppTheme {
         switch mode {
         case .sudoku:      return Color(hex: "4CC9F0")
         case .minesweeper: return Color(hex: "FF9F1C")
-        case .kakuro:      return Color(hex: "06D6A0")
-        case .kenken:      return Color(hex: "FFBE0B")
+        case .colorLink:   return Color(hex: "06D6A0")
+        case .gridlock:    return Color(hex: "FFBE0B")
         case .anagram:     return Color(hex: "F72585")
         case .wordHunt:    return Color(hex: "4361EE")
         case .wordle:      return Color(hex: "538D4E")

@@ -16,10 +16,10 @@ struct SoloGameView: View {
                 SudokuView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .minesweeper:
                 MinesweeperView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
-            case .kakuro:
-                KakuroView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
-            case .kenken:
-                KenKenView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
+            case .colorLink:
+                ColorLinkView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
+            case .gridlock:
+                GridlockView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .anagram:
                 AnagramView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult)
             case .wordHunt:

@@ -2,52 +2,112 @@ import Foundation
 import Combine
 
 @MainActor
-final class KakuroViewModel: ObservableObject {
-    @Published var board: KakuroBoard
-    @Published var selectedID: Int?
+final class ColorLinkViewModel: ObservableObject {
+    @Published var board: ColorLinkBoard
+    @Published var activePairID: Int?
+    @Published var paths: [Int: [ColorLinkPosition]] = [:]
     @Published var elapsedSeconds: Int = 0
     @Published var isComplete = false
-    @Published var isNoteMode = false
 
     let difficulty: Difficulty
     private var timer: AnyCancellable?
 
-    var progress: Double {
-        let entries = board.cells.filter { if case .entry = $0.type { return true }; return false }
-        guard !entries.isEmpty else { return isComplete ? 1 : 0 }
-        let validFilled = entries.filter { $0.value != 0 && !$0.isInvalid }.count
-        return Double(validFilled) / Double(entries.count)
+    var occupiedPositions: Set<ColorLinkPosition> {
+        var occupied = Set<ColorLinkPosition>()
+        for pair in board.pairs {
+            occupied.insert(pair.start)
+            occupied.insert(pair.end)
+        }
+        for path in paths.values {
+            occupied.formUnion(path)
+        }
+        return occupied
     }
+
+    var filledCellCount: Int { occupiedPositions.count }
+    var fillProgress: Double { Double(filledCellCount) / Double(max(1, board.totalCells)) }
+    var solvedPairCount: Int { board.pairs.filter { isPairConnected($0.id) }.count }
 
     init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
-        self.board = KakuroGenerator.generate(difficulty: difficulty, seed: seed)
+        self.board = ColorLinkGenerator.generate(difficulty: difficulty, seed: seed)
         startTimer()
     }
 
-    func selectCell(id: Int) {
-        guard case .entry = board.cells[id].type else { selectedID = nil; return }
-        selectedID = (selectedID == id) ? nil : id
+    func tap(row: Int, col: Int) {
+        guard !isComplete else { return }
+        let position = ColorLinkPosition(row: row, col: col)
+        guard board.contains(position) else { return }
+
+        if let endpointPairID = board.pairID(at: position) {
+            handleEndpointTap(position, pairID: endpointPairID)
+        } else if let activePairID {
+            extendActivePath(to: position, pairID: activePairID)
+        }
+
+        checkCompletion()
     }
 
-    func enterDigit(_ digit: Int) {
-        guard let id = selectedID else { return }
-        if isNoteMode {
-            if board.cells[id].notes.contains(digit) {
-                board.cells[id].notes.remove(digit)
-            } else {
-                board.cells[id].notes.insert(digit)
-            }
+    func clearActivePath() {
+        guard let activePairID else { return }
+        paths[activePairID] = nil
+    }
+
+    private func handleEndpointTap(_ position: ColorLinkPosition, pairID: Int) {
+        if activePairID != pairID {
+            activePairID = pairID
+            paths[pairID] = [position]
+            return
+        }
+
+        guard var path = paths[pairID], let last = path.last else {
+            paths[pairID] = [position]
+            return
+        }
+
+        if let existingIndex = path.firstIndex(of: position) {
+            paths[pairID] = Array(path.prefix(existingIndex + 1))
+        } else if position.isAdjacent(to: last) {
+            path.append(position)
+            paths[pairID] = path
         } else {
-            board.setValue(digit, at: id)
-            if board.isSolved { isComplete = true; timer?.cancel() }
+            paths[pairID] = [position]
         }
     }
 
-    func erase() {
-        guard let id = selectedID else { return }
-        board.cells[id].value = 0
-        board.cells[id].notes = []
+    private func extendActivePath(to position: ColorLinkPosition, pairID: Int) {
+        guard owner(of: position) == nil || owner(of: position) == pairID else { return }
+        guard var path = paths[pairID], let last = path.last else { return }
+
+        if let existingIndex = path.firstIndex(of: position) {
+            paths[pairID] = Array(path.prefix(existingIndex + 1))
+            return
+        }
+
+        guard position.isAdjacent(to: last) else { return }
+        path.append(position)
+        paths[pairID] = path
+    }
+
+    private func owner(of position: ColorLinkPosition) -> Int? {
+        for (pairID, path) in paths where path.contains(position) {
+            return pairID
+        }
+        return board.pairID(at: position)
+    }
+
+    private func isPairConnected(_ pairID: Int) -> Bool {
+        guard let pair = board.pair(for: pairID), let path = paths[pairID], path.count >= 2 else { return false }
+        let endpoints = Set([pair.start, pair.end])
+        guard let first = path.first, let last = path.last else { return false }
+        return endpoints.contains(first) && endpoints.contains(last) && first != last
+    }
+
+    private func checkCompletion() {
+        if solvedPairCount == board.pairs.count && filledCellCount == board.totalCells {
+            isComplete = true
+            timer?.cancel()
+        }
     }
 
     private func startTimer() {

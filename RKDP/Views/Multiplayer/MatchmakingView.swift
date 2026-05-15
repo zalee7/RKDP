@@ -436,9 +436,17 @@ struct MatchBreakdownView: View {
         case .minesweeper:
             LabeledContent("Safe cells", value: result.summary["safeCells"] ?? "\(result.score)")
             LabeledContent("Mine hit", value: result.hitMine ? "Yes" : "No")
-        case .sudoku, .kakuro, .kenken:
+        case .sudoku:
             LabeledContent("Completed", value: result.completed ? "Yes" : "No")
             LabeledContent("Progress", value: "\(Int((result.progress * 100).rounded()))%")
+        case .gridlock:
+            LabeledContent("Escaped", value: result.completed ? "Yes" : "No")
+            LabeledContent("Moves", value: "\(result.moveCount)")
+            LabeledContent("Escape progress", value: "\(Int((result.progress * 100).rounded()))%")
+        case .colorLink:
+            LabeledContent("Completed", value: result.completed ? "Yes" : "No")
+            LabeledContent("Board fill", value: "\(Int((result.progress * 100).rounded()))%")
+            LabeledContent("Color pairs", value: "\(result.solvedPairs)")
         }
 
         if !result.details.isEmpty {
