@@ -3,117 +3,86 @@ import Foundation
 struct GridlockGenerator {
     static func generate(difficulty: Difficulty, seed: Int? = nil) -> GridlockBoard {
         var rng = SeededRNG(seed: seed ?? Int.random(in: 0..<Int.max))
-        let boards = puzzles(for: difficulty)
-        let index = Int(rng.next()) % boards.count
-        return boards[index]
+        let size = boardSize(for: difficulty)
+        let colorCount = colorCount(for: difficulty)
+        var board = solvedBoard(size: size, colorCount: colorCount, rng: &rng)
+        scramble(&board, difficulty: difficulty, rng: &rng)
+        return board
     }
 
-    private static func puzzles(for difficulty: Difficulty) -> [GridlockBoard] {
+    static func boardSize(for difficulty: Difficulty) -> Int {
         switch difficulty {
-        case .easy:
-            return [
-                board([
-                    car("A", 2, 0, 2, .horizontal, true, 0),
-                    car("B", 1, 3, 2, .vertical, false, 1),
-                    car("C", 0, 0, 2, .horizontal, false, 2),
-                    car("D", 4, 1, 3, .horizontal, false, 3),
-                    car("E", 3, 5, 2, .vertical, false, 4)
-                ]),
-                board([
-                    car("A", 2, 1, 2, .horizontal, true, 0),
-                    car("B", 0, 4, 3, .vertical, false, 1),
-                    car("C", 0, 0, 3, .horizontal, false, 2),
-                    car("D", 4, 2, 2, .horizontal, false, 3),
-                    car("E", 3, 0, 2, .vertical, false, 4)
-                ])
-            ]
-        case .medium:
-            return [
-                board([
-                    car("A", 2, 0, 2, .horizontal, true, 0),
-                    car("B", 0, 2, 3, .vertical, false, 1),
-                    car("C", 1, 4, 3, .vertical, false, 2),
-                    car("D", 0, 0, 2, .horizontal, false, 3),
-                    car("E", 3, 2, 2, .horizontal, false, 4),
-                    car("F", 4, 5, 2, .vertical, false, 5)
-                ]),
-                board([
-                    car("A", 2, 0, 2, .horizontal, true, 0),
-                    car("B", 1, 3, 2, .vertical, false, 1),
-                    car("C", 0, 4, 3, .vertical, false, 2),
-                    car("D", 3, 0, 3, .horizontal, false, 3),
-                    car("E", 4, 2, 2, .vertical, false, 4),
-                    car("F", 5, 3, 2, .horizontal, false, 5)
-                ])
-            ]
-        case .hard:
-            return [
-                board([
-                    car("A", 2, 0, 2, .horizontal, true, 0),
-                    car("B", 0, 2, 3, .vertical, false, 1),
-                    car("C", 0, 3, 2, .horizontal, false, 2),
-                    car("D", 1, 5, 3, .vertical, false, 3),
-                    car("E", 3, 1, 2, .horizontal, false, 4),
-                    car("F", 3, 4, 2, .vertical, false, 5),
-                    car("G", 5, 0, 3, .horizontal, false, 6)
-                ]),
-                board([
-                    car("A", 2, 1, 2, .horizontal, true, 0),
-                    car("B", 0, 3, 3, .vertical, false, 1),
-                    car("C", 0, 0, 2, .vertical, false, 2),
-                    car("D", 0, 4, 2, .horizontal, false, 3),
-                    car("E", 3, 1, 3, .horizontal, false, 4),
-                    car("F", 3, 5, 3, .vertical, false, 5),
-                    car("G", 5, 2, 2, .horizontal, false, 6)
-                ])
-            ]
-        case .expert:
-            return [
-                board([
-                    car("A", 2, 0, 2, .horizontal, true, 0),
-                    car("B", 0, 2, 3, .vertical, false, 1),
-                    car("C", 0, 3, 2, .horizontal, false, 2),
-                    car("D", 1, 5, 3, .vertical, false, 3),
-                    car("E", 3, 0, 2, .horizontal, false, 4),
-                    car("F", 3, 3, 2, .vertical, false, 5),
-                    car("G", 4, 1, 3, .horizontal, false, 6),
-                    car("H", 5, 4, 2, .horizontal, false, 7)
-                ]),
-                board([
-                    car("A", 2, 0, 2, .horizontal, true, 0),
-                    car("B", 1, 2, 2, .vertical, false, 1),
-                    car("C", 0, 3, 3, .vertical, false, 2),
-                    car("D", 0, 4, 2, .horizontal, false, 3),
-                    car("E", 3, 0, 2, .vertical, false, 4),
-                    car("F", 3, 2, 3, .horizontal, false, 5),
-                    car("G", 4, 5, 2, .vertical, false, 6),
-                    car("H", 5, 1, 3, .horizontal, false, 7)
-                ])
-            ]
+        case .easy: return 4
+        case .medium: return 5
+        case .hard: return 6
+        case .expert: return 7
         }
     }
 
-    private static func board(_ vehicles: [GridlockVehicle]) -> GridlockBoard {
-        GridlockBoard(size: 6, exitRow: 2, vehicles: vehicles)
+    static func colorCount(for difficulty: Difficulty) -> Int {
+        switch difficulty {
+        case .easy: return 3
+        case .medium: return 4
+        case .hard: return 5
+        case .expert: return 6
+        }
     }
 
-    private static func car(
-        _ id: String,
-        _ row: Int,
-        _ col: Int,
-        _ length: Int,
-        _ orientation: GridlockOrientation,
-        _ isTarget: Bool,
-        _ colorIndex: Int
-    ) -> GridlockVehicle {
-        GridlockVehicle(
-            id: id,
-            row: row,
-            col: col,
-            length: length,
-            orientation: orientation,
-            isTarget: isTarget,
-            colorIndex: colorIndex
-        )
+    private static func solvedBoard(size: Int, colorCount: Int, rng: inout SeededRNG) -> GridlockBoard {
+        var tiles = Array(repeating: Array(repeating: -1, count: size), count: size)
+        let colorOffset = Int(rng.next()) % colorCount
+        var orbitIndex = 0
+
+        for row in 0..<size {
+            for col in 0..<size where tiles[row][col] == -1 {
+                let orbit = symmetryOrbit(row: row, col: col, size: size)
+                let color = (orbitIndex + colorOffset) % colorCount
+                for position in orbit {
+                    tiles[position.row][position.col] = color
+                }
+                orbitIndex += 1
+            }
+        }
+
+        return GridlockBoard(size: size, colorCount: colorCount, tiles: tiles)
     }
+
+    private static func symmetryOrbit(row: Int, col: Int, size: Int) -> Set<GridDuelPosition> {
+        [
+            GridDuelPosition(row: row, col: col),
+            GridDuelPosition(row: row, col: size - 1 - col),
+            GridDuelPosition(row: size - 1 - row, col: col),
+            GridDuelPosition(row: size - 1 - row, col: size - 1 - col)
+        ]
+    }
+
+    private static func scramble(_ board: inout GridlockBoard, difficulty: Difficulty, rng: inout SeededRNG) {
+        let moveCount: Int
+        switch difficulty {
+        case .easy: moveCount = 8
+        case .medium: moveCount = 14
+        case .hard: moveCount = 22
+        case .expert: moveCount = 32
+        }
+
+        for moveIndex in 0..<moveCount {
+            let axis: GridDuelAxis = Int(rng.next()) % 2 == 0 ? .row : .column
+            let index = Int(rng.next()) % board.size
+            var steps = 1 + Int(rng.next()) % max(1, board.size - 1)
+            if moveIndex.isMultiple(of: 2) { steps *= -1 }
+            board.shift(axis: axis, index: index, steps: steps)
+        }
+
+        if board.isSolved {
+            board.shift(axis: .row, index: 0, steps: 1)
+            if board.isSolved, board.size > 1 {
+                board.shift(axis: .column, index: 1, steps: 1)
+            }
+        }
+    }
+}
+
+private struct GridDuelPosition: Hashable {
+    var row: Int
+    var col: Int
 }

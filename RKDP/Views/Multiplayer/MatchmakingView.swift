@@ -477,9 +477,11 @@ struct MatchBreakdownView: View {
             LabeledContent("Completed", value: result.completed ? "Yes" : "No")
             LabeledContent("Progress", value: "\(Int((result.progress * 100).rounded()))%")
         case .gridlock:
-            LabeledContent("Escaped", value: result.completed ? "Yes" : "No")
+            LabeledContent("Completed", value: result.completed ? "Yes" : "No")
             LabeledContent("Moves", value: "\(result.moveCount)")
-            LabeledContent("Escape progress", value: "\(Int((result.progress * 100).rounded()))%")
+            LabeledContent("Symmetry", value: "\(Int((result.progress * 100).rounded()))%")
+            LabeledContent("Grid", value: result.summary["boardSize"].map { "\($0)x\($0)" } ?? "Unknown")
+            LabeledContent("Colors", value: result.summary["colorCount"] ?? "Unknown")
         case .colorLink:
             LabeledContent("Completed", value: result.completed ? "Yes" : "No")
             LabeledContent("Board fill", value: "\(Int((result.progress * 100).rounded()))%")

@@ -14,14 +14,10 @@ struct HowToPlayView: View {
                 .ignoresSafeArea()
 
                 TabView(selection: $selectedTab) {
-                    gameGuide(for: .sudoku).tag(0)
-                    gameGuide(for: .minesweeper).tag(1)
-                    gameGuide(for: .colorLink).tag(2)
-                    gameGuide(for: .gridlock).tag(3)
-                    gameGuide(for: .anagram).tag(4)
-                    gameGuide(for: .wordHunt).tag(5)
-                    gameGuide(for: .wordle).tag(6)
-                    RankGuideView().tag(7)
+                    ForEach(GameMode.allCases.indices, id: \.self) { index in
+                        gameGuide(for: GameMode.allCases[index]).tag(index)
+                    }
+                    RankGuideView().tag(GameMode.allCases.count)
                 }
                 .tabViewStyle(.page)
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
@@ -166,19 +162,19 @@ struct HowToPlayView: View {
         case .gridlock:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Move the red car to the exit on the right side of the grid.",
-                    "Horizontal pieces slide left and right.",
-                    "Vertical pieces slide up and down.",
+                    "Arrange the colored grid so it mirrors itself left-to-right and top-to-bottom.",
+                    "Every cell is filled; the challenge is shifting colors into symmetry.",
+                    "The puzzle ends automatically when every mirror pair matches.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
-                    "Drag a car or block along its allowed direction.",
-                    "Horizontal pieces only slide left and right; vertical pieces only slide up and down.",
-                    "Clear blockers from the red car's row to open the escape lane.",
+                    "Drag a row sideways to rotate that row.",
+                    "Drag a column up or down to rotate that column.",
+                    "Each whole-cell shift counts as one move.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same seeded traffic puzzle.",
-                    "Escaping wins; if both escape, fewer moves wins before time.",
-                    "If neither player escapes, better escape progress wins.",
+                    "Both players receive the same seeded symmetry puzzle.",
+                    "Completion wins; if both finish, fewer moves wins before time.",
+                    "If neither player finishes, higher symmetry percent wins.",
                 ]),
             ]
         case .anagram:

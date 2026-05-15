@@ -11,6 +11,10 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
 
     var accentColor: Color { AppTheme.modeAccent(self) }
 
+    static var allCases: [GameMode] {
+        [.colorLink, .gridlock, .sudoku, .minesweeper, .wordle, .wordHunt, .anagram]
+    }
+
     var id: String { rawValue }
     var isComingSoon: Bool { false }
 
@@ -19,7 +23,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "Sudoku"
         case .minesweeper: return "Minesweeper"
         case .colorLink:   return "Color Link"
-        case .gridlock:    return "Gridlock"
+        case .gridlock:    return "Grid Duel"
         case .anagram:     return "Anagrams"
         case .wordHunt:    return "Word Hunt"
         case .wordle:      return "Wordle"
@@ -35,7 +39,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .colorLink:
             return "Connect matching colors with paths that cover the board."
         case .gridlock:
-            return "Slide cars and blocks out of the way so the red car can escape."
+            return "Slide rows and columns to form a mirrored color grid before your opponent."
         case .anagram:
             return "Unscramble the letters to find the hidden word before your opponent."
         case .wordHunt:
@@ -50,7 +54,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "grid"
         case .minesweeper: return "scope"
         case .colorLink:   return "point.3.connected.trianglepath.dotted"
-        case .gridlock:    return "car.fill"
+        case .gridlock:    return "square.grid.3x3.square"
         case .anagram:     return "textformat.abc"
         case .wordHunt:    return "magnifyingglass"
         case .wordle:      return "character.cursor.ibeam"
@@ -65,7 +69,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "Fastest to complete the puzzle wins"
         case .minesweeper: return "Most cells uncovered wins (fastest if both finish)"
         case .colorLink:   return "Fill more of the board with completed color paths"
-        case .gridlock:    return "Escape in fewer moves, then faster time"
+        case .gridlock:    return "Make the grid symmetrical in fewer moves"
         case .anagram:     return "Most points from words wins"
         case .wordHunt:    return "Most points from found words wins"
         case .wordle:      return "Best of 3 shared words; guesses and time break ties"

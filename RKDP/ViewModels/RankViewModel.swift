@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class RankViewModel: ObservableObject {
     @Published var leaderboard: [LeaderboardEntry] = []
-    @Published var selectedMode: GameMode = .sudoku
+    @Published var selectedMode: GameMode = GameMode.allCases.first ?? .colorLink
     @Published var isLoading = false
     @Published var errorMessage: String?
 

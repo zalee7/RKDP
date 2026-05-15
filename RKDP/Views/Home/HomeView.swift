@@ -225,6 +225,7 @@ struct GameModeDetailView: View {
         switch mode {
         case .gridlock:
             if let moves = rankInfo.bestMoves { return "Best \(moves) moves" }
+            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))% symmetry" }
             if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
         case .wordle:
             if let guesses = rankInfo.bestGuesses { return "Best \(guesses) guesses" }
@@ -301,7 +302,9 @@ private struct ModeMiniPreview: View {
             let colors: [Color] = [AppTheme.hotPink, AppTheme.iconBlue, AppTheme.teal, AppTheme.crownGold, AppTheme.iconPurple, AppTheme.royalBlue]
             return colors[index % colors.count].opacity(index % 3 == 0 ? 1 : 0.45)
         case .gridlock:
-            return index % 5 == 0 ? AppTheme.hotPink : AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
+            let colors: [Color] = [AppTheme.crownGold, AppTheme.teal, AppTheme.hotPink, AppTheme.iconBlue]
+            let mirrorIndex = index < 9 ? index : 17 - index
+            return colors[mirrorIndex % colors.count].opacity(index % 2 == 0 ? 1 : 0.72)
         case .wordle:
             return [Color(hex: "538D4E"), Color(hex: "C9B458"), Color(hex: "3A3A3C")][index % 3]
         default:

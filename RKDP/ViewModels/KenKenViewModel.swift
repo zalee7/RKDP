@@ -4,7 +4,6 @@ import Combine
 @MainActor
 final class GridlockViewModel: ObservableObject {
     @Published var board: GridlockBoard
-    @Published var selectedVehicleID: String?
     @Published var elapsedSeconds: Int = 0
     @Published var moveCount: Int = 0
     @Published var isComplete = false
@@ -12,31 +11,26 @@ final class GridlockViewModel: ObservableObject {
     let difficulty: Difficulty
     private var timer: AnyCancellable?
 
-    var progress: Double { board.escapeProgress }
+    var progress: Double { board.symmetryProgress }
+    var boardSize: Int { board.size }
+    var colorCount: Int { board.colorCount }
 
     init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
         self.board = GridlockGenerator.generate(difficulty: difficulty, seed: seed)
-        self.selectedVehicleID = board.target?.id
         startTimer()
     }
 
-    func selectVehicle(id: String) {
-        selectedVehicleID = id
-    }
-
-    func moveVehicle(id vehicleID: String, steps: Int) {
+    func shift(axis: GridDuelAxis, index: Int, steps: Int) {
         guard !isComplete, steps != 0 else { return }
-        selectedVehicleID = vehicleID
-        let direction = steps > 0 ? 1 : -1
-        for _ in 0..<abs(steps) {
-            guard board.move(vehicleID: vehicleID, delta: direction) else { break }
-            moveCount += 1
-            if board.isSolved {
-                isComplete = true
-                timer?.cancel()
-                break
-            }
+        board.shift(axis: axis, index: index, steps: steps)
+        moveCount += abs(steps)
+        SoundManager.shared.keyboardPress()
+
+        if board.isSolved {
+            isComplete = true
+            timer?.cancel()
+            SoundManager.shared.gameOver()
         }
     }
 

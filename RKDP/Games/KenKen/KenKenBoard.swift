@@ -1,93 +1,107 @@
 import Foundation
 
-enum GridlockOrientation: String, Codable {
-    case horizontal
-    case vertical
+enum GridDuelAxis: String, Codable, Equatable {
+    case row
+    case column
 }
 
-struct GridlockVehicle: Identifiable, Codable, Equatable {
-    var id: String
-    var row: Int
-    var col: Int
-    var length: Int
-    var orientation: GridlockOrientation
-    var isTarget: Bool
-    var colorIndex: Int
+struct GridDuelMove: Equatable {
+    var axis: GridDuelAxis
+    var index: Int
+    var steps: Int
 }
 
 struct GridlockBoard: Codable, Equatable {
     var size: Int
-    var exitRow: Int
-    var vehicles: [GridlockVehicle]
-
-    var target: GridlockVehicle? {
-        vehicles.first { $0.isTarget }
-    }
+    var colorCount: Int
+    var tiles: [[Int]]
 
     var isSolved: Bool {
-        guard let target else { return false }
-        return target.orientation == .horizontal && target.row == exitRow && target.col + target.length == size
+        symmetryProgress >= 1
     }
 
-    var blockerCount: Int {
-        guard let target else { return 0 }
-        let startCol = target.col + target.length
-        guard startCol < size else { return 0 }
-        return (startCol..<size).filter { col in
-            guard let vehicle = vehicle(atRow: exitRow, col: col) else { return false }
-            return vehicle.id != target.id
-        }.count
+    var symmetryProgress: Double {
+        let horizontal = symmetryScore(axis: .row)
+        let vertical = symmetryScore(axis: .column)
+        return (horizontal + vertical) / 2
     }
 
-    var escapeProgress: Double {
-        guard let target else { return 0 }
-        if isSolved { return 1 }
-        let exitDistance = max(0, size - (target.col + target.length))
-        let penalty = exitDistance + blockerCount * 2
-        let maxPenalty = max(1, size + size)
-        return max(0, min(1, 1 - Double(penalty) / Double(maxPenalty)))
+    var solvedPairCount: Int {
+        solvedPairs(axis: .row) + solvedPairs(axis: .column)
     }
 
-    func vehicle(atRow row: Int, col: Int) -> GridlockVehicle? {
-        vehicles.first { vehicle in
-            cells(for: vehicle).contains(row * size + col)
+    var totalPairCount: Int {
+        pairCount(axis: .row) + pairCount(axis: .column)
+    }
+
+    mutating func shift(_ move: GridDuelMove) {
+        shift(axis: move.axis, index: move.index, steps: move.steps)
+    }
+
+    mutating func shift(axis: GridDuelAxis, index: Int, steps: Int) {
+        guard size > 0, index >= 0, index < size else { return }
+        let normalized = ((steps % size) + size) % size
+        guard normalized != 0 else { return }
+
+        switch axis {
+        case .row:
+            tiles[index] = shifted(tiles[index], by: normalized)
+        case .column:
+            var column = (0..<size).map { tiles[$0][index] }
+            column = shifted(column, by: normalized)
+            for row in 0..<size {
+                tiles[row][index] = column[row]
+            }
         }
     }
 
-    func cells(for vehicle: GridlockVehicle) -> [Int] {
-        (0..<vehicle.length).map { offset in
-            let row = vehicle.row + (vehicle.orientation == .vertical ? offset : 0)
-            let col = vehicle.col + (vehicle.orientation == .horizontal ? offset : 0)
-            return row * size + col
-        }
+    private func shifted(_ values: [Int], by steps: Int) -> [Int] {
+        guard !values.isEmpty else { return values }
+        let pivot = values.count - steps
+        return Array(values[pivot..<values.count] + values[0..<pivot])
     }
 
-    mutating func move(vehicleID: String, delta: Int) -> Bool {
-        guard let index = vehicles.firstIndex(where: { $0.id == vehicleID }) else { return false }
-        guard canMove(piece: vehicles[index], delta: delta) else { return false }
-        switch vehicles[index].orientation {
-        case .horizontal:
-            vehicles[index].col += delta
-        case .vertical:
-            vehicles[index].row += delta
-        }
-        return true
+    private func symmetryScore(axis: GridDuelAxis) -> Double {
+        let total = pairCount(axis: axis)
+        guard total > 0 else { return 1 }
+        return Double(solvedPairs(axis: axis)) / Double(total)
     }
 
-    func canMove(piece: GridlockVehicle, delta: Int) -> Bool {
-        guard delta == -1 || delta == 1 else { return false }
-        let nextRow: Int
-        let nextCol: Int
-        switch piece.orientation {
-        case .horizontal:
-            nextRow = piece.row
-            nextCol = delta < 0 ? piece.col - 1 : piece.col + piece.length
-        case .vertical:
-            nextRow = delta < 0 ? piece.row - 1 : piece.row + piece.length
-            nextCol = piece.col
+    private func solvedPairs(axis: GridDuelAxis) -> Int {
+        var count = 0
+        for row in 0..<size {
+            for col in 0..<size {
+                guard shouldCountPair(row: row, col: col, axis: axis) else { continue }
+                let mirror = mirrored(row: row, col: col, axis: axis)
+                if tiles[row][col] == tiles[mirror.row][mirror.col] {
+                    count += 1
+                }
+            }
         }
+        return count
+    }
 
-        guard nextRow >= 0, nextRow < size, nextCol >= 0, nextCol < size else { return false }
-        return vehicle(atRow: nextRow, col: nextCol)?.id == nil
+    private func pairCount(axis: GridDuelAxis) -> Int {
+        var count = 0
+        for row in 0..<size {
+            for col in 0..<size where shouldCountPair(row: row, col: col, axis: axis) {
+                count += 1
+            }
+        }
+        return count
+    }
+
+    private func shouldCountPair(row: Int, col: Int, axis: GridDuelAxis) -> Bool {
+        let mirror = mirrored(row: row, col: col, axis: axis)
+        return row < mirror.row || (row == mirror.row && col < mirror.col)
+    }
+
+    private func mirrored(row: Int, col: Int, axis: GridDuelAxis) -> (row: Int, col: Int) {
+        switch axis {
+        case .row:
+            return (row, size - 1 - col)
+        case .column:
+            return (size - 1 - row, col)
+        }
     }
 }

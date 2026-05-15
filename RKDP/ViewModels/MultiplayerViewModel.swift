@@ -391,24 +391,24 @@ enum MatchResolver {
     private static func compareGridlock(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
         if a.completed != b.completed {
             let winner = a.completed ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Escaped the gridlock")
+            return MatchResolution(winnerID: winner.userID, reason: "Completed Grid Duel symmetry")
         }
         if a.completed && b.completed {
             if a.moveCount != b.moveCount {
                 let winner = a.moveCount < b.moveCount ? a : b
-                return MatchResolution(winnerID: winner.userID, reason: "Escaped in fewer moves")
+                return MatchResolution(winnerID: winner.userID, reason: "Solved in fewer moves")
             }
-            return compareElapsed(a, b, fallback: "Same Gridlock result")
+            return compareElapsed(a, b, fallback: "Same Grid Duel result")
         }
         if a.progress != b.progress {
             let winner = a.progress > b.progress ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Better escape progress")
+            return MatchResolution(winnerID: winner.userID, reason: "Higher symmetry progress")
         }
         if a.moveCount != b.moveCount {
             let winner = a.moveCount < b.moveCount ? a : b
             return MatchResolution(winnerID: winner.userID, reason: "Used fewer moves")
         }
-        return compareElapsed(a, b, fallback: "Same Gridlock progress")
+        return compareElapsed(a, b, fallback: "Same Grid Duel progress")
     }
 
     private static func compareColorLink(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
