@@ -74,17 +74,17 @@ struct GridlockBoard: Codable, Equatable {
         return true
     }
 
-    func canMove(vehicle: GridlockVehicle, delta: Int) -> Bool {
+    func canMove(piece: GridlockVehicle, delta: Int) -> Bool {
         guard delta == -1 || delta == 1 else { return false }
         let nextRow: Int
         let nextCol: Int
-        switch vehicle.orientation {
+        switch piece.orientation {
         case .horizontal:
-            nextRow = vehicle.row
-            nextCol = delta < 0 ? vehicle.col - 1 : vehicle.col + vehicle.length
+            nextRow = piece.row
+            nextCol = delta < 0 ? piece.col - 1 : piece.col + piece.length
         case .vertical:
-            nextRow = delta < 0 ? vehicle.row - 1 : vehicle.row + vehicle.length
-            nextCol = vehicle.col
+            nextRow = delta < 0 ? piece.row - 1 : piece.row + piece.length
+            nextCol = piece.col
         }
 
         guard nextRow >= 0, nextRow < size, nextCol >= 0, nextCol < size else { return false }
