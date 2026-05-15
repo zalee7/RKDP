@@ -10,6 +10,7 @@ final class AuthViewModel: ObservableObject {
 
     private let auth = FirebaseAuthService.shared
     private let store = FirestoreService.shared
+    private let ranking = RankingService.shared
 
     init() {
         // Use state-change listener so session is restored after cold launch
@@ -58,7 +59,9 @@ final class AuthViewModel: ObservableObject {
     // Loads from Firestore; if doc is missing, creates it from Firebase Auth data
     private func loadUser(firebaseUser: FirebaseAuth.User) async {
         do {
-            user = try await store.fetchUser(id: firebaseUser.uid)
+            var loadedUser = try await store.fetchUser(id: firebaseUser.uid)
+            loadedUser = await applyPendingRankedOutcomes(for: loadedUser)
+            user = loadedUser
         } catch {
             // Doc missing — create a minimal profile so login never hard-fails
             let fallbackUsername = firebaseUser.displayName
@@ -77,6 +80,19 @@ final class AuthViewModel: ObservableObject {
     func refreshUser() async {
         guard let firebaseUser = Auth.auth().currentUser else { return }
         await loadUser(firebaseUser: firebaseUser)
+    }
+
+    private func applyPendingRankedOutcomes(for loadedUser: AppUser) async -> AppUser {
+        do {
+            let sessions = try await store.fetchUnappliedFinishedSessions(for: loadedUser)
+            guard !sessions.isEmpty else { return loadedUser }
+            for session in sessions {
+                try await ranking.applyFinishedSession(session, for: loadedUser.id)
+            }
+            return try await store.fetchUser(id: loadedUser.id)
+        } catch {
+            return loadedUser
+        }
     }
 
     func recordSoloResult(_ result: SoloGameResult) async {

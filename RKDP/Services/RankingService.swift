@@ -19,10 +19,35 @@ final class RankingService {
     }
 
     func processOutcome(_ outcome: MatchOutcome) async throws {
-        try await applyOutcomeTransaction(outcome)
+        try await finishSessionIfNeeded(outcome)
     }
 
-    private func applyOutcomeTransaction(_ outcome: MatchOutcome) async throws {
+    func applyFinishedSession(_ session: GameSession, for userID: String) async throws {
+        guard session.status == .finished,
+              session.players.contains(where: { $0.userID == userID }) else { return }
+        try await applyPlayerOutcome(session: session, userID: userID)
+    }
+
+    static func rankDelta(
+        for playerID: String,
+        mode: GameMode,
+        difficulty: Difficulty,
+        winnerID: String?,
+        players: [MatchPlayer]
+    ) -> Int {
+        let isWinner = winnerID == playerID
+        let base: Int
+        if winnerID == nil {
+            base = 5
+        } else {
+            base = isWinner ? 30 : -15
+        }
+
+        let adjustedBase = adjustedRankBase(base, playerID: playerID, isWinner: isWinner, winnerID: winnerID, players: players)
+        return Int(Double(adjustedBase) * mode.pointMultiplier(for: difficulty))
+    }
+
+    private func finishSessionIfNeeded(_ outcome: MatchOutcome) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
                 let sessionRef = self.db.collection("sessions").document(outcome.sessionID)
@@ -38,66 +63,8 @@ final class RankingService {
                         return true
                     }
 
-                    let userRefs = outcome.players.map { self.db.collection("users").document($0.userID) }
-                    var users: [AppUser] = []
-                    for ref in userRefs {
-                        users.append(try transaction.getDocument(ref).data(as: AppUser.self))
-                    }
-
-                    let pot = outcome.players.reduce(0) { $0 + $1.wager }
                     let encodedResults = try Firestore.Encoder().encode(outcome.playerResults)
                     let finishedAt = Date()
-
-                    for (index, player) in outcome.players.enumerated() {
-                        var user = users[index]
-                        let isWinner = outcome.winnerID == player.userID
-                        let delta = self.rankDelta(for: player.userID, outcome: outcome)
-
-                        var rankInfo = user.ranks[outcome.mode] ?? .empty
-                        rankInfo.points = max(0, rankInfo.points + delta)
-                        rankInfo.tier = RankTier.tier(for: rankInfo.points)
-                        if outcome.winnerID != nil {
-                            if isWinner { rankInfo.wins += 1 } else { rankInfo.losses += 1 }
-                        }
-
-                        let result = outcome.playerResults[player.userID]
-                        let wonByForfeit = result?.status == "Won by forfeit"
-                        if isWinner, !wonByForfeit, result?.completed == true, let time = result?.elapsedSeconds {
-                            rankInfo.bestTime = min(rankInfo.bestTime ?? Int.max, time)
-                        }
-                        if isWinner, outcome.mode.isScoreBased, let score = result?.score {
-                            rankInfo.bestScore = max(rankInfo.bestScore ?? 0, score)
-                        }
-                        if isWinner, outcome.mode.isWordle, let guesses = result?.totalGuesses, guesses > 0 {
-                            rankInfo.bestGuesses = min(rankInfo.bestGuesses ?? Int.max, guesses)
-                        }
-
-                        user.ranks[outcome.mode] = rankInfo
-                        if let winnerID = outcome.winnerID {
-                            user.coins += (player.userID == winnerID ? pot : -player.wager)
-                        }
-
-                        let encodedUser = try Firestore.Encoder().encode(user)
-                        transaction.setData(encodedUser, forDocument: userRefs[index], merge: true)
-
-                        let entry = LeaderboardEntry(
-                            id: player.userID,
-                            username: user.username,
-                            avatarURL: user.avatarURL,
-                            rankTier: rankInfo.tier,
-                            rankPoints: rankInfo.points,
-                            wins: rankInfo.wins,
-                            bestTime: rankInfo.bestTime,
-                            mode: outcome.mode,
-                            equippedTitle: user.cosmetics.equippedTitle
-                        )
-                        let encodedEntry = try Firestore.Encoder().encode(entry)
-                        let entryRef = self.db.collection("leaderboards")
-                            .document(outcome.mode.rawValue)
-                            .collection("entries")
-                            .document(player.userID)
-                        transaction.setData(encodedEntry, forDocument: entryRef, merge: true)
-                    }
 
                     var sessionData: [String: Any] = [
                         "status": SessionStatus.finished.rawValue,
@@ -125,19 +92,127 @@ final class RankingService {
         }
     }
 
-    private func rankDelta(for playerID: String, outcome: MatchOutcome) -> Int {
-        if let winnerID = outcome.winnerID {
-            let isWinner = playerID == winnerID
-            var base = isWinner ? 30 : -15
-            if isWinner {
-                let myPlayer  = outcome.players.first { $0.userID == playerID }
-                let oppPlayer = outcome.players.first { $0.userID != playerID }
-                if let myPts = myPlayer?.rankPoints, let oppPts = oppPlayer?.rankPoints, oppPts > myPts {
-                    base += 5
+    private func applyPlayerOutcome(session: GameSession, userID: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+                let entryRef = self.db.collection("leaderboards")
+                    .document(session.mode.rawValue)
+                    .collection("entries")
+                    .document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
                 }
-            }
-            return Int(Double(base) * outcome.mode.pointMultiplier(for: outcome.difficulty))
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    if user.appliedRankedOutcomes[session.id] == true {
+                        return true
+                    }
+
+                    let delta = Self.rankDelta(
+                        for: userID,
+                        mode: session.mode,
+                        difficulty: session.difficulty,
+                        winnerID: session.winnerID,
+                        players: session.players
+                    )
+
+                    var rankInfo = user.ranks[session.mode] ?? .empty
+                    rankInfo.points = max(0, rankInfo.points + delta)
+                    rankInfo.tier = RankTier.tier(for: rankInfo.points)
+                    if let winnerID = session.winnerID {
+                        if winnerID == userID {
+                            rankInfo.wins += 1
+                        } else {
+                            rankInfo.losses += 1
+                        }
+                    }
+
+                    let result = session.playerResults?[userID]
+                    let isWinner = session.winnerID == userID
+                    let wonByForfeit = result?.status == "Won by forfeit"
+                    if isWinner, !wonByForfeit, result?.completed == true, let time = result?.elapsedSeconds {
+                        rankInfo.bestTime = min(rankInfo.bestTime ?? Int.max, time)
+                    }
+                    if isWinner, session.mode.isScoreBased, let score = result?.score {
+                        rankInfo.bestScore = max(rankInfo.bestScore ?? 0, score)
+                    }
+                    if isWinner, session.mode.isWordle, let guesses = result?.totalGuesses, guesses > 0 {
+                        rankInfo.bestGuesses = min(rankInfo.bestGuesses ?? Int.max, guesses)
+                    }
+
+                    user.ranks[session.mode] = rankInfo
+                    if let winnerID = session.winnerID,
+                       let player = session.players.first(where: { $0.userID == userID }) {
+                        user.coins += winnerID == userID ? session.totalPot : -player.wager
+                    }
+                    user.appliedRankedOutcomes[session.id] = true
+
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+
+                    let entry = LeaderboardEntry(
+                        id: userID,
+                        username: user.username,
+                        avatarURL: user.avatarURL,
+                        rankTier: rankInfo.tier,
+                        rankPoints: rankInfo.points,
+                        wins: rankInfo.wins,
+                        bestTime: rankInfo.bestTime,
+                        mode: session.mode,
+                        equippedTitle: user.cosmetics.equippedTitle
+                    )
+                    let encodedEntry = try Firestore.Encoder().encode(entry)
+                    transaction.setData(encodedEntry, forDocument: entryRef, merge: true)
+                    return true
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { _, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            })
         }
-        return Int(Double(5) * outcome.mode.pointMultiplier(for: outcome.difficulty))
+    }
+
+    private static func adjustedRankBase(
+        _ base: Int,
+        playerID: String,
+        isWinner: Bool,
+        winnerID: String?,
+        players: [MatchPlayer]
+    ) -> Int {
+        guard winnerID != nil,
+              let player = players.first(where: { $0.userID == playerID }),
+              let opponent = players.first(where: { $0.userID != playerID }) else {
+            return base
+        }
+
+        let diff = divisionScore(opponent) - divisionScore(player)
+        guard diff != 0 else { return base }
+
+        let capped = max(-2, min(2, diff))
+        if isWinner {
+            return max(10, base + capped * 5)
+        }
+        return min(-5, base + capped * 3)
+    }
+
+    private static func divisionScore(_ player: MatchPlayer) -> Int {
+        let info = RankInfo(
+            points: player.rankPoints,
+            tier: player.rankTier,
+            wins: 0,
+            losses: 0,
+            bestTime: nil,
+            bestScore: nil
+        )
+        return player.rankTier.rawValue * 3 + info.division.rawValue
     }
 }

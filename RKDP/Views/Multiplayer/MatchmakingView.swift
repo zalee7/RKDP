@@ -342,11 +342,13 @@ struct MatchmakingView: View {
     private func resultView(session: GameSession) -> some View {
         let isWinner = session.winnerID == user.id
         let isDraw   = session.winnerID == nil
-        let myPlayer    = session.players.first { $0.userID == user.id }
-        let oppPlayer   = session.players.first { $0.userID != user.id }
-        let divBonus    = isWinner && (oppPlayer?.rankPoints ?? 0) > (myPlayer?.rankPoints ?? 0) ? 5 : 0
-        let base        = isDraw ? 5 : (isWinner ? 30 + divBonus : -15)
-        let rankDelta   = Int(Double(base) * session.mode.pointMultiplier(for: session.difficulty))
+        let rankDelta = RankingService.rankDelta(
+            for: user.id,
+            mode: session.mode,
+            difficulty: session.difficulty,
+            winnerID: session.winnerID,
+            players: session.players
+        )
 
         let results      = session.playerResults ?? vm.playerResults
         let myResult     = results[user.id]
@@ -382,8 +384,8 @@ struct MatchmakingView: View {
                         Text("\(rankDelta >= 0 ? "+" : "")\(rankDelta)")
                             .font(.title3.bold())
                             .foregroundStyle(rankDelta >= 0 ? AppTheme.success : AppTheme.danger)
-                        if divBonus > 0 {
-                            Text("↑ Higher Division Bonus")
+                        if let adjustmentLabel = rankAdjustmentLabel(session: session) {
+                            Text(adjustmentLabel)
                                 .font(.system(size: 10))
                                 .foregroundStyle(AppTheme.crownGold)
                         }
@@ -408,6 +410,22 @@ struct MatchmakingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
             .padding(.horizontal)
+
+            if let rewardError = vm.rewardErrorMessage {
+                Button {
+                    Task { await vm.retryFinishedRewards(session: session) }
+                } label: {
+                    Label(rewardError, systemImage: "arrow.clockwise.circle.fill")
+                        .font(.caption.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppTheme.warning.opacity(0.18))
+                        .foregroundStyle(AppTheme.warning)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.warning.opacity(0.45), lineWidth: 1))
+                }
+                .padding(.horizontal)
+            }
 
             Button { showBreakdown = true } label: {
                 Label("Match Breakdown", systemImage: "list.bullet.rectangle")
@@ -462,6 +480,31 @@ struct MatchmakingView: View {
 
     private var sessionModeMissingResultText: String {
         mode == .wordle ? "not finished" : "waiting"
+    }
+
+    private func rankAdjustmentLabel(session: GameSession) -> String? {
+        guard session.winnerID != nil,
+              let me = session.players.first(where: { $0.userID == user.id }),
+              let opponent = session.players.first(where: { $0.userID != user.id }) else { return nil }
+        let myScore = rankPosition(me)
+        let oppScore = rankPosition(opponent)
+        guard myScore != oppScore else { return nil }
+        if session.winnerID == user.id {
+            return oppScore > myScore ? "Higher division bonus" : "Lower division adjustment"
+        }
+        return oppScore > myScore ? "Reduced loss vs higher division" : "Lower division penalty"
+    }
+
+    private func rankPosition(_ player: MatchPlayer) -> Int {
+        let info = RankInfo(
+            points: player.rankPoints,
+            tier: player.rankTier,
+            wins: 0,
+            losses: 0,
+            bestTime: nil,
+            bestScore: nil
+        )
+        return player.rankTier.rawValue * 3 + info.division.rawValue
     }
 
     // MARK: - Error

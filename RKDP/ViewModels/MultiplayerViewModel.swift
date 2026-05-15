@@ -20,6 +20,7 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var opponentUser: AppUser? = nil
     @Published var matchCountdown: Int = 5
     @Published var finishedSessionID: String?
+    @Published var rewardErrorMessage: String?
     private var countdownTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
@@ -65,6 +66,7 @@ final class MultiplayerViewModel: ObservableObject {
         elapsedSeconds = 0
         matchCountdown = 5
         finishedSessionID = nil
+        rewardErrorMessage = nil
 
         self.user = user
         self.mode = mode
@@ -175,6 +177,7 @@ final class MultiplayerViewModel: ObservableObject {
                 if let results = session.playerResults {
                     self.playerResults = results
                 }
+                await self.applyFinishedRewards(session)
                 self.state = .finished(session: session)
                 self.finishedSessionID = session.id
             }
@@ -224,6 +227,7 @@ final class MultiplayerViewModel: ObservableObject {
         do {
             try await ranking.processOutcome(outcome)
             let updated = try await store.fetchSession(id: session.id)
+            await applyFinishedRewards(updated)
             state = .finished(session: updated)
             finishedSessionID = updated.id
         } catch {
@@ -286,6 +290,7 @@ final class MultiplayerViewModel: ObservableObject {
         do {
             try await ranking.processOutcome(outcome)
             let updated = try await store.fetchSession(id: session.id)
+            await applyFinishedRewards(updated)
             state = .finished(session: updated)
             finishedSessionID = updated.id
             if resetAfterProcessing {
@@ -295,6 +300,24 @@ final class MultiplayerViewModel: ObservableObject {
             state = .error(error.localizedDescription)
         }
         isForfeiting = false
+    }
+
+    func retryFinishedRewards(session: GameSession) async {
+        await applyFinishedRewards(session)
+        if rewardErrorMessage == nil {
+            finishedSessionID = session.id
+        }
+    }
+
+    private func applyFinishedRewards(_ session: GameSession) async {
+        guard let userID = user?.id else { return }
+        do {
+            try await ranking.applyFinishedSession(session, for: userID)
+            user = try? await store.fetchUser(id: userID)
+            rewardErrorMessage = nil
+        } catch {
+            rewardErrorMessage = "Result saved. Tap to refresh rewards."
+        }
     }
 
     // MARK: - Helpers
@@ -339,6 +362,7 @@ final class MultiplayerViewModel: ObservableObject {
         opponentUser = nil
         selectedWager = nil
         finishedSessionID = nil
+        rewardErrorMessage = nil
         isForfeiting = false
     }
 

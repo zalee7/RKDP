@@ -70,6 +70,18 @@ final class FirestoreService {
         try await db.collection("sessions").document(id).getDocument(as: GameSession.self)
     }
 
+    func fetchUnappliedFinishedSessions(for user: AppUser, limit: Int = 10) async throws -> [GameSession] {
+        let snapshot = try await db.collection("sessions")
+            .whereField("playerIDs", arrayContains: user.id)
+            .whereField("status", isEqualTo: SessionStatus.finished.rawValue)
+            .limit(to: limit)
+            .getDocuments()
+
+        return try snapshot.documents
+            .map { try $0.data(as: GameSession.self) }
+            .filter { user.appliedRankedOutcomes[$0.id] != true }
+    }
+
     func listenForSession(id: String, onChange: @escaping (GameSession) -> Void) -> ListenerRegistration {
         db.collection("sessions").document(id)
             .addSnapshotListener { snapshot, _ in
@@ -236,7 +248,7 @@ final class FirestoreService {
         }
 
         let seed = Int.random(in: 0..<Int.max)
-        let session = GameSession(
+        var session = GameSession(
             id: sessionID,
             mode: mode,
             difficulty: difficulty,
@@ -249,6 +261,7 @@ final class FirestoreService {
             puzzleData: "",
             createdAt: Date()
         )
+        session.playerIDs = [hostUser.id, opponentID]
 
         // Create session
         try db.collection("sessions").document(sessionID).setData(from: session)

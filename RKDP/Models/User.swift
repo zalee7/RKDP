@@ -10,6 +10,7 @@ struct AppUser: Codable, Identifiable {
     var ranks: [GameMode: RankInfo]
     var cosmetics: OwnedCosmetics = .default
     var soloCompletions: [GameMode: [Difficulty]] = [:]
+    var appliedRankedOutcomes: [String: Bool] = [:]
 
     var totalRankPoints: Int { ranks.values.reduce(0) { $0 + $1.points } }
 
@@ -57,7 +58,7 @@ struct AppUser: Codable, Identifiable {
 
 extension AppUser {
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions
+        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes
     }
 
     init(from decoder: Decoder) throws {
@@ -82,6 +83,7 @@ extension AppUser {
             guard let mode = GameMode(rawValue: item.key) else { return }
             partial[mode] = item.value.compactMap { Difficulty(rawValue: $0) }
         }
+        appliedRankedOutcomes = (try? c.decode([String: Bool].self, forKey: .appliedRankedOutcomes)) ?? [:]
     }
 
     func encode(to encoder: Encoder) throws {
@@ -103,5 +105,6 @@ extension AppUser {
             rawSolo[mode.rawValue] = difficulties.map(\.rawValue)
         }
         try c.encode(rawSolo, forKey: .soloCompletions)
+        try c.encode(appliedRankedOutcomes, forKey: .appliedRankedOutcomes)
     }
 }
