@@ -289,7 +289,7 @@ struct MatchmakingView: View {
         let oppPlayer   = session.players.first { $0.userID != user.id }
         let divBonus    = isWinner && (oppPlayer?.rankPoints ?? 0) > (myPlayer?.rankPoints ?? 0) ? 5 : 0
         let base        = isDraw ? 5 : (isWinner ? 30 + divBonus : -15)
-        let rankDelta   = Int(Double(base) * session.difficulty.pointMultiplier)
+        let rankDelta   = Int(Double(base) * session.mode.pointMultiplier(for: session.difficulty))
 
         let results      = session.playerResults ?? vm.playerResults
         let myResult     = results[user.id]

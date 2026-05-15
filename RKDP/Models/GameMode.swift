@@ -75,6 +75,22 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .wordle:      return "Best of 3 shared words; guesses and time break ties"
         }
     }
+
+    var defaultDifficulty: Difficulty {
+        self == .wordle ? .medium : .easy
+    }
+
+    func pointMultiplier(for difficulty: Difficulty) -> Double {
+        if self == .wordle {
+            switch difficulty {
+            case .easy:   return 0.8
+            case .medium: return 1.0
+            case .hard:   return 1.5
+            case .expert: return 2.0
+            }
+        }
+        return difficulty.pointMultiplier
+    }
 }
 
 enum Difficulty: String, Codable, CaseIterable {

@@ -135,8 +135,8 @@ final class RankingService {
                     base += 5
                 }
             }
-            return Int(Double(base) * outcome.difficulty.pointMultiplier)
+            return Int(Double(base) * outcome.mode.pointMultiplier(for: outcome.difficulty))
         }
-        return Int(Double(5) * outcome.difficulty.pointMultiplier)
+        return Int(Double(5) * outcome.mode.pointMultiplier(for: outcome.difficulty))
     }
 }

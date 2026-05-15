@@ -149,7 +149,7 @@ struct GameSession: Codable, Identifiable {
         case .draw:      base = 5
         case .abandoned: base = -20
         }
-        return Int(Double(base) * difficulty.pointMultiplier)
+        return Int(Double(base) * mode.pointMultiplier(for: difficulty))
     }
 }
 

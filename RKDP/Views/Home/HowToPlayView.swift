@@ -83,9 +83,9 @@ struct HowToPlayView: View {
                         .foregroundStyle(mode.accentColor)
                     ForEach(Difficulty.allCases, id: \.self) { d in
                         HStack {
-                            Text(d.displayName).font(.subheadline.bold()).foregroundStyle(.white)
+                            Text(mode.difficultyLabel(d)).font(.subheadline.bold()).foregroundStyle(.white)
                             Spacer()
-                            Text("×\(String(format: "%.1f", d.pointMultiplier)) points").font(.caption).foregroundStyle(.white.opacity(0.6))
+                            Text("×\(String(format: "%.1f", mode.pointMultiplier(for: d))) points").font(.caption).foregroundStyle(.white.opacity(0.6))
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color.white.opacity(0.07))
@@ -231,7 +231,7 @@ struct HowToPlayView: View {
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players receive the same shared words in a best-of-3 match.",
                     "Solving 2 rounds wins immediately; guesses and time break ties if both finish.",
-                    "Difficulty controls how many guesses you get (4–7).",
+                    "Difficulty controls how many guesses you get: 6 guesses is the standard 1.0× game.",
                 ]),
             ]
         }

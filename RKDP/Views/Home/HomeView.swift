@@ -96,8 +96,13 @@ struct GameModeDetailView: View {
     let mode: GameMode
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) var dismiss
-    @State private var selectedDifficulty: Difficulty = .easy
+    @State private var selectedDifficulty: Difficulty
     @State private var destination: NavigationPath = .init()
+
+    init(mode: GameMode) {
+        self.mode = mode
+        _selectedDifficulty = State(initialValue: mode.defaultDifficulty)
+    }
 
     private var user: AppUser? { auth.user }
     private var rankInfo: RankInfo { user?.rank(for: mode) ?? .empty }
@@ -124,7 +129,7 @@ struct GameModeDetailView: View {
                             }
                             HStack {
                                 ModeFactRow(icon: "timer", title: "Ranked timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
-                                ModeFactRow(icon: "star.fill", title: "Multiplier", value: "x\(String(format: "%.1f", selectedDifficulty.pointMultiplier))", color: .yellow)
+                                ModeFactRow(icon: "star.fill", title: "Multiplier", value: "x\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))", color: .yellow)
                             }
                         }
                         .padding(.horizontal)
@@ -204,7 +209,11 @@ struct GameModeDetailView: View {
                         onPlayAgain: {},
                         onChangeDifficulty: { destination.removeLast() },
                         onTryRanked: {
-                            selectedDifficulty = mode.rankedDifficulties.first ?? .medium
+                            if mode.rankedDifficulties.contains(mode.defaultDifficulty) {
+                                selectedDifficulty = mode.defaultDifficulty
+                            } else {
+                                selectedDifficulty = mode.rankedDifficulties.first ?? .medium
+                            }
                             destination.removeLast()
                             if auth.user != nil {
                                 destination.append("ranked")
@@ -413,7 +422,7 @@ private struct DifficultyCardView: View {
     }
 
     private var rewardText: String {
-        "x\(String(format: "%.1f", difficulty.pointMultiplier)) reward"
+        "x\(String(format: "%.1f", mode.pointMultiplier(for: difficulty))) reward"
     }
 
     private var cardBorderColor: Color {
