@@ -175,7 +175,7 @@ final class MultiplayerViewModel: ObservableObject {
         let handle = rtdb.listenForResults(sessionID: session.id) { [weak self] results in
             Task { @MainActor in
                 self?.playerResults = results
-                if results.count >= session.players.count {
+                if MatchResolver.canResolve(session: session, results: results) {
                     await self?.resolveMatch(session: session, results: results)
                 }
             }
@@ -296,8 +296,18 @@ struct MatchResolution {
 }
 
 enum MatchResolver {
+    static func canResolve(session: GameSession, results: [String: MatchPlayerResult]) -> Bool {
+        if session.mode == .wordle, hasClinchedWordleResult(results) {
+            return true
+        }
+        return results.count >= session.players.count
+    }
+
     static func resolve(session: GameSession, results: [String: MatchPlayerResult]) -> MatchResolution {
         let ordered = session.players.compactMap { results[$0.userID] }
+        if session.mode == .wordle, ordered.count == 1, let resolution = resolveClinchedWordle(ordered[0]) {
+            return resolution
+        }
         guard ordered.count == session.players.count, ordered.count == 2 else {
             return MatchResolution(winnerID: nil, reason: "Waiting for both players")
         }
@@ -320,6 +330,15 @@ enum MatchResolver {
         case .minesweeper:
             return compareMinesweeper(a, b)
         }
+    }
+
+    private static func hasClinchedWordleResult(_ results: [String: MatchPlayerResult]) -> Bool {
+        results.values.contains { $0.mode == .wordle && $0.solvedRounds >= 2 }
+    }
+
+    private static func resolveClinchedWordle(_ result: MatchPlayerResult) -> MatchResolution? {
+        guard result.solvedRounds >= 2 else { return nil }
+        return MatchResolution(winnerID: result.userID, reason: "Won \(result.solvedRounds) Wordles")
     }
 
     private static func compareWordle(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
