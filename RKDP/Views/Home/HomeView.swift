@@ -296,7 +296,8 @@ private struct ModeMiniPreview: View {
     private func previewColor(_ index: Int) -> Color {
         switch mode {
         case .colorLink:
-            return [.red, .blue, .green, .orange, .purple, .cyan][index % 6].opacity(index % 3 == 0 ? 1 : 0.45)
+            let colors: [Color] = [.red, .blue, .green, .orange, .purple, .cyan]
+            return colors[index % colors.count].opacity(index % 3 == 0 ? 1 : 0.45)
         case .gridlock:
             return index % 5 == 0 ? .red : AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
         case .wordle:
