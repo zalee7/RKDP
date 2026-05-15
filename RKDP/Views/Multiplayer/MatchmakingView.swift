@@ -15,22 +15,26 @@ struct MatchmakingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            switch vm.state {
-            case .idle:
-                wagerPicker
-            case .searching:
-                searchingView
-            case .matchFound(let session):
-                matchFoundView(session: session)
-            case .inMatch(let session):
-                inMatchView(session: session)
-            case .finished(let session):
-                resultView(session: session)
-            case .error(let msg):
-                errorView(msg)
+        ZStack {
+            AppTheme.backgroundGradient.ignoresSafeArea()
+            VStack(spacing: 24) {
+                switch vm.state {
+                case .idle:
+                    wagerPicker
+                case .searching:
+                    searchingView
+                case .matchFound(let session):
+                    matchFoundView(session: session)
+                case .inMatch(let session):
+                    inMatchView(session: session)
+                case .finished(let session):
+                    resultView(session: session)
+                case .error(let msg):
+                    errorView(msg)
+                }
             }
         }
+        .foregroundStyle(AppTheme.textPrimary)
         .navigationTitle("Ranked Match")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { vm.reset() }
@@ -52,7 +56,7 @@ struct MatchmakingView: View {
                         CoinBadgeView(amount: user.coins)
                     }
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.textSecondary)
                 }
 
                 Text("Choose Your Wager").font(.title3.bold())
@@ -72,12 +76,13 @@ struct MatchmakingView: View {
 
                 if let wager = selectedWager {
                     VStack(spacing: 6) {
-                        Text("Winner takes: \(wager.amount * 2) coins").font(.subheadline.bold()).foregroundStyle(.green)
-                        Text("Both players wager \(wager.amount) coins each").font(.caption).foregroundStyle(.secondary)
+                        Text("Winner takes: \(wager.amount * 2) coins").font(.subheadline.bold()).foregroundStyle(AppTheme.success)
+                        Text("Both players wager \(wager.amount) coins each").font(.caption).foregroundStyle(AppTheme.textSecondary)
                     }
                     .padding()
-                    .background(Color(.secondarySystemBackground))
+                    .background(AppTheme.cardBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
                     .padding(.horizontal)
                 }
 
@@ -213,15 +218,15 @@ struct MatchmakingView: View {
                 Spacer()
                 if let oppResult = vm.playerResults.first(where: { $0.key != user.id })?.value {
                     Label(oppResult.status, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppTheme.success)
                 } else {
-                    Text("In progress…").foregroundStyle(.secondary)
+                    Text("In progress…").foregroundStyle(AppTheme.textSecondary)
                 }
             }
             .font(.caption)
             .padding(.horizontal)
             .padding(.vertical, 6)
-            .background(Color(.secondarySystemBackground))
+            .background(AppTheme.cardBackground)
 
             ZStack {
                 // Game board — seed ensures both players get identical puzzle
@@ -273,11 +278,11 @@ struct MatchmakingView: View {
             Spacer()
             Text(isDraw ? "Draw 🤝" : (isWinner ? "Victory! 🏆" : "Defeat 😔"))
                 .font(.largeTitle.bold())
-                .foregroundStyle(isDraw ? .orange : (isWinner ? .yellow : .secondary))
+                .foregroundStyle(isDraw || isWinner ? AppTheme.crownGold : AppTheme.textSecondary)
 
             Text(session.winnerReason ?? mode.winConditionText)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -294,14 +299,14 @@ struct MatchmakingView: View {
 
                 HStack(spacing: 0) {
                     VStack(spacing: 2) {
-                        Text("Rank Points").font(.caption).foregroundStyle(.secondary)
+                        Text("Rank Points").font(.caption).foregroundStyle(AppTheme.textSecondary)
                         Text("\(rankDelta >= 0 ? "+" : "")\(rankDelta)")
                             .font(.title3.bold())
-                            .foregroundStyle(rankDelta >= 0 ? .green : .red)
+                            .foregroundStyle(rankDelta >= 0 ? AppTheme.success : AppTheme.danger)
                         if divBonus > 0 {
                             Text("↑ Higher Division Bonus")
                                 .font(.system(size: 10))
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(AppTheme.crownGold)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -310,27 +315,29 @@ struct MatchmakingView: View {
                         Divider().frame(height: 40)
                         let coinDelta = isDraw ? 0 : (isWinner ? wager.amount : -wager.amount)
                         VStack(spacing: 2) {
-                            Text("Coins").font(.caption).foregroundStyle(.secondary)
+                            Text("Coins").font(.caption).foregroundStyle(AppTheme.textSecondary)
                             Text("\(coinDelta >= 0 ? "+" : "")\(coinDelta)")
                                 .font(.title3.bold())
-                                .foregroundStyle(coinDelta >= 0 ? .green : .red)
+                                .foregroundStyle(coinDelta >= 0 ? AppTheme.success : AppTheme.danger)
                         }
                         .frame(maxWidth: .infinity)
                     }
                 }
                 .padding(.vertical, 10)
             }
-            .background(Color(.secondarySystemBackground))
+            .background(AppTheme.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
             .padding(.horizontal)
 
             Button { showBreakdown = true } label: {
                 Label("Match Breakdown", systemImage: "list.bullet.rectangle")
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color(.secondarySystemBackground))
+                    .background(AppTheme.cardBackground)
                     .foregroundStyle(mode.accentColor)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
             }
             .padding(.horizontal)
 
@@ -476,16 +483,16 @@ struct WagerOptionRow: View {
                 }
                 Spacer()
                 if !canAfford {
-                    Text("Insufficient coins").font(.caption).foregroundStyle(.red)
+                    Text("Insufficient coins").font(.caption).foregroundStyle(AppTheme.danger)
                 }
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(AppTheme.teal)
                 }
             }
             .padding()
-            .background(isSelected ? Color.green.opacity(0.1) : Color(.secondarySystemBackground))
+            .background(isSelected ? AppTheme.teal.opacity(0.16) : AppTheme.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(isSelected ? Color.green : Color.clear, lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(isSelected ? AppTheme.teal : AppTheme.cardBorder, lineWidth: isSelected ? 2 : 1))
         }
         .disabled(!canAfford)
         .opacity(canAfford ? 1 : 0.4)

@@ -56,7 +56,7 @@ struct SoloResultOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.72).ignoresSafeArea()
+            AppTheme.royalBlue.opacity(0.42).ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 18) {
                     RoundedRectangle(cornerRadius: 24)
@@ -118,7 +118,7 @@ struct SoloResultOverlay: View {
                 }
                 .padding(22)
             }
-            .background(Color(hex: "14142F"))
+            .background(AppTheme.backgroundGradient)
             .clipShape(RoundedRectangle(cornerRadius: 30))
             .overlay(RoundedRectangle(cornerRadius: 30).stroke(AppTheme.cardBorder, lineWidth: 1))
             .padding(18)

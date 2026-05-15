@@ -1,73 +1,84 @@
 import SwiftUI
 
 enum AppTheme {
-    // Background: deep warm navy — feels rich but lets bright colours pop
+    // Icon palette: electric arcade blue/purple with candy blocks and a gold crown.
+    static let iconBlue         = Color(hex: "168CFF")
+    static let royalBlue        = Color(hex: "256BFF")
+    static let iconPurple       = Color(hex: "7B42FF")
+    static let crownGold        = Color(hex: "FFD02E")
+    static let hotPink          = Color(hex: "FF2F78")
+    static let teal             = Color(hex: "12C8A2")
+    static let success          = Color(hex: "2EEA9D")
+    static let warning          = Color(hex: "FFD02E")
+    static let danger           = Color(hex: "FF4A7D")
+
+    // Background: brighter app-icon blue/purple instead of the old deep navy.
     static let backgroundGradient = LinearGradient(
-        colors: [Color(hex: "0F0E2A"), Color(hex: "1A1040"), Color(hex: "0D1B3E")],
+        colors: [iconBlue, royalBlue, iconPurple],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
-    // Brand: coral-orange to hot pink — warm, energetic, fun
+    // Brand: crown gold into jewel pink.
     static let brandGradient = LinearGradient(
-        colors: [Color(hex: "FF6B35"), Color(hex: "F72585")],
+        colors: [crownGold, hotPink],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
-    static let cardBackground   = Color.white.opacity(0.09)
-    static let cardBorder       = Color.white.opacity(0.14)
+    static let cardBackground   = Color.white.opacity(0.16)
+    static let cardBorder       = Color.white.opacity(0.38)
     static let textPrimary      = Color.white
-    static let textSecondary    = Color.white.opacity(0.65)
-    static let accent           = Color(hex: "F72585")   // hot pink
-    static let accentBright     = Color(hex: "FF9F1C")   // amber/orange
+    static let textSecondary    = Color.white.opacity(0.82)
+    static let accent           = hotPink
+    static let accentBright     = crownGold
 
-    // Each mode gets its own bold saturated gradient
+    // Each mode keeps its identity, tuned into the icon palette.
     static func modeGradient(_ mode: GameMode) -> LinearGradient {
         switch mode {
         case .sudoku:
-            return LinearGradient(colors: [Color(hex: "3A86FF"), Color(hex: "00CFFD")],
+            return LinearGradient(colors: [iconBlue, Color(hex: "34D9FF")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .minesweeper:
-            return LinearGradient(colors: [Color(hex: "FF6B35"), Color(hex: "FF9F1C")],
+            return LinearGradient(colors: [hotPink, crownGold],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .colorLink:
-            return LinearGradient(colors: [Color(hex: "06D6A0"), Color(hex: "8338EC")],
+            return LinearGradient(colors: [teal, hotPink, royalBlue],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .gridlock:
-            return LinearGradient(colors: [Color(hex: "FFBE0B"), Color(hex: "FB5607")],
+            return LinearGradient(colors: [crownGold, iconBlue],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .anagram:
-            return LinearGradient(colors: [Color(hex: "F72585"), Color(hex: "7209B7")],
+            return LinearGradient(colors: [hotPink, iconPurple],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .wordHunt:
-            return LinearGradient(colors: [Color(hex: "4CC9F0"), Color(hex: "4361EE")],
+            return LinearGradient(colors: [Color(hex: "39D5FF"), royalBlue],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .wordle:
-            return LinearGradient(colors: [Color(hex: "538D4E"), Color(hex: "6AAB9C")],
+            return LinearGradient(colors: [Color(hex: "50C878"), teal],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
     static func modeShadow(_ mode: GameMode) -> Color {
         switch mode {
-        case .sudoku:      return Color(hex: "3A86FF").opacity(0.5)
-        case .minesweeper: return Color(hex: "FF6B35").opacity(0.5)
-        case .colorLink:   return Color(hex: "06D6A0").opacity(0.5)
-        case .gridlock:    return Color(hex: "FFBE0B").opacity(0.5)
-        case .anagram:     return Color(hex: "F72585").opacity(0.5)
-        case .wordHunt:    return Color(hex: "4CC9F0").opacity(0.5)
-        case .wordle:      return Color(hex: "538D4E").opacity(0.5)
+        case .sudoku:      return iconBlue.opacity(0.62)
+        case .minesweeper: return hotPink.opacity(0.62)
+        case .colorLink:   return teal.opacity(0.62)
+        case .gridlock:    return crownGold.opacity(0.62)
+        case .anagram:     return hotPink.opacity(0.62)
+        case .wordHunt:    return royalBlue.opacity(0.62)
+        case .wordle:      return teal.opacity(0.62)
         }
     }
 
-    // Per-mode accent colour (flat) for text/badges
+    // Per-mode accent colour (flat) for text/badges.
     static func modeAccent(_ mode: GameMode) -> Color {
         switch mode {
-        case .sudoku:      return Color(hex: "4CC9F0")
-        case .minesweeper: return Color(hex: "FF9F1C")
-        case .colorLink:   return Color(hex: "06D6A0")
-        case .gridlock:    return Color(hex: "FFBE0B")
-        case .anagram:     return Color(hex: "F72585")
-        case .wordHunt:    return Color(hex: "4361EE")
+        case .sudoku:      return iconBlue
+        case .minesweeper: return hotPink
+        case .colorLink:   return teal
+        case .gridlock:    return crownGold
+        case .anagram:     return hotPink
+        case .wordHunt:    return royalBlue
         case .wordle:      return Color(hex: "538D4E")
         }
     }

@@ -296,10 +296,10 @@ private struct ModeMiniPreview: View {
     private func previewColor(_ index: Int) -> Color {
         switch mode {
         case .colorLink:
-            let colors: [Color] = [.red, .blue, .green, .orange, .purple, .cyan]
+            let colors: [Color] = [AppTheme.hotPink, AppTheme.iconBlue, AppTheme.teal, AppTheme.crownGold, AppTheme.iconPurple, AppTheme.royalBlue]
             return colors[index % colors.count].opacity(index % 3 == 0 ? 1 : 0.45)
         case .gridlock:
-            return index % 5 == 0 ? .red : AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
+            return index % 5 == 0 ? AppTheme.hotPink : AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
         case .wordle:
             return [Color(hex: "538D4E"), Color(hex: "C9B458"), Color(hex: "3A3A3C")][index % 3]
         default:
@@ -397,7 +397,7 @@ private struct DifficultyCardView: View {
         if let soloLockedReason {
             Text(soloLockedReason)
                 .font(.caption2)
-                .foregroundStyle(Color.orange)
+                .foregroundStyle(AppTheme.crownGold)
                 .lineLimit(2)
         } else if let rankedLockedReason {
             Text(rankedLockedReason)
@@ -424,8 +424,8 @@ private struct DifficultyCardView: View {
             .font(.caption2.bold())
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
-            .background((locked ? Color.white.opacity(0.08) : Color.green.opacity(0.18)))
-            .foregroundStyle(locked ? AppTheme.textSecondary : .green)
+            .background((locked ? Color.white.opacity(0.10) : AppTheme.teal.opacity(0.22)))
+            .foregroundStyle(locked ? AppTheme.textSecondary : AppTheme.teal)
             .clipShape(Capsule())
     }
 }

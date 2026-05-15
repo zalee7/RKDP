@@ -19,12 +19,12 @@ struct ShopView: View {
                     Spacer()
                     Label("Balance:", systemImage: "circle.fill")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.textSecondary)
                     CoinBadgeView(amount: user.coins)
                     Spacer()
                 }
                 .padding(.vertical, 10)
-                .background(Color(.secondarySystemBackground))
+                .background(AppTheme.cardBackground)
 
                 // Category tabs
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -34,8 +34,8 @@ struct ShopView: View {
                                 Text(cat.rawValue)
                                     .font(.subheadline.weight(selectedCategory == cat ? .bold : .regular))
                                     .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(selectedCategory == cat ? Color.blue : Color(.secondarySystemBackground))
-                                    .foregroundStyle(selectedCategory == cat ? .white : .primary)
+                                    .background(selectedCategory == cat ? AppTheme.royalBlue : AppTheme.cardBackground)
+                                    .foregroundStyle(selectedCategory == cat ? .white : AppTheme.textSecondary)
                                     .clipShape(Capsule())
                             }
                         }
@@ -77,9 +77,12 @@ struct ShopView: View {
                     }
                 }
             }
+            .background(AppTheme.backgroundGradient.ignoresSafeArea())
+            .foregroundStyle(AppTheme.textPrimary)
             .navigationTitle("Shop")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .tint(AppTheme.accentBright)
             .alert("Error", isPresented: .constant(vm.errorMessage != nil)) {
                 Button("OK") { vm.errorMessage = nil }
             } message: {
@@ -156,11 +159,11 @@ struct RotationCountdownBanner: View {
             Text("Rotates in \(timeLeft)")
                 .font(.caption.bold())
         }
-        .foregroundStyle(.orange)
+        .foregroundStyle(AppTheme.crownGold)
         .padding(.horizontal)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(Color.orange.opacity(0.1))
+        .background(AppTheme.crownGold.opacity(0.16))
         .onAppear { updateCountdown() }
         .onReceive(timer) { _ in updateCountdown() }
     }
@@ -191,9 +194,9 @@ struct ShopItemCard: View {
     }
 
     var actionColor: Color {
-        if isEquipped { return .gray }
-        if isOwned    { return .blue }
-        return canAfford ? .orange : .gray
+        if isEquipped { return AppTheme.cardBorder }
+        if isOwned    { return AppTheme.royalBlue }
+        return canAfford ? AppTheme.crownGold : AppTheme.cardBorder
     }
 
     var body: some View {
@@ -202,23 +205,23 @@ struct ShopItemCard: View {
                 // Preview area
                 if item.category == .title {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(.systemGray6))
+                        .fill(AppTheme.cardBackground)
                         .frame(height: 72)
                         .overlay(
                             Text("\"\(item.name)\"")
                                 .font(.subheadline.bold().italic())
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(AppTheme.textPrimary)
                                 .multilineTextAlignment(.center)
                                 .padding(8)
                         )
                 } else {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(.systemGray5))
+                        .fill(AppTheme.cardBackground)
                         .frame(height: 72)
                         .overlay(
                             Image(systemName: iconForCategory(item.category))
                                 .font(.system(size: 30))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppTheme.textSecondary)
                         )
                 }
 
@@ -228,20 +231,20 @@ struct ShopItemCard: View {
                         Text("LIMITED")
                             .font(.system(size: 9, weight: .black))
                             .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(Color.orange)
+                            .background(AppTheme.crownGold)
                             .foregroundStyle(.white)
                             .clipShape(Capsule())
                     }
                     if isOwned {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(AppTheme.teal)
                     }
                 }
                 .padding(6)
             }
 
             Text(item.name).font(.subheadline.bold()).lineLimit(1)
-            Text(item.description).font(.caption).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.center)
+            Text(item.description).font(.caption).foregroundStyle(AppTheme.textSecondary).lineLimit(2).multilineTextAlignment(.center)
 
             Button(action: onAction) {
                 Text(actionLabel)
@@ -254,11 +257,11 @@ struct ShopItemCard: View {
             .disabled(isEquipped || (!isOwned && !canAfford))
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(isLimited && !isOwned ? Color.orange.opacity(0.4) : Color.clear, lineWidth: 1.5)
+                .stroke(isLimited && !isOwned ? AppTheme.crownGold.opacity(0.65) : AppTheme.cardBorder, lineWidth: 1.5)
         )
     }
 
