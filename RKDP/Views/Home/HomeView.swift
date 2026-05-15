@@ -343,49 +343,80 @@ private struct DifficultyCardView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(mode.difficultyLabel(difficulty))
-                        .font(.headline.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-                    Spacer()
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(AppTheme.accentBright)
-                    }
-                }
-
-                Text("x\(String(format: "%.1f", difficulty.pointMultiplier)) reward")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
-
-                HStack(spacing: 6) {
-                    availabilityBadge("Solo", locked: soloLockedReason != nil)
-                    availabilityBadge("Ranked", locked: rankedLockedReason != nil)
-                }
-
-                if let soloLockedReason {
-                    Text(soloLockedReason)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .lineLimit(2)
-                } else if let rankedLockedReason {
-                    Text(rankedLockedReason)
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .lineLimit(2)
-                }
-            }
+            cardContent
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
-            .background(isSelected ? AppTheme.modeGradient(mode).opacity(0.32) : AppTheme.cardBackground)
+            .background(cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(isSelected ? AppTheme.accentBright : AppTheme.cardBorder, lineWidth: isSelected ? 2 : 1)
+                    .stroke(cardBorderColor, lineWidth: cardBorderWidth)
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(mode.difficultyLabel(difficulty))
+                    .font(.headline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(AppTheme.accentBright)
+                }
+            }
+
+            Text(rewardText)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+
+            HStack(spacing: 6) {
+                availabilityBadge("Solo", locked: soloLockedReason != nil)
+                availabilityBadge("Ranked", locked: rankedLockedReason != nil)
+            }
+
+            lockReasonText
+        }
+    }
+
+    @ViewBuilder
+    private var cardBackground: some View {
+        if isSelected {
+            AppTheme.modeGradient(mode)
+                .opacity(0.32)
+        } else {
+            AppTheme.cardBackground
+        }
+    }
+
+    @ViewBuilder
+    private var lockReasonText: some View {
+        if let soloLockedReason {
+            Text(soloLockedReason)
+                .font(.caption2)
+                .foregroundStyle(Color.orange)
+                .lineLimit(2)
+        } else if let rankedLockedReason {
+            Text(rankedLockedReason)
+                .font(.caption2)
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(2)
+        }
+    }
+
+    private var rewardText: String {
+        "x\(String(format: "%.1f", difficulty.pointMultiplier)) reward"
+    }
+
+    private var cardBorderColor: Color {
+        isSelected ? AppTheme.accentBright : AppTheme.cardBorder
+    }
+
+    private var cardBorderWidth: CGFloat {
+        isSelected ? 2 : 1
     }
 
     private func availabilityBadge(_ label: String, locked: Bool) -> some View {
