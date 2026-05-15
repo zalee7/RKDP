@@ -1,0 +1,481 @@
+import Foundation
+
+struct WordHuntGame {
+    let grid: [[Character]]   // 4×4
+    let seed: Int
+    private(set) var validWords: Set<String> = []
+
+    static let gridSize = 4
+
+    init(grid: [[Character]], seed: Int) {
+        self.grid = grid
+        self.seed = seed
+        self.validWords = Self.findAllWords(in: grid)
+    }
+
+    // MARK: - Path validation
+
+    /// Returns true if `word` can be traced as a valid adjacency path in the grid.
+    func canForm(_ word: String) -> Bool {
+        let chars = Array(word.uppercased())
+        guard chars.count >= 3 else { return false }
+        for r in 0..<Self.gridSize {
+            for c in 0..<Self.gridSize {
+                if grid[r][c] == chars[0] {
+                    var visited = [[Bool]](repeating: [Bool](repeating: false, count: Self.gridSize), count: Self.gridSize)
+                    visited[r][c] = true
+                    if dfs(chars: chars, index: 1, row: r, col: c, visited: &visited) { return true }
+                }
+            }
+        }
+        return false
+    }
+
+    private func dfs(chars: [Character], index: Int, row: Int, col: Int, visited: inout [[Bool]]) -> Bool {
+        if index == chars.count { return true }
+        for (nr, nc) in Self.neighbors(row: row, col: col) {
+            guard !visited[nr][nc], grid[nr][nc] == chars[index] else { continue }
+            visited[nr][nc] = true
+            if dfs(chars: chars, index: index + 1, row: nr, col: nc, visited: &visited) { return true }
+            visited[nr][nc] = false
+        }
+        return false
+    }
+
+    static func neighbors(row: Int, col: Int) -> [(Int, Int)] {
+        var result: [(Int, Int)] = []
+        for dr in -1...1 {
+            for dc in -1...1 {
+                guard dr != 0 || dc != 0 else { continue }
+                let nr = row + dr, nc = col + dc
+                if nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize {
+                    result.append((nr, nc))
+                }
+            }
+        }
+        return result
+    }
+
+    // MARK: - Score
+
+    static func score(for word: String) -> Int {
+        switch word.count {
+        case 3:      return 1
+        case 4:      return 2
+        case 5:      return 3
+        case 6:      return 4
+        default:     return 5
+        }
+    }
+
+    // MARK: - Grid generation
+
+    static func generate(seed: Int) -> WordHuntGame {
+        // Weighted letter bag — roughly English Scrabble frequencies
+        let bag: [Character] = Array(
+            "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTTUUUUVVWWXYYZ"
+        )
+        var s = UInt64(bitPattern: Int64(seed &* 6364136223846793005 &+ 1442695040888963407))
+        var flat: [Character] = []
+        for _ in 0..<(gridSize * gridSize) {
+            s = s &* 6364136223846793005 &+ 1442695040888963407
+            flat.append(bag[Int(s >> 33) % bag.count])
+        }
+        let grid = (0..<gridSize).map { r in Array(flat[(r * gridSize)..<(r * gridSize + gridSize)]) }
+        return WordHuntGame(grid: grid, seed: seed)
+    }
+
+    // MARK: - Pre-compute all valid words in this grid
+
+    private static func findAllWords(in grid: [[Character]]) -> Set<String> {
+        var found = Set<String>()
+        let game = WordHuntGame(grid: grid, seed: 0, validWords: Set())   // temp without recursion
+        for word in WordDictionary.words {
+            if game.canForm(word) { found.insert(word) }
+        }
+        return found
+    }
+
+    // Private init used during pre-computation
+    private init(grid: [[Character]], seed: Int, validWords: Set<String>) {
+        self.grid = grid
+        self.seed = seed
+        self.validWords = validWords
+    }
+}
+
+// MARK: - Embedded dictionary
+
+enum WordDictionary {
+    static let words: Set<String> = [
+        // 3-letter words
+        "ACE","ACT","ADD","AGE","AGO","AID","AIM","AIR","ALL","AND","ANT","APE","APT","ARC","ARE","ARK","ARM","ART",
+        "ASH","ASK","ATE","AWE","AXE","BAD","BAG","BAN","BAR","BAT","BAY","BED","BIG","BIT","BOW","BOX","BOY",
+        "BUD","BUG","BUN","BUS","BUT","BUY","CAB","CAN","CAP","CAR","CAT","COB","COD","COP","COT","COW","CRY",
+        "CUB","CUP","CUT","DAD","DAM","DAY","DEN","DID","DIG","DIM","DIP","DOC","DOE","DOG","DOT","DRY","DUB",
+        "DUD","DUE","DUG","DUN","DUO","DYE","EAR","EAT","EEL","EGG","ELF","ELK","ELM","EMU","END","ERA","EWE",
+        "EYE","FAD","FAN","FAR","FAT","FAX","FED","FEW","FIG","FIN","FIT","FLY","FOB","FOE","FOG","FOR","FOX",
+        "FRY","FUN","FUR","GAP","GAS","GEL","GEM","GET","GIG","GNU","GOD","GOT","GUM","GUN","GUT","GUY","GYM",
+        "HAD","HAM","HAS","HAT","HAY","HEN","HER","HIM","HIT","HOB","HOG","HOP","HOT","HOW","HUB","HUE","HUG",
+        "HUM","HUT","ICE","ICY","ILL","INN","ION","IRE","IVY","JAB","JAM","JAR","JAW","JET","JOB","JOG","JOT",
+        "JOY","JUG","JUT","KEG","KIT","LAB","LAD","LAP","LAW","LAX","LAY","LEA","LED","LEG","LET","LID","LIP",
+        "LIT","LOG","LOT","LOW","MAD","MAP","MAR","MAT","MAW","MAY","MEN","MET","MID","MIX","MOB","MOD","MOM",
+        "MOP","MOW","MUD","MUG","NAB","NAG","NAP","NET","NEW","NIP","NOB","NOD","NOR","NOT","NOW","NUB","NUN",
+        "NUT","OAK","OAR","OAT","ODD","ODE","OPT","ORB","ORE","OUR","OUT","OWE","OWL","OWN","PAD","PAN","PAP",
+        "PAR","PAT","PAW","PAY","PEA","PEG","PEN","PEP","PET","PIE","PIG","PIN","PIT","PLY","POD","POP","POT",
+        "POW","PRY","PUB","PUG","PUN","PUP","PUS","PUT","RAG","RAM","RAN","RAP","RAT","RAW","RAY","RED","RIB",
+        "RID","RIG","RIM","RIP","ROB","ROD","ROT","ROW","RUB","RUG","RUN","RUT","SAC","SAD","SAP","SAT","SAW",
+        "SAY","SEA","SET","SEW","SHY","SIP","SIR","SIT","SIX","SKI","SKY","SLY","SOB","SOD","SON","SOP","SOT",
+        "SOW","SOY","SPA","SPY","STY","SUB","SUM","SUN","TAB","TAD","TAG","TAN","TAP","TAR","TAT","TAX","TEA",
+        "TEN","THE","TIE","TIN","TIP","TOE","TON","TOO","TOP","TOT","TOW","TOY","TUB","TUG","TUN","TWO","URN",
+        "USE","VAT","VIA","VIE","VOW","WAD","WAR","WAS","WAX","WEB","WED","WET","WHO","WHY","WIG","WIN","WIT",
+        "WOE","WOK","WON","WOO","WOW","YAK","YAM","YAP","YAW","YEA","YEW","YOU","ZAP","ZEN","ZIP","ZIT","ZOO",
+        // 4-letter words
+        "ABLE","ACHE","ACID","AGED","ALSO","ARCH","AREA","ARMY","ACHE","ATOM","AUNT","AURA","AWAY","BAKE","BALE",
+        "BALL","BAND","BANE","BANG","BARE","BARK","BARN","BASE","BASH","BASK","BATH","BEAD","BEAM","BEAN","BEAR",
+        "BEAT","BEEN","BELL","BELT","BEND","BEST","BIAS","BILE","BILL","BIND","BITE","BLADE","BLOT","BLOW","BLUE",
+        "BLUR","BOAR","BOAT","BOLD","BOLT","BOND","BONE","BOOK","BOOM","BOOT","BORE","BORN","BOTH","BOUT","BRAG",
+        "BRAN","BRAT","BREW","BRIM","BULL","BUMP","BURN","BURP","CAGE","CAKE","CALL","CALM","CAME","CAMP","CANE",
+        "CAPE","CARD","CARE","CART","CASE","CASH","CAST","CAVE","CELL","CHAD","CHAT","CHIP","CLAM","CLAP","CLAY",
+        "CLIP","CLOD","CLOG","CLOP","CLOT","CLUB","CLUE","COAL","COAT","COIL","COIN","COLA","COLD","COME","COOK",
+        "COOL","COPE","CORD","CORE","CORK","CORN","COST","COSY","COUP","CRAM","CRIB","CROP","CROW","CUBE","CURL",
+        "DAMP","DARE","DARK","DART","DATA","DAWN","DAYS","DEAD","DEAL","DEAN","DEAR","DEBT","DECK","DEED","DEEM",
+        "DEEP","DENY","DESK","DIET","DIRE","DIRT","DISK","DOCK","DOME","DONE","DOOM","DOOR","DOSE","DOVE","DOWN",
+        "DRAB","DRAG","DRAW","DRIP","DROP","DRUG","DRUM","DUAL","DUNE","DUSK","DUST","DUTY","EACH","EARL","EARN",
+        "EASE","EAST","EDGE","EMIT","ENVY","EPIC","EXAM","FACE","FACT","FADE","FAIL","FAIR","FAKE","FALL","FAME",
+        "FANG","FARE","FARM","FAST","FATE","FAWN","FEAT","FEED","FEEL","FEET","FELL","FELT","FEND","FERN","FETE",
+        "FILE","FILL","FILM","FIND","FIRE","FIRM","FISH","FIST","FIZZ","FLAG","FLAP","FLAT","FLAW","FLEA","FLED",
+        "FLEW","FLEX","FLIP","FLOG","FLOW","FOAM","FOLD","FOLK","FOND","FONT","FOOD","FOOL","FORD","FORE","FORK",
+        "FORM","FORT","FOUL","FOUR","FOWL","FREE","FROG","FROM","FUME","FUND","FUSE","FUZZ","GALE","GANG","GASH",
+        "GATE","GAVE","GAZE","GEAR","GERM","GIFT","GILL","GIRD","GIRL","GIST","GIVE","GLAD","GLEE","GLEN","GLOW",
+        "GLUE","GNAT","GNAW","GOAL","GOLF","GOOD","GOOF","GORE","GOWN","GRAB","GRAM","GRAY","GREW","GRIN","GRIP",
+        "GRIT","GUST","HACK","HAIL","HAIR","HALE","HALF","HALL","HALT","HAND","HANG","HARD","HARE","HARM","HARP",
+        "HASH","HATE","HAVE","HAWK","HAZE","HEAD","HEAL","HEAP","HEAR","HEAT","HEEL","HELM","HELP","HEMP","HERB",
+        "HERD","HERO","HIDE","HIGH","HILL","HIRE","HISS","HOLD","HOLE","HOME","HOOD","HOOK","HORN","HOSE","HOST",
+        "HOUR","HULK","HULL","HUNT","HYMN","IDEA","IDLE","INCH","INTO","JACK","JADE","JAIL","JERK","JOIN","JOKE",
+        "JOLT","JUNK","JUST","KEEN","KEEP","KERN","KIND","KING","KNOB","KNOT","KNOW","LACK","LAKE","LAMB","LAMP",
+        "LAND","LANE","LARK","LASH","LAST","LATE","LAUD","LAVA","LAWN","LEAD","LEAF","LEAN","LEAP","LEFT","LEND",
+        "LESS","LIFE","LIFT","LIKE","LIME","LINE","LINK","LION","LIST","LIVE","LOAD","LOAF","LOAN","LOCK","LODE",
+        "LONE","LONG","LOOK","LOOM","LOOP","LORD","LORE","LOSE","LOSS","LOST","LOUD","LOVE","LUCK","LULL","LUMP",
+        "LUNG","LURK","LUST","MADE","MAIL","MAIN","MAKE","MALE","MALL","MANE","MAST","MATE","MAZE","MEAL","MEAN",
+        "MEAT","MEET","MELT","MEMO","MENU","MESS","MILD","MILE","MILK","MILL","MINE","MINT","MISS","MIST","MOAN",
+        "MOAT","MOCK","MOLD","MOLE","MORE","MOST","MOTH","MOVE","MUCK","MULE","MUTT","MYTH","NAIL","NAME","NAVY",
+        "NEAR","NEAT","NECK","NEED","NEWS","NEXT","NICE","NINE","NODE","NONE","NOON","NOPE","NORM","NOSE","NOSH",
+        "NOTE","NUDE","NUMB","OATH","OBEY","ODDS","OMEN","ONCE","ONLY","OPEN","OVAL","OVEN","OVER","OXEN","PACE",
+        "PACK","PAGE","PAID","PAIN","PALE","PALM","PANT","PATH","PAVE","PEAK","PEAL","PEAR","PEAT","PEEK","PEEL",
+        "PEER","PEST","PICK","PILE","PILL","PINE","PINK","PIPE","PLAN","PLAY","PLEA","PLOD","PLOT","PLOW","PLUG",
+        "PLUM","PLUS","POEM","POET","POLE","POLL","POOL","POOR","POPE","PORE","PORK","PORT","POSE","POUR","PRAY",
+        "PREP","PREY","PRIM","PROD","PROP","PROW","PULL","PULP","PUMP","PURE","PUSH","QUAD","QUAY","QUIZ","RACE",
+        "RACK","RAGE","RAIL","RAIN","RAKE","RAMP","RANG","RANK","RANT","RASH","RATE","READ","REAL","REAP","REED",
+        "REEF","REEK","REEL","RELY","REND","RENT","RICH","RIDE","RING","RIOT","RISE","RISK","ROAD","ROAM","ROAR",
+        "RODE","ROLL","ROOF","ROOM","ROOT","ROPE","ROSE","ROUT","RUDE","RULE","RUSH","RUST","SAFE","SAGE","SAID",
+        "SAIL","SALT","SAME","SAND","SANE","SANG","SANK","SAP","SASH","SAVE","SCAN","SCAR","SEAL","SEAM","SEEM",
+        "SEEN","SELF","SELL","SEND","SENT","SHED","SHIN","SHIP","SHOE","SHOT","SHOW","SHUT","SICK","SIGN","SILK",
+        "SILL","SING","SINK","SIZE","SKIN","SKIP","SLAM","SLAP","SLID","SLIM","SLIP","SLOB","SLOE","SLOT","SLOW",
+        "SLUG","SLUM","SMUG","SNAP","SNOB","SNOW","SOAP","SOCK","SOIL","SOLE","SOME","SONG","SORE","SORT","SOUL",
+        "SOUP","SOUR","SPIN","SPIT","SPOT","SPUR","STAB","STAG","STAR","STAY","STEM","STEP","STEW","STIR","STOP",
+        "STUB","STUD","SUED","SULK","SUNG","SUNK","SURF","SWAP","SWAT","SWIM","TAIL","TALE","TALK","TALL","TAME",
+        "TAUT","TEAM","TEAR","TEEM","TELL","TEND","TERM","TEST","THAN","THAT","THEM","THEN","THEY","THIN","THIS",
+        "THORN","THOU","THUD","TICK","TIDE","TILL","TILT","TIME","TINY","TIRE","TOAD","TOLD","TOLL","TOMB","TOME",
+        "TONG","TORE","TORN","TORT","TOUR","TRAM","TRAP","TRIM","TRIO","TRIP","TROD","TROT","TRUE","TUBE","TUFT",
+        "TUNE","TURF","TUSK","TWIN","TYPE","UGLY","UNDO","UNIT","UPON","URGE","USED","VALE","VANE","VASE","VAST",
+        "VEIL","VEIN","VERY","VEST","VETO","VIBE","VINE","VISA","VOID","VOLT","VOTE","WADE","WAGE","WAKE","WALK",
+        "WALL","WANE","WANT","WARD","WARM","WARN","WARP","WART","WASP","WAVE","WEAK","WEAL","WEAN","WEAR","WEED",
+        "WEEK","WELL","WEND","WENT","WERE","WEST","WHAM","WHAT","WHEN","WHET","WHIP","WHIR","WIDE","WIFE","WILD",
+        "WILL","WILT","WIND","WINE","WING","WIRE","WISE","WISH","WITH","WOLF","WOOD","WOOL","WORD","WORE","WORM",
+        "WORN","WREN","WRIT","YARD","YARN","YEAR","YELL","YOGA","YOLK","YORK","YOUR","ZERO","ZEST","ZINC","ZONE",
+        // 5-letter words
+        "ABOUT","ABOVE","ABUSE","ACTOR","ACUTE","ADMIT","ADOPT","ADULT","AFTER","AGAIN","AGENT","AGREE","AHEAD",
+        "ALARM","ALBUM","ALERT","ALIKE","ALIGN","ALIVE","ALOFT","ALONE","ALONG","ALOUD","ALTER","AMBER","AMBLE",
+        "AMEND","ANGEL","ANGER","ANGLE","ANGRY","ANIME","ANNEX","ANTIC","APART","APPLE","APPLY","ARENA","ARGUE",
+        "ARISE","ARMOR","AROMA","ARRAY","ASIDE","ASSET","AUDIO","AUDIT","AVOID","AWAKE","AWARD","AWARE","AWFUL",
+        "BADGE","BARGE","BASIC","BASIN","BASIS","BATCH","BEACH","BEARD","BEAST","BEGAN","BEGIN","BEING","BELOW",
+        "BENCH","BILLY","BINGO","BIRCH","BIRTH","BISON","BITES","BLAND","BLANK","BLAST","BLAZE","BLEAK","BLEED",
+        "BLEND","BLESS","BLIND","BLOCK","BLOOD","BLOOM","BLOWN","BLUNT","BOARD","BOAST","BOGGY","BOUND","BRACE",
+        "BRAIN","BRAND","BRAVE","BREAK","BREED","BREVE","BRICK","BRIDE","BRIEF","BRINE","BRINK","BROKE","BROOD",
+        "BROTH","BROWN","BULLY","BURLY","BURNS","BUYER","CABIN","CAMEL","CANDY","CARRY","CATCH","CAUSE","CEDAR",
+        "CHAIN","CHALK","CHAMP","CHAOS","CHARM","CHEAT","CHEEK","CHEEP","CHEER","CHESS","CHEST","CHIEF","CHILD",
+        "CHILI","CHIME","CHIMP","CHINA","CHORD","CHUNK","CIVIC","CIVIL","CLAIM","CLAMP","CLANK","CLASH","CLASP",
+        "CLASS","CLEAT","CLERK","CLICK","CLIMB","CLING","CLOAK","CLOCK","CLONE","CLOSE","CLOTH","CLOUD","CLOWN",
+        "COACH","COBRA","COCOA","COLOR","COMET","CORAL","COUNT","COURT","COVER","CRACK","CRAFT","CRAMP","CRANE",
+        "CRASH","CRAWL","CREAK","CREAM","CREEK","CREEP","CREST","CRIME","CRISP","CROSS","CROWD","CROWN","CRUEL",
+        "CRUSH","CRUST","CRYPT","CURES","CURRY","CURSE","CURVE","CUTIE","CYCLE","DAILY","DAISY","DANCE","DEPOT",
+        "DEPTH","DERBY","DIRTY","DITCH","DIVER","DIZZY","DODGE","DOING","DONOR","DOUBT","DOUGH","DOWRY","DRAIN",
+        "DRAPE","DREAD","DREAM","DRESS","DRIED","DRIFT","DRILL","DRINK","DRIVE","DRONE","DROOL","DROVE","DRUNK",
+        "DRYER","DYING","EAGLE","EARLY","EARTH","EATEN","EIGHT","ELITE","EMPTY","ENEMY","ENJOY","ENTER","ENTRY",
+        "EQUAL","EVENT","EVERY","EXACT","EXIST","EXTRA","FABLE","FACET","FAIRY","FAITH","FANCY","FATAL","FEAST",
+        "FEVER","FIBER","FIELD","FIEND","FIFTH","FIFTY","FIGHT","FINAL","FIXED","FLAIR","FLAME","FLARE","FLASH",
+        "FLASK","FLESH","FLICK","FLIES","FLING","FLOAT","FLOCK","FLOOD","FLOOR","FLOSS","FLUFF","FLUNK","FLUSH",
+        "FOCAL","FOGGY","FORAY","FORCE","FORGE","FORTE","FORUM","FOUND","FRAME","FRANK","FREED","FRESH","FRONT",
+        "FROST","FROZE","FULLY","FUNNY","GAMES","GHOST","GIRTH","GIVEN","GLAND","GLARE","GLASS","GLEAM","GLOBE",
+        "GLORY","GLOSS","GLOVE","GOING","GRACE","GRADE","GRAIN","GRAND","GRANT","GRAPE","GRASP","GRASS","GRATE",
+        "GRAVE","GRAVY","GRAZE","GREED","GREET","GRIEF","GRIND","GROAN","GROIN","GROPE","GROSS","GROUT","GROVE",
+        "GROWL","GRUFF","GUARD","GUILD","GUILE","GUILT","GUSTO","HABIT","HAPPY","HARSH","HAVEN","HEDGE","HEIST",
+        "HENCE","HOARD","HOARY","HOLLY","HOMER","HONEY","HONOR","HORSE","HOTEL","HOUSE","HUMAN","HUMOR","HURRY",
+        "HUSKY","IMAGE","IMPLY","INDEX","INNER","INPUT","INTER","INTRO","ISSUE","IVORY","JELLY","JEWEL","JUMBO",
+        "JUICE","JUICY","KARMA","KAYAK","KNEEL","KNIFE","KNIVE","KNOCK","LABEL","LANCE","LANKY","LAPSE","LARGE",
+        "LASER","LATER","LAUGH","LAYER","LEARN","LEASE","LEAST","LEAVE","LEGAL","LEMON","LIGHT","LIMIT","LINER",
+        "LIVER","LOCAL","LODGE","LOGIC","LOOSE","LOVER","LOWER","LOYAL","LUNAR","LUSTY","LYRIC","MAGIC","MAJOR",
+        "MANOR","MAPLE","MARCH","MARSH","MATCH","MAYOR","MEDIA","MERCY","MERIT","METAL","MIGHT","MINOR","MINUS",
+        "MIRTH","MOIST","MONEY","MONTH","MORAL","MOUTH","MOVIE","MUDDY","MUSIC","NAIVE","NERVE","NEVER","NIGHT",
+        "NOBLE","NOISE","NORTH","NOTCH","NOVEL","NURSE","NYMPH","OCEAN","OFFER","OLIVE","ONSET","ORDER","OTHER",
+        "OUTER","OWNER","OXIDE","OZONE","PAINT","PAPER","PARTY","PASTA","PATCH","PEARL","PENAL","PERCH","PHOTO",
+        "PIANO","PIECE","PILOT","PINCH","PITCH","PIXEL","PIXEL","PIXEL","PIXIE","PLACE","PLAIN","PLANE","PLANK",
+        "PLANT","PLATE","PLAZA","PLEAD","PLEAT","PLUCK","PLUMB","PLUME","PLUMP","PLUNK","POINT","POLAR","POPPY",
+        "POWER","PRESS","PRICE","PRIDE","PRIME","PRINT","PRIOR","PRIZE","PROBE","PROOF","PROSE","PROUD","PROVE",
+        "PROWL","PULSE","PUNCH","PUPIL","PURSE","QUEEN","QUERY","QUEST","QUICK","QUIET","QUOTA","QUOTE","RADAR",
+        "RADIO","RAISE","RANCH","RANGE","RAPID","RATIO","REACH","REACT","READY","REALM","REBUT","REIGN","RELAX",
+        "REPAY","REPLY","RIGHT","RIGID","RISKY","RIVAL","RIVER","RIVET","ROBOT","ROCKY","ROUGE","ROUGH","ROUND",
+        "ROUTE","ROWDY","RULER","RURAL","RUSTY","SADLY","SAINT","SAUCE","SCALE","SCALP","SCAMP","SCANT","SCARF",
+        "SCENE","SCENT","SCONE","SCOOP","SCOPE","SCORE","SCOUT","SCOWL","SCRAM","SCRAP","SCRUB","SEIZE","SENSE",
+        "SEVEN","SHADE","SHAKE","SHALL","SHAME","SHAPE","SHARE","SHARP","SHEER","SHONE","SHORE","SHOUT","SHOVE",
+        "SHRUB","SIEGE","SINCE","SIXTH","SIXTY","SKILL","SKIRT","SKULL","SLACK","SLAIN","SLANT","SLASH","SLATE",
+        "SLAVE","SLEEK","SLEEP","SLEET","SLICK","SLIDE","SLING","SLOPE","SMART","SMASH","SMELL","SMELT","SMILE",
+        "SMITE","SMOKE","SNACK","SNAIL","SNAKE","SNARE","SNIFF","SNORE","SOLAR","SOLID","SOUTH","SPACE","SPARK",
+        "SPAWN","SPEAK","SPEAR","SPEED","SPEND","SPICE","SPINE","SPIRAL","SPLAT","SPOKE","SPOON","SPRAY","SQUAD",
+        "STACK","STAFF","STAGE","STAIN","STAIR","STAKE","STALE","STALL","STAMP","STAND","STARK","START","STASH",
+        "STATE","STEAM","STEEL","STEEP","STEER","STERN","STICK","STIFF","STILL","STOCK","STONE","STOOD","STORM",
+        "STORY","STOUT","STOVE","STRAP","STRAY","STRUM","STUCK","STUDY","STUFF","STUMP","STUNG","STYLE","SUGAR",
+        "SUITE","SUNNY","SUPER","SURGE","SWEAR","SWEEP","SWEET","SWEPT","SWIFT","SWING","SWIPE","SWOOP","SWORD",
+        "TABLE","TASTE","TAUNT","THORN","THREE","TIGER","TIMER","TIRED","TITLE","TOAST","TOKEN","TORCH","TOTAL",
+        "TOUCH","TOUGH","TOWER","TOXIC","TRACE","TRACK","TRADE","TRAIL","TRAIN","TRAMP","TREAD","TREND","TRIBE",
+        "TRICK","TRIED","TROOP","TROTH","TRUCK","TRULY","TRUMP","TRUNK","TRUST","TRUTH","TULIP","TUMOR","TUNIC",
+        "UNION","UNITY","UNTIL","UPPER","USAGE","UTTER","VAGUE","VALID","VAULT","VIGOR","VIRAL","VISIT","VISTA",
+        "VITAL","VIVID","VOCAL","VOICE","VOUCH","WALTZ","WASTE","WATCH","WATER","WEARY","WEAVE","WEDGE","WEEDY",
+        "WEIGH","WEIRD","WHALE","WHEAT","WHEEL","WHERE","WHICH","WHILE","WHITE","WHOLE","WHOSE","WIDER","WIELD",
+        "WINDY","WITCH","WOMAN","WOMEN","WOOZY","WORLD","WORRY","WORSE","WORST","WORTH","WOULD","WRACK","WRATH",
+        "WREAK","WRECK","WROTE","YOUNG","YOUTH","ZIPPY",
+        // 6-letter words
+        "ABSENT","ACCENT","ACCEPT","ACCESS","ANIMAL","ANNUAL","ANSWER","ANYONE","ATTACK","BATTLE","BEAUTY","BEHIND",
+        "BELONG","BETTER","BEYOND","BITTER","BRIDGE","BROKEN","BUDGET","BUTTER","CANDLE","CARBON","CASTLE","CATTLE",
+        "CAUGHT","CHANCE","CHANGE","CHARGE","CHEEKY","CHERRY","CHOICE","CHOOSE","CIRCLE","CLEVER","CLOSER","COFFEE",
+        "COMBAT","COMMIT","CORNER","COTTON","COUPLE","CREATE","CUSTOM","DAMAGE","DANGER","DEBATE","DECIDE","DEFEAT",
+        "DEFEND","DESIGN","DETAIL","DINNER","DIRECT","DIVIDE","DOUBLE","ENOUGH","ENTITY","ENTIRE","ESCAPE","EVENTS",
+        "EXPERT","EXTEND","FACTOR","FALLEN","FAMILY","FAMOUS","FASTER","FATHER","FIGURE","FINGER","FOLLOW","FOREST",
+        "FORMAL","FROZEN","FUTURE","GARDEN","GATHER","GENTLE","GLOBAL","GOVERN","GRAVEL","GROUND","GROWTH","HAPPEN",
+        "HARBOR","HUNGRY","HUNTER","IMPACT","INCOME","INSULT","ISLAND","ITSELF","JACKET","JUNGLE","JUNIOR","KEEPER",
+        "KERNEL","KNIGHT","LADDER","LANCER","LAUNCH","LEADER","LESSEN","LETTER","LISTEN","LITTLE","LOVING","LUXURY",
+        "MAGNET","MANNER","MARBLE","MARKET","MATTER","MEMBER","MIGHTY","MIRROR","MODERN","MOMENT","MORTAL","MOTHER",
+        "MOTION","MUSCLE","MUTUAL","MYSELF","NARROW","NATION","NATURE","NEARLY","NEEDLE","OBJECT","OLDEST","ONLINE",
+        "ORANGE","ORIGIN","OUTPUT","PARENT","PATROL","PEOPLE","PLANET","PLAYER","PLENTY","POCKET","PONDER","PORTAL",
+        "PRETTY","PRISON","PROPER","PUBLIC","PURPLE","PUZZLE","RABBIT","RADIAL","RANDOM","REASON","RECORD","REFUSE",
+        "REMAIN","REMOTE","RENTAL","REPAIR","REPEAT","RESCUE","RESULT","RETURN","REVIEW","RISING","ROCKET","ROTATE",
+        "RUSTIC","SAMPLE","SCHEME","SCHOOL","SEARCH","SECURE","SELECT","SERIES","SIGNAL","SILVER","SIMPLE","SINGLE",
+        "SISTER","SLIGHT","SMOOTH","SNATCH","SOCIAL","SOCKET","SOLACE","SOLVER","SORROW","SORTED","SOURCE","SIMPLE",
+        "SPREAD","SQUARE","STABLE","STATUE","STEADY","STRIDE","STRIKE","STRING","STRONG","SUMMER","SUPPLY","SWITCH",
+        "SYSTEM","TARGET","THEORY","THIRTY","THOUGH","THREAD","THREAT","THROAT","TIMBER","TONGUE","TRAVEL","TRIPLE",
+        "TUNNEL","TURTLE","TWELVE","TWENTY","UPWARD","USEFUL","WISDOM","WITHIN","WONDER","WOODEN","WRITER","YELLOW",
+        // additional 3-letter words
+        "ADO","AFT","AGA","AHI","ALE","ALP","ALT","AMI","AMP","ANA","ANE","ANI","APO","ARS","AUK","AVE","AWL","AWN",
+        "AYE","BAH","BAS","BEE","BEN","BET","BEY","BOA","BOD","BOG","BOP","BRO","BYE","CAD","CAW","CEE","COG","COL",
+        "CON","COO","COS","CUE","CUR","DEE","DEW","DOH","DOM","DOP","DOW","DUH","EFF","EMS","ETA","FAH","FEH","FEZ",
+        "FIB","FON","FOP","GAD","GAL","GAM","GAY","GEE","GEN","GIB","GIT","GOB","HAG","HAP","HEP","HEY","HIE","HIN",
+        "HOD","HON","HOO","HOY","JAY","JEE","JIB","JIG","JIN","KAY","KEN","KID","KIN","KOI","LAG","LAM","LAR","LAT",
+        "LAV","LEI","LET","LEW","LIE","LYE","MAC","MAL","MAN","MAW","MEL","MHO","MIL","MOI","MOL","MON","MOO","MOR",
+        "MOT","MOW","NAE","NAM","NAW","NEB","NEE","NEF","NIL","NIM","NOB","NOG","NOM","OCA","OOH","OPE","ORA","ORF",
+        "OVA","PAH","PAL","PAM","PAS","PAX","PHI","PIU","PIX","PLY","POI","POL","POM","POO","PRO","PSI","PYA","REC",
+        "REF","REI","REP","RES","REV","REX","RHO","ROC","ROM","ROO","SAE","SAG","SAL","SAT","SEC","SEG","SEN","SEP",
+        "SER","SHE","SKA","SOB","SOL","SOM","SOP","SOT","SOV","SOX","SRI","STE","STY","SUQ","TAO","TAV","TAW","TAX",
+        "TAY","TEE","TEF","TEG","TEL","TIG","TIL","TOD","TOG","TOM","TOP","TOR","TUI","TWO","UDO","UGH","UKE","ULU",
+        "UMP","UNS","UPO","UPP","UTE","VAV","VAW","VEE","VEX","VIM","VOX","WAN","WIS","WIZ","WOD","WOP","YEP","YET",
+        "YID","YIN","YOM","YON","ZAG","ZAX","ZED","ZEK","ZIG","ZIT","ZOA",
+        // additional 4-letter words
+        "ABUT","ACES","ACHE","ACME","ACNE","ACRE","ACTS","ADZE","AFAR","AGAR","AGIO","AGOG","AGUE","AHEM","AIDE",
+        "AIMS","AIRS","AIRY","AJAR","ALOE","ALSO","ALTO","ALUM","AMEN","AMID","AMOK","AMYL","ANAL","ANKH","ANON",
+        "APES","APEX","APID","AQUA","ARCS","ARES","ARGS","ARIA","ARMS","ARTY","ASHY","ATOP","AVID","AVOW","AXED",
+        "AXLE","BLAB","BLOB","BLOC","BLOT","BLOW","BLUE","BLUR","BOOB","BOON","BOOR","BOOS","BORE","BOSH","BOSS",
+        "BOXY","BRIG","BRIM","BRIT","BRUT","BUFF","BULB","BULK","BUNK","BUOY","BURR","BUSY","BUTT","BUZZ","CAFE",
+        "CAGY","CAPO","CHAT","CHAW","CHEF","CHEW","CHIN","CHOP","CHOW","CITY","CLAM","CLAP","CLAW","CLAY","CLEF",
+        "CLEW","COCO","COIF","CONK","COOP","COOT","COPY","COZY","CRAM","CRAW","CRUX","CUBE","CUFF","CZAR","DADO",
+        "DAIS","DALE","DAME","DANK","DASH","DAZE","DEFT","DELI","DELL","DENT","DILL","DIME","DING","DISC","DISH",
+        "DOPY","DOTE","DOWL","DRAT","DREW","DRUB","DUPE","EACH","EDGY","EMIT","ENVY","ERGO","EVEN","EVER","EVIL",
+        "EXAM","EXPO","FADS","FAZE","FELL","FEND","FEST","FEUD","FIEF","FIFO","FIFE","FLAY","FLEW","FLEX","FLOE",
+        "FOES","FOGY","FOHN","FORE","FOXY","FRAY","FURL","GAWK","GILD","GIVE","GLOB","GLOAT","GLOP","GLOW","GOBY",
+        "GOOF","GORE","GORY","GOSH","GOUT","GUNK","GURU","GUST","HAFT","HALE","HALO","HANK","HARP","HAVE","HEED",
+        "HEWN","HIGH","HILK","HILT","HIND","HINT","HOCK","HOER","HONE","HONK","HOOT","HOPE","HOPS","HUED","HUFFS",
+        "HULK","HULL","HUNG","HUNK","HYPO","IAMB","IBEX","IMAM","IMDB","INFO","INKY","ISLE","ITCH","ITEM","JAPE",
+        "JASP","JEST","JIBE","JOLT","JOWL","JUDD","KEEL","KENO","KERN","KEYS","KIBE","KILM","KILT","KINE","KNAP",
+        "KNEW","KOAN","LACE","LADS","LAIN","LAIR","LAMP","LANK","LASS","LATH","LAUD","LAVA","LAZE","LAZY","LEAP",
+        "LEET","LEHR","LEWD","LIMP","LIND","LINT","LISP","LOBE","LOCK","LOIN","LOFT","LOGO","LOIN","LORE","LOUR",
+        "LOUT","LUAU","LUGE","LURE","LYRE","MACE","MAID","MALT","MARE","MASK","MAUL","MAYO","MEAD","MESA","MEWL",
+        "MICE","MIKE","MINK","MINX","MIRE","MITT","MOAN","MOAT","MOUE","MOURN","MOWN","MUCH","MULL","MULM","MUSE",
+        "MUSK","NARC","NARY","NAVE","NIGH","NIMM","NOEL","NOME","NOOK","NORM","NOSH","NOUN","NOVA","NUDE","NUKE",
+        "OAFS","OBOE","OKAY","OKRA","OLLA","OMIT","ONYX","OPAH","OPUS","ORCA","OUPH","OWED","OXEN","PACT","PAPA",
+        "PARA","PARE","PARK","PAST","PHON","PIAN","PICK","PIED","PIER","PIKA","PINT","PLOP","PLOY","POCK","PODS",
+        "POKY","POUT","PUCE","PUFF","PUNK","PUNY","QUAFF","RACK","RAFF","RAGA","RAGS","RAID","REAL","REAM","REDO",
+        "REED","RIFT","RILE","RIMY","ROBE","ROIL","ROOST","RORE","ROUX","ROVE","RUIN","RULE","RUSE","RUTH","RYOT",
+        "SAGA","SAGO","SAKI","SALE","SALM","SARI","SASH","SEEP","SELF","SERE","SEWN","SHAG","SHAN","SHAW","SHIM",
+        "SHIV","SHMO","SHOD","SHOE","SHOP","SHUN","SLAB","SLOE","SLOP","SLOG","SLUR","SMEW","SNAG","SNUB","SNUG",
+        "SOCK","SOFT","SOMA","SOON","SOPS","SOWM","SPAN","SPAR","SPEC","SPEW","SPUD","STAB","STAB","STOW","STYE",
+        "SUCK","SUES","SUMO","SWAB","SWAM","SWAN","SWAP","SWUM","TACK","TACK","TADS","TAEL","TAMP","TARN","TARP",
+        "TASS","TEAK","TEEM","TIER","TIFF","TONG","TORC","TOXIN","TREK","TRIM","TSAR","TUTU","TWIG","TWIT","TYKE",
+        "TYRN","UDOS","UMPH","UNTO","UNCO","URSA","UREA","USER","VAMP","VEAL","VERY","VIBE","VIED","VILE","VILL",
+        "VIMY","VISA","VISE","VITA","WADE","WAIF","WAIL","WAIT","WANE","WARY","WEAL","WEEP","WEFT","WELP","WEND",
+        "WHAM","WHIZ","WHOM","WICK","WILE","WIRY","WOAD","WORE","WOVE","YORE","YUCK","YULE","ZEAL",
+        // additional 5-letter words
+        "ABACK","ABASH","ABATE","ABBEY","ABBOT","ABIDE","ABODE","ABOIL","ABOMB","ABORT","ABRIM","ABYSM","ACORN",
+        "ACRID","ADAGE","ADEPT","ADOBE","AFOOT","AGAVE","AGILE","AGLOW","AGONY","AGORA","AILED","AIMER","AITCH",
+        "ALGAE","ALLAY","ALLOT","ALOOF","ALOUD","ALTAR","AMASS","AMAZE","AMBLE","AMISS","AMOUR","ANNOY","ANTIC",
+        "ANVIL","APHID","APRON","APTLY","ARBOR","ARDOR","ARGOT","ARTSY","ASCOT","ASKEW","ATOLL","ATONE","ATTIC",
+        "AWASH","AWING","BADLY","BAGEL","BAGGY","BAIZE","BALMY","BANDY","BANJO","BARON","BARRY","BASIL","BASTE",
+        "BATTY","BAYOU","BEADY","BEEFY","BELIE","BELLE","BEZEL","BILGE","BITCH","BITTY","BLARE","BLEEK","BLIMP",
+        "BLISS","BLOAT","BODGE","BOGUS","BOSSY","BOXER","BRAWL","BRAWN","BRAZE","BREAM","BRINE","BRISK","BROIL",
+        "BROOCH","BUDDY","BURLY","CACHE","CADET","CAFFE","CAMEO","CAPER","CARAT","CAULK","CHAFE","CHALK","CHASM",
+        "CHASTE","CHIDE","CHIME","CHISEL","CHORE","CINCH","CIPHER","CLEFT","CLUCK","CLUMP","CLUNG","COAXED","COBALT",
+        "COBIA","COBRA","COLIC","COLON","CONDO","CONFER","CONGA","COOKY","COPSE","COUCH","COVET","COZY","CRANE",
+        "CRAZE","CREAK","CRIMP","CROAK","CRONE","CROON","CURLY","DADDY","DAFFY","DAUNT","DECAL","DECAY","DECOY",
+        "DECRY","DELVE","DEPOT","DERBY","DESKS","DEVIL","DIGIT","DINGO","DINGY","DIVOT","DIZZY","DOGGY","DOLLY",
+        "DOLMA","DOWDY","DROWN","DUCHY","DUMPY","DUNCE","DUSTY","DWARF","DWELL","EASEL","EERIE","EGRET","ELBOW",
+        "ELOPE","EMBED","EMCEE","ERASE","ERODE","ESSAY","ETHIC","EVADE","EXACT","EXERT","EXILE","EXPEL","EXULT",
+        "FANNY","FEIGN","FELON","FEMUR","FETCH","FIERY","FISHY","FJORD","FLAKY","FLEET","FLINT","FLOSS","FLOUT",
+        "FLUME","FLUNK","FLUTE","FOAMY","FORTE","FOYER","FREED","FRISK","FRIZZ","FROZE","FRUMP","FUGUE","GAUDY",
+        "GAUZE","GAVEL","GAWKY","GECKO","GEESE","GENRY","GENUS","GERMS","GIDDY","GIRLK","GIRTH","GIZMO","GLAZE",
+        "GLINT","GLOAT","GLOGG","GLOOM","GLOSS","GLYPH","GNASH","GNOME","GOLLY","GOUGE","GRAZE","GRIPE","GROOM",
+        "GROPE","GRUEL","GRUFF","GRUMP","GULCH","GUMBO","GUSTO","GYPSY","HAIKU","HAMMY","HARDY","HATCH","HAUTE",
+        "HAVEN","HAZEL","HEAVE","HEDGE","HELIX","HERBY","HIPPO","HIPPY","HITCH","HOAGY","HOIST","HOMER","HORNY",
+        "HOTEL","HOUND","HOVER","HOWDY","HURTLE","HYENA","ICIER","ICILY","IDYLL","IMPEL","INANE","INCUR","INDIE",
+        "INERT","INFER","INGOT","IRATE","IRONY","ITCHY","IAMBS","JOUST","JUMPY","KAPOW","KHAKI","KIOSK","KITTY",
+        "KNACK","KNAVE","KNEEL","KNELT","KNISH","LAGER","LAITY","LANKY","LARDY","LARGO","LATCH","LEGGY","LIBEL",
+        "LILAC","LIMBO","LITHE","LIVID","LLAMA","LOBBY","LOFTY","LOOPY","LORRY","LOWLY","LUMPY","MACHO","MAMBO",
+        "MATEY","MAXIM","MEALY","MEATY","MEDIC","MELEE","MELON","MESSY","MIDGE","MIGHT","MINCE","MINTY","MIRKY",
+        "MOCHA","MOGUL","MOLDY","MOOSE","MOUSY","MUCKY","MUGGY","NIFTY","NINNY","NIPPY","NOBLE","NUTTY","NYMPH",
+        "OAKEN","ODDLY","OFFAL","OFTEN","OGLED","OLIVE","ONION","OOZE","ORBIT","OVOID","PANEL","PANSY","PASTY",
+        "PATSY","PAUPER","PAYNE","PEACH","PEAKY","PEEVE","PICKY","PINEY","PINKY","PIPIT","PIXIE","PLAID","PLAZA",
+        "PODGY","POGGY","POOCH","POTTY","POUTY","PRINK","PRIVY","PRUNE","PUDGY","PUFFY","PURGE","PYGMY","QUACK",
+        "QUAFF","QUAGY","QUALM","QUELL","QUERY","RABBI","RABID","RADIX","RAMMY","RANGY","RASPY","RAVEN","RAZED",
+        "RECTO","REEDY","REEDY","REGAL","RENEW","REPEL","REPLETE","RERUN","RESEW","RHYME","RIPEN","RISEN","RISKY",
+        "ROCKY","RUDDY","RUGBY","RUNNY","RUSTY","SAGGY","SANDY","SASSY","SAVVY","SCALD","SCALP","SCALY","SCONE",
+        "SCOUT","SEDAN","SEEDY","SERVE","SHADY","SHAKY","SHAME","SLANG","SLIMY","SLINKY","SLUGS","SLUNK","SOAPY",
+        "SOGGY","SOMBER","SONIC","SOOTY","SOPPY","SOUPY","SPANK","SPARE","SPLAY","SPOOK","SPORE","SPRIG","SPUNK",
+        "SPURN","SQUAT","SQUID","STAID","STOIC","STONY","STRAP","STRAW","STRIP","STRUT","SULKY","SULLY","SUNNY",
+        "SUPER","SURLY","SWAMP","SWATHE","TABBY","TAFFY","TANGY","TAPIR","TARDY","TAWNY","TEPID","TERSE","TESTY",
+        "THANE","THATCH","TIDAL","TOADY","TODDY","TOLLY","TOPIC","TOPPLE","TORTE","TOTUM","TRASHY","TRICKY","TRILL",
+        "TRIPE","TRITE","TROTH","TROUT","TUBER","TUMID","TUBBY","TULLE","TURBO","TWANG","TWEED","TWILL","TYING",
+        "ULCER","ULTRA","UMBRA","UNDUE","UNFIT","UNIFY","UNKEMPT","UNLIT","UNMET","UNPIN","UNTIE","UNWED","UPGRADE",
+        "URBAN","USHER","UVULA","VEINY","VIGOR","VIPER","VISOR","VIXEN","VODKA","VOMIT","VOTED","VULVA","WACKY",
+        "WADER","WAGED","WAGER","WAKEN","WARTY","WAFER","WEEDY","WIMPY","WINCE","WITTY","WOODY","WOOZY","WORMY",
+        "WRUNG","YAPPY","YUCKY","YUKKY","ZIPPY","ZONAL","ZESTY",
+        // additional 6-letter words
+        "ABDUCT","ABUSED","ACCENT","ACROSS","ADHERE","ADVERB","AERIAL","AFFECT","AFFIRM","AFFORD","AFIELD","AFOOT",
+        "AGENDA","AGHAST","AGREED","ALBEIT","ALBINO","ALCOVE","ALIGHT","ALLIED","ALLURE","ALMOST","ALPINE","ALTERS",
+        "AMUSED","ANALOG","ANEMIA","ANKLET","ANNEAL","ANOINT","APLOMB","APPALL","ARCHED","ARDENT","ARGYLE","ARMOUR",
+        "ASPIRE","ASSENT","ASSORT","ASTRAY","ATTAIN","ATTIRE","ATTUNED","AUGUST","AVERSE","BABBLE","BADGER","BAMBOO",
+        "BARREL","BARREN","BASHFUL","BECKON","BEDLAM","BEFOUL","BEHOLD","BELFRY","BEMOAN","BESTOW","BETRAY","BEWARE",
+        "BLAZER","BLIGHT","BONNET","BORDER","BOUNTY","BUFFET","BUMBLE","BURROW","CACKLE","CAMPER","CANOPY","CAPITA",
+        "CARPET","CASKET","CAVERN","CENSUS","CERTIFY","CHAPEL","CHARGE","CHASTE","CHERUB","CHROME","CIPHER","CLOVEN",
+        "COERCE","COHORT","COMPLY","CONCUR","CONDOR","CONFESS","CONQUER","CONSUL","CONVEX","CONVEY","CONVEX","CORTEX",
+        "CRIPPLE","DARKEN","DAZZLE","DECEIT","DECENT","DECREE","DEFILE","DEFLECT","DEJECT","DETAIN","DIFFER","DISCERN",
+        "DISMAL","DISPEL","DISUSE","DIVERT","DOLLOP","DONKEY","DOTTED","DOTING","DRAFT","DRAWER","DURESS","EARLDOM",
+        "EERILY","EFFETE","EFFIGY","ELAPSE","ELATED","ELDEST","EMBODY","EMERGE","EMPLOY","ENCAGE","ENGAGE","ENGULF",
+        "ERRANT","ERUPT","EVENLY","EVOLVE","EXCISE","EXCITE","EXEMPT","EXHORT","EXPOSE","EXUDE","FAMINE","FATHOM",
+        "FEEBLE","FELINE","FERRET","FETISH","FICKLE","FIDDLE","FIERCE","FISCAL","FITFUL","FIZZLE","FLAIR","FLAWED",
+        "FLEDGE","FLINCH","FLOPPY","FLORAL","FLORID","FLUENT","FOLLY","FORBID","FOREGO","FORGED","FORLORN","FRENZY",
+        "FRUGAL","GAMBLE","GARBLE","GARLIC","GARNET","GARNER","GENTLE","GIBBET","GIGGLE","GILDED","GIMMICK","GIRLISH",
+        "GLACIAL","GLEEFUL","GOBLIN","GODLY","GOSSIP","GRAVEL","GREEDY","GROVEL","GRUMBLE","GRUDGE","HAGGLE","HAMLET",
+        "HANDLE","HANKER","HAMPER","HEARTY","HEAVEN","HERALD","HEREIN","HERMIT","HIKING","HOOPLA","HOPEFUL","HORRID",
+        "HOSTILE","HUDDLE","HUMBLE","HUSTLE","IGNITE","IMPEDE","IMPURE","INDICT","INFECT","INFUSE","INNATE","INSANE",
+        "INSERT","INWARD","JACKAL","JESTER","JOSTLE","JOVIAL","JUGGLE","JUMBLE","JUNGLE","LANTERN","LAVISH","LEADEN",
+        "LETHAL","LISTLESS","LIVID","LOOSEN","MANGLE","MANTLE","MEDDLE","MELODY","MENTAL","MIDDAY","MIDGET","MINGLE",
+        "MISHAP","MODEST","MOLTEN","MORTAR","MOSAIC","MUTTER","MYRIAD","NAMELY","NATTER","NETTLE","NIMBLE","NOODLE",
+        "NOTION","NUZZLE","OBLONG","OBTUSE","OCCUPY","OPPOSE","ORDEAL","ORNATE","OUTLAW","OUTWIT","PADDLE","PAMPER",
+        "PARDON","PASTRY","PATRON","PEBBLE","PEDDLE","PENURY","PICNIC","PIDDLE","PIRATE","PLACID","PLAGUE","PLAQUE",
+        "PLIANT","PODIUM","POMPOM","POUNCE","PREFER","PRETTY","PREVAIL","PRIORY","PROTON","PUDDLE","PUMMEL","PUPPET",
+        "QUIRKY","RACKET","RAMBLE","RANCID","RANKLE","RATTLE","RAGGED","RAVAGE","RECKLESS","RECKON","RECOIL","RECOUNT",
+        "RENDER","REPENT","RESENT","REVEAL","RIDDLE","RIFFLE","RIPPLE","ROBUST","ROTTEN","RUBBLE","RUFFLE","RUGGED",
+        "SAVAGE","SCORCH","SCRAWL","SCRIBE","SCRUFF","SERAPH","SERENE","SETTLE","SHAGGY","SHIFTY","SHIMMER","SHIVER",
+        "SHREWD","SHRIEK","SHRINK","SICKEN","SIZZLE","SKEWER","SKIMPY","SLEAZY","SLEUTH","SLUDGE","SMUDGE","SNARL",
+        "SNOOTY","SOLEMN","SOOTHE","SORDID","SPLEEN","SPRAWL","SQUALL","SQUIRM","STUPID","SUBDUE","SUBMIT","SUBTLE",
+        "SULLEN","SUMMIT","SUNDRY","SURREY","SWERVE","TACKLE","TAMPER","TASSEL","TATTER","TEETHE","TENDER","TETHER",
+        "THATCH","TINGLE","TOPPLE","TOTTER","TRIFLE","TRUDGE","TUMBLE","TUSSLE","TWITCH","WANDER","WANTON","WARBLE",
+        "WELTER","WICKED","WITHER","WOBBLE","WRITHE","YEOMAN",
+        // plurals of common 3-letter nouns → 4-letter words
+        "ACES","ACTS","AGES","AIDS","AIMS","AIRS","ANTS","APES","ARCS","ARMS","ARTS","AXES","BAGS","BARS","BATS",
+        "BAYS","BEDS","BIDS","BITS","BOWS","BOYS","BUGS","BUNS","CABS","CANS","CAPS","CARS","CATS","COBS","COPS",
+        "COTS","COWS","CUBS","CUPS","CUTS","DADS","DAMS","DAYS","DENS","DIGS","DIMS","DIPS","DOCS","DOGS","DOTS",
+        "DYES","EARS","EGGS","EELS","ELMS","EYES","FANS","FATS","FIGS","FINS","FOES","FOGS","FURS","GELS","GEMS",
+        "GIGS","GODS","GUMS","GUNS","GUTS","GUYS","HAMS","HATS","HENS","HITS","HUBS","HUGS","HUTS","JABS","JAMS",
+        "JARS","JAWS","JETS","JOBS","JOGS","JOTS","JUGS","KEGS","KITS","LABS","LADS","LAPS","LAWS","LEGS","LIDS",
+        "LIPS","LOGS","LOTS","MAPS","MATS","MOBS","MOPS","MUGS","NAPS","NETS","NIPS","NODS","NUTS","OARS","OATS",
+        "ORBS","ORES","PADS","PANS","PARS","PATS","PAWS","PEGS","PENS","PETS","PIGS","PINS","PODS","PUNS","PUPS",
+        "RAGS","RAMS","RAPS","RATS","RAYS","RIBS","RODS","RUBS","RUGS","RUTS","SAPS","SAWS","SEAS","SIPS","TABS",
+        "TAGS","TANS","TAPS","TARS","TEAS","TIES","TINS","TIPS","TOES","TONS","TOPS","TOTS","TOYS","TUBS","TUGS",
+        "URNS","VATS","VOWS","WADS","WARS","WIGS","WOES",
+        // plurals of 4-letter nouns → 5-letter words
+        "ACHES","ACRES","BAKES","BALES","BALLS","BANDS","BANES","BANGS","BARKS","BARNS","BASES","BEADS","BEAMS",
+        "BEANS","BEARS","BEATS","BELLS","BELTS","BENDS","BILLS","BINDS","BITES","BOARS","BOATS","BOLTS","BONDS",
+        "BONES","BOOKS","BOOMS","BOOTS","BORES","CAGES","CAKES","CALLS","CANES","CAPES","CARDS","CARES","CARTS",
+        "CASES","CAVES","CELLS","CHIPS","CLAMS","CLAPS","CLAYS","CLIPS","CLODS","CLOGS","CLOTS","CLUBS","CLUES",
+        "COILS","COINS","COOKS","CORDS","CORES","CORKS","CORNS","COSTS","CRAMS","CRIBS","CROPS","CROWS","CUBES",
+        "CURLS","DARES","DARTS","DAWNS","DEALS","DECKS","DEEDS","DESKS","DIETS","DOCKS","DOMES","DOORS","DOSES",
+        "DOVES","DRAGS","DRIPS","DROPS","DRUMS","DUNES","DUSTS","EARLS","EDGES","FADES","FAILS","FALLS","FANGS",
+        "FARES","FARMS","FATES","FEATS","FEEDS","FEELS","FERNS","FILES","FILLS","FILMS","FINDS","FIRES","FIRMS",
+        "FISTS","FLAGS","FLAPS","FLAWS","FLEAS","FLIPS","FLOWS","FOAMS","FOLDS","FOLKS","FONTS","FOODS","FOOLS",
+        "FORDS","FORKS","FORMS","FORTS","FROGS","FUMES","FUNDS","FUSES","GALES","GANGS","GEARS","GERMS","GIFTS",
+        "GIRLS","GLOWS","GNATS","GOALS","GOWNS","GRABS","GRAMS","GRINS","GRIPS","HAILS","HALLS","HANDS","HANGS",
+        "HARES","HARPS","HAWKS","HEADS","HEALS","HEAPS","HEARS","HEELS","HERBS","HERDS","HIDES","HILLS","HOLDS",
+        "HOLES","HOMES","HOOKS","HORNS","HOURS","HUNTS","IDEAS","JACKS","JAILS","JERKS","JOKES","JOLTS","KEEPS",
+        "KINDS","KINGS","KNOBS","KNOTS","LAKES","LAMBS","LAMPS","LANDS","LANES","LEADS","LEAPS","LENDS","LIFTS",
+        "LIKES","LIMES","LINES","LINKS","LIONS","LISTS","LOADS","LOANS","LOCKS","LOOPS","LORDS","LOVES","LUMPS",
+        "LUNGS","LUSTS","MAILS","MALES","MANES","MEALS","MEATS","MEETS","MELTS","MENUS","MILES","MILLS","MINES",
+        "MINTS","MISTS","MOANS","MOLDS","MOLES","MOTHS","MOVES","MULES","NAILS","NAMES","NECKS","NEEDS","NODES",
+        "NOSES","NOTES","PACES","PACKS","PAGES","PAINS","PALES","PALMS","PATHS","PEEKS","PEELS","PEERS","PICKS",
+        "PILES","PILLS","PINES","PIPES","PLANS","PLAYS","PLOTS","PLUGS","POEMS","POETS","POLES","POLLS","POOLS",
+        "PORES","PORTS","POSES","RACES","RACKS","RAILS","RAINS","RAKES","RAMPS","RANKS","RANTS","RATES","READS",
+        "REELS","RENTS","RIDES","RINGS","RIOTS","RISES","RISKS","ROAMS","ROARS","ROLLS","ROOFS","ROOMS","ROOTS",
+        "ROPES","ROSES","RUINS","RULES","SAILS","SANDS","SCARS","SEALS","SEAMS","SEEDS","SELLS","SENDS","SHINS",
+        "SHIPS","SHOES","SIGNS","SILLS","SINKS","SIZES","SKINS","SLAPS","SLIPS","SLOTS","SLUGS","SNOBS","SOCKS",
+        "SOILS","SOLES","SONGS","SORES","SORTS","SOULS","SOUPS","SPINS","SPITS","SPOTS","SPURS","STABS","STAGS",
+        "STARS","STEMS","STEPS","STEWS","STOPS","STUBS","STUDS","SULKS","SURFS","SWAPS","TACKS","TALES","TALKS",
+        "TEARS","TELLS","TENDS","TERMS","TESTS","TICKS","TIDES","TILLS","TIRES","TOADS","TOLLS","TOMBS","TOMES",
+        "TONGS","TOURS","TRAMS","TRAPS","TRIPS","TROTS","TUBES","TUFTS","TUNES","TURFS","TUSKS","TWINS","TYPES",
+        "URGES","VALES","VANES","VASES","VEILS","VEINS","VESTS","VIBES","VINES","VOIDS","VOTES","WAGES","WALKS",
+        "WALLS","WANTS","WARDS","WARNS","WARPS","WASPS","WAVES","WEEDS","WEEKS","WHIPS","WINDS","WINES","WINGS",
+        "WIRES","WORMS","WRENS","WRITS","YARDS","YARNS","YEARS","YELLS","YOLKS","ZONES",
+        // common verb forms
+        "ACHED","ACTED","AGED","AIMED","AILED","ASKED","BAKED","BALED","CALLED","CARED","DARED","DEALT","DINED",
+        "DIVED","ENDED","FACED","FADED","FAKED","FARED","FAXED","FILED","FINED","FIRED","FIXED","FLED","FLIED",
+        "FLIPPED","FOLDED","FREED","FUSED","GAMED","GIVEN","GRADED","HAILED","HANDED","HELPED","HIRED","HOPED",
+        "JOKED","JUMPED","KEPT","KICKED","KNEEL","KNELT","LACED","LADED","LAPPED","LIKED","LINED","LIVED","LOVED",
+        "MAILED","NAMED","NOSED","NOTED","OWNED","PACED","PAGED","PALED","PARED","PAVED","POKED","POSED","PULLED",
+        "RACED","RAKED","RAINED","RANGED","RATED","RISEN","ROBED","ROPED","RULED","SAILED","SANDED","SAVED",
+        "SEEDED","TIMED","TONED","TONED","TUNED","TYPED","URGED","VOTED","WAGED","WANED","WAVED","WIRED","WISHED",
+        // extra common words missing from list
+        "SEED","WEED","LEAK","PEEK","WEEK","BEAD","LEAD","MEAD","READ","DEAL","HEAL","MEAL","REAL","SEAL","TEAL",
+        "VEAL","ZEAL","BEAK","FEAT","GEAR","HEAR","NEAR","PEAR","REAR","TEAR","WEAR","YEAR","BEAT","HEAT","MEAT",
+        "NEAT","PEAT","SEAT","FEAT","BEEF","KEEN","SEEN","BEEN","TEEN","DEED","FEED","HEED","NEED","REED","WEED",
+        "GEEK","REEK","SEEK","PEEK","FEEL","HEEL","KEEL","PEEL","REEL","STEEL","KNEEL","SHEEP","SLEEP","SWEEP",
+        "SLEEP","CREEP","STEEP","QUEEN","GREET","SWEET","TWEET","SHELF","SHELF",
+        // 7-letter words
+        "ABANDON","ABILITY","ABSOLVE","ABSTAIN","ACCLAIM","ACCOUNT","ACCUSED","ACHIEVE","ACQUIRE","ADAMANT",
+        "ADAPTED","ADDRESS","ADJOURN","ADVANCE","ADVERSE","AFFECTS","AFFIRMS","AGITATE","AGONIZE","AILMENT",
+        "ALLEGED","ALMONDS","ALREADY","ALTERED","ALRIGHT","AMATEUR","AMBIENT","ANCIENT","ANDROID","ANIMATE",
+        "ANXIOUS","APPROVE","ARDUOUS","ASCRIBE","ASPHALT","ASSHOLE","ASSUMED","ASTONISH","ATTEMPT","ATTRACT",
+        "AUCTION","AUDIBLE","AWKWARD","BALCONY","BALLAST","BELOVED","BENEATH","BERSERK","BESTIAL","BETWEEN",
+        "BLOSSOM","BOMBARD","BORDERS","BOTTLES","BREATHE","BRIGADE","BROUGHT","BUFFOON","BURNISH","CABINET",
+        "CAPABLE","CAPTAIN","CAPTURE","CAPTAIN","CAREFUL","CATALOG","CEILING","CENTURY","CHAOTIC","CHIEFLY",
+        "CLARITY","CLASSIC","CLEANSE","CLIMATE","CLUSTER","COLLECT","COMFORT","COMMEND","COMPLEX","CONCEAL",
+        "CONDEMN","CONFIRM","CONFUSE","CONNECT","CONSENT","CONSIST","CONTAIN","CONTEXT","CONTROL","CONQUER",
+        "COURAGE","COVERED","CRUCIAL","CRUMBLE","CULTURE","CURIOUS","CURRENT","CUSHION","DECRYPT","DELIGHT",
+        "DELIVER","DESKTOP","DEVELOP","DEVOTED","DIGITAL","DIPLOMA","DISABLE","DISMISS","DISTURB","DIVERSE",
+        "DIVIDED","DORMANT","DYNASTY","ECLIPSE","EDUCATE","ELECTED","ELEVATE","EMBRACE","ENCHANT","ENFORCE",
+        "ENHANCE","ENLARGE","ENRICH","ENROLL","ENTITLE","EPISODE","EXTREME","EVIDENT","EXAMINE","EXECUTE",
+        "EXHAUST","EXPLAIN","EXPLODE","EXPLORE","EXPRESS","EXTRACT","FABULOUS","FAILURE","FANTASY","FASHION",
+        "FERTILE","FIGURED","FILLING","FINALLY","FINDING","FLUTTER","FOCUSED","FOREIGN","FORTUNE","FOUNDED",
+        "GENUINE","GRAMMAR","GRANTED","GRAVITY","GREATER","HARMONY","HARVEST","HEALTHY","HOLIDAY","HONORED",
+        "HOSTILE","HOWEVER","HUNDRED","IMAGINE","IMMENSE","IMPULSE","INCLUDE","INSISTS","INSPIRE","INSTEAD",
+        "INTENSE","ISOLATE","JOURNEY","JUSTICE","KNOWING","KINGDOM","LABELED","LANDING","LEARNED","LEISURE",
+        "LIBERAL","LIMITED","LITERAL","LOGICAL","LOYALTY","MENTION","MIGRATE","MILLION","MIRACLE","MISSING",
+        "MIXTURE","MONITOR","MONTHLY","MYSTERY","NETWORK","NEUTRAL","NOTABLE","NOTHING","NOURISH","OBSCURE",
+        "OBVIOUS","OFFENSE","OPERATE","OPINION","OPTIMAL","ORGANIC","OUTLINE","OUTSIDE","PAINFUL","PATIENT",
+        "PERFECT","PERFORM","PERSIST","PHANTOM","PLASTIC","POPULAR","PORTION","POSTURE","PRESENT","PREVENT",
+        "PRIVATE","PROCESS","PRODUCE","PROGRAM","PROJECT","PROMOTE","PROTECT","PROTEST","PROVIDE","PURPOSE",
+        "QUALIFY","QUALITY","REALITY","RECEIVE","RECOVER","REFLECT","REGULAR","RELEASE","REPLACE","REQUIRE",
+        "RESOLVE","RESPECT","RESPOND","RESULTS","RESTORE","RETREAT","REVENUE","REVERSE","REVIVAL","ROYALTY",
+        "SATISFY","SCATTER","SCIENCE","SECTION","SILENCE","SIMILAR","SKILLED","SOCIETY","SOLDIER","SOMEHOW",
+        "SOMEONE","SPECIAL","STADIUM","STARTLE","STATION","STRETCH","STUDENT","SUBJECT","SUGGEST","SUPPORT",
+        "SUPPOSE","SURVIVE","TACTICS","TEACHER","TENSION","THOUGHT","THROUGH","TONIGHT","TOPMOST","TOURISM",
+        "TRAGEDY","TRIUMPH","TRUSTED","UNCOVER","UNFOLDS","UNGUARD","UNIFORM","UNKNOWN","UNRAVEL","URGENCY",
+        "VACCINE","VENTURE","VERSION","VETERAN","VIBRANT","VILLAGE","VISIBLE","VOLCANO","WARRIOR","WEDDING",
+        "WELCOME","WHETHER","WHISPER","WITNESS","WORKOUT","YOUNGER"
+    ]
+}

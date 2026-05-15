@@ -1,0 +1,46 @@
+name: RKDP
+options:
+  bundleIdPrefix: com.rkdp
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+
+packages:
+  FirebaseAnalytics:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "10.0.0"
+  FirebaseAuth:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "10.0.0"
+  FirebaseFirestore:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "10.0.0"
+  FirebaseDatabase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "10.0.0"
+
+targets:
+  RKDP:
+    type: application
+    platform: iOS
+    sources:
+      - path: RKDP
+    resources:
+      - path: RKDP/Resources
+      - path: RKDP/SupportingFiles/GoogleService-Info.plist
+    dependencies:
+      - package: FirebaseAnalytics
+        product: FirebaseAnalytics
+      - package: FirebaseAuth
+        product: FirebaseAuth
+      - package: FirebaseFirestore
+        product: FirebaseFirestore
+      - package: FirebaseDatabase
+        product: FirebaseDatabase
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rkdp.app
+        SWIFT_VERSION: "5.9"
+        INFOPLIST_FILE: RKDP/SupportingFiles/Info.plist
+        DEVELOPMENT_TEAM: ""
+
