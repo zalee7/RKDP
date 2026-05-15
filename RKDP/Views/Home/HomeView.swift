@@ -29,7 +29,7 @@ struct HomeView: View {
                         }
                         .padding(.horizontal)
 
-                        VStack(spacing: 18) {
+                        VStack(spacing: 14) {
                             HomeGameCategorySection(
                                 title: "Grid Games",
                                 subtitle: "Paths, boards, mines, and symmetry",
@@ -48,7 +48,7 @@ struct HomeView: View {
                                 selectedMode = mode
                             }
                         }
-                        .padding(.bottom, 24)
+                        .padding(.bottom, 8)
                     }
                     .padding(.top, 12)
                 }
@@ -128,7 +128,7 @@ private struct HomeGameCategorySection: View {
                         GameModeCardView(mode: mode, user: user) {
                             onSelect(mode)
                         }
-                        .frame(width: 172, height: 172)
+                        .frame(width: 184, height: 188)
                     }
                 }
                 .padding(.horizontal)
@@ -560,11 +560,37 @@ struct GameModeCardView: View {
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .aspectRatio(1, contentMode: .fit)
-            .background(AppTheme.modeGradient(mode).opacity(0.18))
+            .background(cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.modeAccent(mode).opacity(0.45), lineWidth: 1.5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color.white.opacity(0.58), lineWidth: 1.2)
+            )
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(AppTheme.modeGradient(mode))
+                    .frame(height: 4)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+            }
+            .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
         }
         .buttonStyle(.plain)
+    }
+
+    private var cardBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.black.opacity(0.18))
+            RoundedRectangle(cornerRadius: 20)
+                .fill(AppTheme.cardBackground)
+            RoundedRectangle(cornerRadius: 20)
+                .fill(AppTheme.modeGradient(mode))
+                .opacity(0.10)
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(AppTheme.modeAccent(mode).opacity(0.55), lineWidth: 1)
+                .padding(1)
+        }
     }
 }
 
