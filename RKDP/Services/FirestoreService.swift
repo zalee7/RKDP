@@ -199,7 +199,7 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .inProgress,
             players: [
-                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier, rankPoints: user.rank(for: mode).points),
+                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier, rankPoints: hostUser.rank(for: mode).points),
                 MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints)
             ],
             seed: seed,
