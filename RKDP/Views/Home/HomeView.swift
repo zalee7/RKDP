@@ -128,7 +128,7 @@ private struct HomeGameCategorySection: View {
                         GameModeCardView(mode: mode, user: user) {
                             onSelect(mode)
                         }
-                        .frame(width: 184, height: 188)
+                        .frame(width: 204, height: 218)
                     }
                 }
                 .padding(.horizontal)
@@ -173,11 +173,11 @@ struct GameModeDetailView: View {
                         VStack(spacing: 10) {
                             HStack {
                                 ModeFactRow(icon: "trophy.fill", title: "Rank", value: rankInfo.fullDisplayName, color: rankInfo.tier.color)
-                                ModeFactRow(icon: "flag.checkered.2.crossed", title: "Win", value: mode.winConditionText, color: mode.accentColor)
+                                ModeFactRow(icon: "chart.bar.fill", title: "W/L", value: rankInfo.recordDisplay, color: AppTheme.teal)
                             }
                             HStack {
                                 ModeFactRow(icon: "timer", title: "Ranked timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
-                                ModeFactRow(icon: "star.fill", title: "Multiplier", value: "x\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))", color: .yellow)
+                                ModeFactRow(icon: "star.fill", title: "Rank Points", value: "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x ranked points", color: .yellow)
                             }
                         }
                         .padding(.horizontal)
@@ -470,7 +470,7 @@ private struct DifficultyCardView: View {
     }
 
     private var rewardText: String {
-        "x\(String(format: "%.1f", mode.pointMultiplier(for: difficulty))) reward"
+        "\(String(format: "%.1f", mode.pointMultiplier(for: difficulty)))x ranked points"
     }
 
     private var cardBorderColor: Color {
@@ -542,16 +542,18 @@ struct GameModeCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 10) {
+            VStack(spacing: 11) {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppTheme.modeGradient(mode))
-                    .frame(width: 64, height: 64)
-                    .overlay(Image(systemName: mode.icon).font(.system(size: 28)).foregroundStyle(.white))
+                    .frame(width: 72, height: 72)
+                    .overlay(Image(systemName: mode.icon).font(.system(size: 32, weight: .semibold)).foregroundStyle(.white))
                     .shadow(color: AppTheme.modeShadow(mode), radius: 8)
 
                 Text(mode.displayName)
-                    .font(.headline).foregroundStyle(AppTheme.textPrimary)
+                    .font(.headline.bold()).foregroundStyle(AppTheme.textPrimary)
                     .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
                 if let user {
                     RankProgressMiniView(info: user.rank(for: mode))
@@ -559,7 +561,6 @@ struct GameModeCardView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .aspectRatio(1, contentMode: .fit)
             .background(cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(
@@ -611,15 +612,19 @@ struct RankProgressMiniView: View {
                     .font(.caption.bold())
                     .foregroundStyle(info.tier.color)
             }
+            Text(info.recordDisplay)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.15)).frame(height: 5)
-                    RoundedRectangle(cornerRadius: 3)
+                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.13)).frame(height: 3)
+                    RoundedRectangle(cornerRadius: 2)
                         .fill(AppTheme.accentBright)
-                        .frame(width: geo.size.width * progress, height: 5)
+                        .frame(width: geo.size.width * progress, height: 3)
                 }
             }
-            .frame(height: 5)
+            .frame(height: 3)
+            .padding(.horizontal, 12)
             Text(pointsLabel).font(.system(size: 9)).foregroundStyle(AppTheme.textSecondary)
             if let best = info.bestScore {
                 Text("Best: \(best) pts").font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
