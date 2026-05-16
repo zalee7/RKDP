@@ -14,6 +14,7 @@ final class AnagramViewModel: ObservableObject {
     @Published var showHint = false
 
     let difficulty: Difficulty
+    let totalSeconds: Int
     private let userID: String?
     private let priorBest: Int?
     private var timer: AnyCancellable?
@@ -27,6 +28,7 @@ final class AnagramViewModel: ObservableObject {
 
     init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil) {
         self.difficulty = difficulty
+        self.totalSeconds = seed == nil ? AnagramGame.totalSeconds(for: difficulty) : 60
         self.userID = userID
         self.priorBest = priorBest
         let g = AnagramGame.generate(difficulty: difficulty, seed: seed)
@@ -36,8 +38,7 @@ final class AnagramViewModel: ObservableObject {
         startTimer()
     }
 
-    var timeRemaining: Int { max(0, AnagramGame.totalSeconds(for: difficulty) - elapsedSeconds) }
-    var totalSeconds: Int { AnagramGame.totalSeconds(for: difficulty) }
+    var timeRemaining: Int { max(0, totalSeconds - elapsedSeconds) }
 
     // MARK: - Tile actions
 
@@ -110,7 +111,7 @@ final class AnagramViewModel: ObservableObject {
     // MARK: - Timer
 
     private func startTimer() {
-        let total = AnagramGame.totalSeconds(for: difficulty)
+        let total = totalSeconds
         timer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
