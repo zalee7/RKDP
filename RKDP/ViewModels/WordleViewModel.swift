@@ -27,6 +27,7 @@ struct WordleRoundResult {
     let targetWord: String
     let guessCount: Int    // 0 = failed
     let solved: Bool
+    let guesses: [WordleGuess]
 }
 
 // MARK: - ViewModel
@@ -130,7 +131,8 @@ final class WordleViewModel: ObservableObject {
         roundResults.append(WordleRoundResult(
             targetWord: game.targetWord,
             guessCount: solved ? guesses.count : 0,
-            solved: solved
+            solved: solved,
+            guesses: guesses
         ))
 
         let wins   = roundResults.filter(\.solved).count
