@@ -587,30 +587,35 @@ struct GameModeCardView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.white.opacity(0.58), lineWidth: 1.2)
-            )
+            .background {
+                cardBackground
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.62), lineWidth: 1.4)
+            }
             .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
         }
         .buttonStyle(.plain)
     }
 
     private var cardBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.black.opacity(0.18))
-            RoundedRectangle(cornerRadius: 20)
-                .fill(AppTheme.cardBackground)
-            RoundedRectangle(cornerRadius: 20)
-                .fill(AppTheme.modeGradient(mode))
-                .opacity(0.22)
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(AppTheme.modeAccent(mode).opacity(0.55), lineWidth: 1)
-                .padding(1)
-        }
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color.black.opacity(0.18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(AppTheme.cardBackground)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(AppTheme.modeGradient(mode))
+                    .opacity(0.24)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(AppTheme.modeAccent(mode).opacity(0.58), lineWidth: 1)
+            }
     }
 }
 

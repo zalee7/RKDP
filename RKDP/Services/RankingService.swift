@@ -44,7 +44,9 @@ final class RankingService {
         }
 
         let adjustedBase = adjustedRankBase(base, playerID: playerID, isWinner: isWinner, winnerID: winnerID, players: players)
-        return Int(Double(adjustedBase) * mode.pointMultiplier(for: difficulty))
+        let scaled = Int(Double(adjustedBase) * mode.pointMultiplier(for: difficulty))
+        if winnerID == nil { return max(0, scaled) }
+        return isWinner ? max(1, scaled) : min(0, scaled)
     }
 
     private func finishSessionIfNeeded(_ outcome: MatchOutcome) async throws {
@@ -93,13 +95,9 @@ final class RankingService {
     }
 
     private func applyPlayerOutcome(session: GameSession, userID: String) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        let updatedUser = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
                 let userRef = self.db.collection("users").document(userID)
-                let entryRef = self.db.collection("leaderboards")
-                    .document(session.mode.rawValue)
-                    .collection("entries")
-                    .document(userID)
 
                 func fail(_ error: Error) -> Any? {
                     errorPointer?.pointee = error as NSError
@@ -109,7 +107,7 @@ final class RankingService {
                 do {
                     var user = try transaction.getDocument(userRef).data(as: AppUser.self)
                     if user.appliedRankedOutcomes[session.id] == true {
-                        return true
+                        return user
                     }
 
                     let delta = Self.rankDelta(
@@ -153,31 +151,45 @@ final class RankingService {
 
                     let encodedUser = try Firestore.Encoder().encode(user)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)
-
-                    let entry = LeaderboardEntry(
-                        id: userID,
-                        username: user.username,
-                        avatarURL: user.avatarURL,
-                        rankTier: rankInfo.tier,
-                        rankPoints: rankInfo.points,
-                        wins: rankInfo.wins,
-                        bestTime: rankInfo.bestTime,
-                        mode: session.mode,
-                        equippedTitle: user.cosmetics.equippedTitle
-                    )
-                    let encodedEntry = try Firestore.Encoder().encode(entry)
-                    transaction.setData(encodedEntry, forDocument: entryRef, merge: true)
-                    return true
+                    return user
                 } catch {
                     return fail(error)
                 }
-            }, completion: { _, error in
+            }, completion: { result, error in
                 if let error {
                     continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
                 } else {
-                    continuation.resume()
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
                 }
             })
+        }
+
+        syncLeaderboardEntry(for: updatedUser, mode: session.mode)
+    }
+
+    private func syncLeaderboardEntry(for user: AppUser, mode: GameMode) {
+        let rankInfo = user.rank(for: mode)
+        let entry = LeaderboardEntry(
+            id: user.id,
+            username: user.username,
+            avatarURL: user.avatarURL,
+            rankTier: rankInfo.tier,
+            rankPoints: rankInfo.points,
+            wins: rankInfo.wins,
+            bestTime: rankInfo.bestTime,
+            mode: mode,
+            equippedTitle: user.cosmetics.equippedTitle
+        )
+        do {
+            try db.collection("leaderboards")
+                .document(mode.rawValue)
+                .collection("entries")
+                .document(user.id)
+                .setData(from: entry, merge: true)
+        } catch {
+            // Rank and coins are already saved on the user record; leaderboard sync can retry later.
         }
     }
 
