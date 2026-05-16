@@ -41,7 +41,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .gridlock:
             return "Slide rows and columns to form a mirrored color grid before your opponent."
         case .anagram:
-            return "Unscramble the letters to find the hidden word before your opponent."
+            return "Make the most valid words from the letters. Longer words score more."
         case .wordHunt:
             return "Find as many words as possible in the letter grid before time runs out."
         case .wordle:
@@ -66,13 +66,13 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
 
     var winConditionText: String {
         switch self {
-        case .sudoku:      return "Fastest to complete the puzzle wins"
-        case .minesweeper: return "Most cells uncovered wins (fastest if both finish)"
-        case .colorLink:   return "Fill more of the board with completed color paths"
+        case .sudoku:      return "Complete the puzzle; progress breaks timeout ties"
+        case .minesweeper: return "Avoid mines; clear status, safe cells, then time decide"
+        case .colorLink:   return "Complete the board; fill and pairs break ties"
         case .gridlock:    return "Make the grid symmetrical in fewer moves"
-        case .anagram:     return "Most points from words wins"
-        case .wordHunt:    return "Most points from found words wins"
-        case .wordle:      return "Best of 3 shared words; guesses and time break ties"
+        case .anagram:     return "Timer ends; score, words, then longest word decide"
+        case .wordHunt:    return "Timer ends; score, words, then longest word decide"
+        case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"
         }
     }
 
