@@ -281,6 +281,20 @@ struct WordleView: View {
         didReportMatchResult = true
         let solved = vm.roundResults.filter(\.solved)
         let totalGuesses = solved.reduce(0) { $0 + $1.guessCount }
+        var summary: [String: String] = [
+            "solvedRounds": "\(solved.count)",
+            "totalGuesses": "\(totalGuesses)",
+            "failedRounds": "\(vm.roundResults.filter { !$0.solved }.count)",
+            "roundCount": "\(vm.roundResults.count)",
+            "maxGuesses": "\(vm.maxGuesses)"
+        ]
+        for (idx, result) in vm.roundResults.enumerated() {
+            let round = idx + 1
+            summary["round\(round)Target"] = result.targetWord
+            summary["round\(round)Solved"] = result.solved ? "true" : "false"
+            summary["round\(round)GuessCount"] = "\(result.guessCount)"
+            summary["round\(round)Guesses"] = encodeWordleGuesses(result.guesses)
+        }
         onMatchResult(MatchPlayerResult(
             userID: userID,
             mode: .wordle,
@@ -289,11 +303,7 @@ struct WordleView: View {
             score: solved.count,
             progress: Double(solved.count) / Double(max(1, vm.totalRounds)),
             status: "\(solved.count)/\(vm.totalRounds) solved",
-            summary: [
-                "solvedRounds": "\(solved.count)",
-                "totalGuesses": "\(totalGuesses)",
-                "failedRounds": "\(vm.roundResults.filter { !$0.solved }.count)"
-            ],
+            summary: summary,
             details: vm.roundResults.enumerated().map { idx, result in
                 if result.solved {
                     return "Round \(idx + 1): \(result.targetWord) in \(result.guessCount)"
@@ -301,6 +311,21 @@ struct WordleView: View {
                 return "Round \(idx + 1): \(result.targetWord) failed"
             }
         ))
+    }
+
+
+    private func encodeWordleGuesses(_ guesses: [WordleGuess]) -> String {
+        guesses.map { guess in
+            let result = guess.result.map { letterResult in
+                switch letterResult {
+                case .correct: return "C"
+                case .present: return "P"
+                case .absent: return "A"
+                }
+            }.joined()
+            return "\(guess.word):\(result)"
+        }
+        .joined(separator: ";")
     }
 
     @ViewBuilder

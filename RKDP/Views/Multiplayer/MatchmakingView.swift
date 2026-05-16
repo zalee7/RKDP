@@ -366,7 +366,7 @@ struct MatchmakingView: View {
                 .font(.largeTitle.bold())
                 .foregroundStyle(isDraw || isWinner ? AppTheme.crownGold : AppTheme.textSecondary)
 
-            Text(session.winnerReason ?? mode.winConditionText)
+            Text(userFacingResultReason(session: session, results: results))
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -469,6 +469,21 @@ struct MatchmakingView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func userFacingResultReason(session: GameSession, results: [String: MatchPlayerResult]) -> String {
+        if let forfeiterID = results.first(where: { $0.value.summary["forfeit"] == "true" })?.key,
+           let forfeiter = session.players.first(where: { $0.userID == forfeiterID }) {
+            return forfeiter.userID == user.id ? "You forfeited" : "\(forfeiter.username) forfeited"
+        }
+
+        if session.winnerReason == "Opponent forfeited",
+           let winnerID = session.winnerID,
+           let forfeiter = session.players.first(where: { $0.userID != winnerID }) {
+            return forfeiter.userID == user.id ? "You forfeited" : "\(forfeiter.username) forfeited"
+        }
+
+        return session.winnerReason ?? mode.winConditionText
     }
 
     private var sessionModeMissingResultText: String {
@@ -736,31 +751,27 @@ struct PostMatchRewardPanel: View {
     }
 }
 
+
 struct MatchBreakdownView: View {
     let session: GameSession
     let currentUserID: String
     let results: [String: MatchPlayerResult]
     @Environment(\.dismiss) private var dismiss
 
+    private var currentOutcome: SessionResult { session.result(for: currentUserID) ?? .draw }
+
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    if let reason = session.winnerReason {
-                        Label(reason, systemImage: session.winnerID == nil ? "equal.circle.fill" : "crown.fill")
-                            .foregroundStyle(session.mode.accentColor)
-                    }
-                }
-
-                ForEach(session.players, id: \.userID) { player in
-                    Section(player.userID == currentUserID ? "You" : player.username) {
-                        if let result = results[player.userID] {
-                            breakdownRows(for: result)
-                        } else {
-                            Text(session.mode == .wordle ? "Not finished before clinch." : "No result submitted yet.")
-                                .foregroundStyle(.secondary)
+            ZStack {
+                AppTheme.backgroundGradient.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 16) {
+                        headerCard
+                        ForEach(session.players, id: \.userID) { player in
+                            playerBreakdownCard(player)
                         }
                     }
+                    .padding()
                 }
             }
             .navigationTitle("Match Breakdown")
@@ -768,50 +779,343 @@ struct MatchBreakdownView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.accentBright)
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private func breakdownRows(for result: MatchPlayerResult) -> some View {
-        LabeledContent("Status", value: result.status)
-        LabeledContent("Time", value: "\(result.elapsedSeconds / 60):\(String(format: "%02d", result.elapsedSeconds % 60))")
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: headerIcon)
+                    .font(.title2.bold())
+                    .foregroundStyle(session.mode.accentColor)
+                    .frame(width: 36, height: 36)
+                    .background(session.mode.accentColor.opacity(0.16))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(headerTitle)
+                        .font(.title3.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("\(session.mode.displayName) · \(session.mode.difficultyLabel(session.difficulty))")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                Spacer()
+            }
 
-        switch session.mode {
-        case .wordle:
-            LabeledContent("Rounds solved", value: "\(result.solvedRounds)")
-            LabeledContent("Solved-round guesses", value: "\(result.totalGuesses)")
-        case .anagram, .wordHunt:
-            LabeledContent("Score", value: "\(result.score)")
-            LabeledContent("Words", value: "\(result.wordCount)")
-            LabeledContent("Longest word", value: "\(result.longestWordLength) letters")
-        case .minesweeper:
-            LabeledContent("Safe cells", value: result.summary["safeCells"] ?? "\(result.score)")
-            LabeledContent("Mine hit", value: result.hitMine ? "Yes" : "No")
-        case .sudoku:
-            LabeledContent("Completed", value: result.completed ? "Yes" : "No")
-            LabeledContent("Progress", value: "\(Int((result.progress * 100).rounded()))%")
-        case .gridlock:
-            LabeledContent("Completed", value: result.completed ? "Yes" : "No")
-            LabeledContent("Moves", value: "\(result.moveCount)")
-            LabeledContent("Symmetry", value: "\(Int((result.progress * 100).rounded()))%")
-            LabeledContent("Grid", value: result.summary["boardSize"].map { "\($0)x\($0)" } ?? "Unknown")
-            LabeledContent("Colors", value: result.summary["colorCount"] ?? "Unknown")
-        case .colorLink:
-            LabeledContent("Completed", value: result.completed ? "Yes" : "No")
-            LabeledContent("Board fill", value: "\(Int((result.progress * 100).rounded()))%")
-            LabeledContent("Color pairs", value: "\(result.solvedPairs)")
+            Text(userFacingReason)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding()
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
 
-        if !result.details.isEmpty {
-            ForEach(result.details, id: \.self) { detail in
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private func playerBreakdownCard(_ player: MatchPlayer) -> some View {
+        let result = results[player.userID]
+        let isCurrent = player.userID == currentUserID
+        let isWinner = session.winnerID == player.userID
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(isWinner ? AppTheme.brandGradient : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 42, height: 42)
+                    .overlay(Text(String(player.username.prefix(1))).font(.headline.bold()).foregroundStyle(.white))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isCurrent ? "You" : player.username)
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text(result.map { displayStatus($0, for: player) } ?? missingResultText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(statusColor(result, isWinner: isWinner))
+                }
+                Spacer()
+                if isWinner {
+                    Image(systemName: "crown.fill")
+                        .foregroundStyle(AppTheme.crownGold)
+                }
+            }
+
+            if let result {
+                if session.mode == .wordle {
+                    wordleBreakdown(result)
+                } else {
+                    statGrid(modeStats(for: result))
+                    detailLines(result.details)
+                }
+            } else {
+                Text(missingResultText)
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            }
+        }
+        .padding()
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private func statGrid(_ stats: [(String, String)]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(stat.0)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                    Text(stat.1)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }
+
+    @ViewBuilder
+    private func wordleBreakdown(_ result: MatchPlayerResult) -> some View {
+        let rounds = parsedWordleRounds(from: result)
+        statGrid([
+            ("Rounds", "\(result.solvedRounds)/3 solved"),
+            ("Solved guesses", "\(result.totalGuesses)"),
+            ("Time", formattedTime(result.elapsedSeconds)),
+            ("Status", result.completed ? "Complete" : "Incomplete")
+        ])
+
+        if rounds.isEmpty {
+            detailLines(result.details.isEmpty ? ["No Wordle round details were stored for this match."] : result.details)
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(rounds) { round in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Round \(round.index)")
+                                .font(.caption.bold())
+                                .foregroundStyle(AppTheme.textSecondary)
+                            Spacer()
+                            Text(round.solved ? "Solved" : "Failed")
+                                .font(.caption.bold())
+                                .foregroundStyle(round.solved ? AppTheme.success : AppTheme.danger)
+                        }
+                        Text("Word: \(round.target)")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+
+                        if round.guesses.isEmpty {
+                            Text("Guess grid unavailable for this round.")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 5) {
+                                ForEach(round.guesses) { guess in
+                                    wordleGuessRow(guess)
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private func wordleGuessRow(_ guess: WordleBreakdownGuess) -> some View {
+        HStack(spacing: 5) {
+            ForEach(Array(guess.word.enumerated()), id: \.offset) { idx, char in
+                Text(String(char))
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(wordleColor(guess.results.indices.contains(idx) ? guess.results[idx] : "A"))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
+            }
+        }
+    }
+
+    private func detailLines(_ details: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(details.prefix(8), id: \.self) { detail in
+                Text(displayDetail(detail))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func modeStats(for result: MatchPlayerResult) -> [(String, String)] {
+        var stats: [(String, String)] = [
+            ("Status", displayStatus(result, for: player(for: result.userID))),
+            ("Time", formattedTime(result.elapsedSeconds))
+        ]
+        switch session.mode {
+        case .wordle:
+            stats.append(contentsOf: [("Rounds", "\(result.solvedRounds)"), ("Guesses", "\(result.totalGuesses)")])
+        case .anagram, .wordHunt:
+            stats.append(contentsOf: [("Score", "\(result.score)"), ("Words", "\(result.wordCount)"), ("Longest", "\(result.longestWordLength) letters")])
+        case .minesweeper:
+            stats.append(contentsOf: [("Safe cells", result.summary["safeCells"] ?? "\(result.score)"), ("Mine hit", result.hitMine ? "Yes" : "No")])
+        case .sudoku:
+            stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Progress", percent(result.progress))])
+        case .gridlock:
+            stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Moves", "\(result.moveCount)"), ("Symmetry", percent(result.progress))])
+        case .colorLink:
+            stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Board fill", percent(result.progress)), ("Pairs", "\(result.solvedPairs)")])
+        }
+        return stats
+    }
+
+    private var userFacingReason: String {
+        if let forfeiter = forfeitPlayer {
+            return forfeiter.userID == currentUserID ? "You forfeited" : "\(forfeiter.username) forfeited"
+        }
+        return session.winnerReason ?? session.mode.winConditionText
+    }
+
+    private var headerTitle: String {
+        switch currentOutcome {
+        case .win: return "Victory"
+        case .loss: return "Defeat"
+        case .draw: return "Draw"
+        case .abandoned: return "Abandoned"
+        }
+    }
+
+    private var headerIcon: String {
+        switch currentOutcome {
+        case .win: return "crown.fill"
+        case .loss: return "xmark.circle.fill"
+        case .draw: return "equal.circle.fill"
+        case .abandoned: return "flag.slash.fill"
+        }
+    }
+
+    private var forfeitPlayer: MatchPlayer? {
+        if let forfeiterID = results.first(where: { $0.value.summary["forfeit"] == "true" })?.key {
+            return player(for: forfeiterID)
+        }
+        guard session.winnerReason == "Opponent forfeited" else { return nil }
+        if let winnerID = session.winnerID {
+            return session.players.first { $0.userID != winnerID }
+        }
+        return nil
+    }
+
+    private var missingResultText: String {
+        session.mode == .wordle ? "Not finished before clinch." : "No result submitted yet."
+    }
+
+    private func displayStatus(_ result: MatchPlayerResult, for player: MatchPlayer?) -> String {
+        if result.summary["forfeit"] == "true" {
+            return player?.userID == currentUserID ? "You forfeited" : "\(player?.username ?? "Opponent") forfeited"
+        }
+        if result.summary["forfeitWin"] == "true" {
+            return "Won by forfeit"
+        }
+        return result.status
+    }
+
+    private func displayDetail(_ detail: String) -> String {
+        if detail.localizedCaseInsensitiveContains("Opponent forfeited"), let forfeiter = forfeitPlayer {
+            return forfeiter.userID == currentUserID ? "You forfeited." : "\(forfeiter.username) forfeited."
+        }
+        return detail
+    }
+
+    private func statusColor(_ result: MatchPlayerResult?, isWinner: Bool) -> Color {
+        guard let result else { return AppTheme.textSecondary }
+        if result.summary["forfeit"] == "true" { return AppTheme.danger }
+        if isWinner || result.completed { return AppTheme.success }
+        return AppTheme.textSecondary
+    }
+
+    private func parsedWordleRounds(from result: MatchPlayerResult) -> [WordleBreakdownRound] {
+        let count = Int(result.summary["roundCount"] ?? "0") ?? 0
+        if count > 0 {
+            return (1...count).map { idx in
+                WordleBreakdownRound(
+                    index: idx,
+                    target: result.summary["round\(idx)Target"] ?? "-----",
+                    solved: result.summary["round\(idx)Solved"] == "true",
+                    guessCount: Int(result.summary["round\(idx)GuessCount"] ?? "0") ?? 0,
+                    guesses: parseEncodedGuesses(result.summary["round\(idx)Guesses"] ?? "")
+                )
+            }
+        }
+        return parseLegacyWordleDetails(result.details)
+    }
+
+    private func parseEncodedGuesses(_ encoded: String) -> [WordleBreakdownGuess] {
+        encoded.split(separator: ";").enumerated().compactMap { idx, item in
+            let parts = item.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return nil }
+            return WordleBreakdownGuess(id: idx, word: Array(parts[0]), results: Array(parts[1]))
+        }
+    }
+
+    private func parseLegacyWordleDetails(_ details: [String]) -> [WordleBreakdownRound] {
+        details.enumerated().compactMap { idx, detail in
+            guard let colon = detail.firstIndex(of: ":") else { return nil }
+            let body = detail[detail.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            if let range = body.range(of: " in ") {
+                return WordleBreakdownRound(index: idx + 1, target: String(body[..<range.lowerBound]), solved: true, guessCount: Int(body[range.upperBound...]) ?? 0, guesses: [])
+            }
+            if let range = body.range(of: " failed") {
+                return WordleBreakdownRound(index: idx + 1, target: String(body[..<range.lowerBound]), solved: false, guessCount: 0, guesses: [])
+            }
+            return nil
+        }
+    }
+
+    private func player(for userID: String) -> MatchPlayer? {
+        session.players.first { $0.userID == userID }
+    }
+
+    private func formattedTime(_ seconds: Int) -> String {
+        "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+
+    private func percent(_ progress: Double) -> String {
+        "\(Int((progress * 100).rounded()))%"
+    }
+
+    private func wordleColor(_ result: Character) -> Color {
+        switch result {
+        case "C": return Color(hex: "538D4E")
+        case "P": return Color(hex: "B59F3B")
+        default: return Color(hex: "3A3A3C")
+        }
+    }
+}
+
+private struct WordleBreakdownRound: Identifiable {
+    let index: Int
+    let target: String
+    let solved: Bool
+    let guessCount: Int
+    let guesses: [WordleBreakdownGuess]
+    var id: Int { index }
+}
+
+private struct WordleBreakdownGuess: Identifiable {
+    let id: Int
+    let word: [Character]
+    let results: [Character]
 }
 
 // MARK: - Wager option row
