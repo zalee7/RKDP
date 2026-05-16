@@ -304,7 +304,8 @@ struct RankTierRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(tier.icon).font(.title2).frame(width: 36)
+            RankIconView(tier: tier, division: .one, size: 34)
+                .frame(width: 36)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(tier.displayName)

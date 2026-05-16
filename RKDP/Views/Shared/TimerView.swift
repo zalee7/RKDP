@@ -15,6 +15,21 @@ struct TimerView: View {
     }
 }
 
+struct RankIconView: View {
+    let tier: RankTier
+    var division: RankDivision? = nil
+    var size: CGFloat = 18
+
+    var body: some View {
+        Image(tier.iconAssetName(division: division))
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .shadow(color: tier.color.opacity(0.35), radius: size * 0.12, x: 0, y: size * 0.06)
+            .accessibilityHidden(true)
+    }
+}
+
 struct RankBadgeView: View {
     let tier: RankTier
     var division: RankDivision? = nil
@@ -22,7 +37,7 @@ struct RankBadgeView: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(tier.icon).font(.subheadline)
+            RankIconView(tier: tier, division: division, size: showLabel ? 18 : 22)
             if showLabel {
                 if let div = division {
                     Text("\(tier.displayName) \(div.label)")

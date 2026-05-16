@@ -633,7 +633,7 @@ struct RankProgressMiniView: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
-                Text(info.tier.icon).font(.caption)
+                RankIconView(tier: info.tier, division: info.division, size: 14)
                 Text(info.fullDisplayName)
                     .font(.caption.bold())
                     .foregroundStyle(info.tier.color)

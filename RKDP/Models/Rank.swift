@@ -54,6 +54,30 @@ enum RankTier: Int, Codable, CaseIterable, Comparable {
         }
     }
 
+    func iconAssetName(division: RankDivision? = nil) -> String {
+        let tierName: String
+        switch self {
+        case .bronze:   tierName = "Bronze"
+        case .silver:   tierName = "Silver"
+        case .gold:     tierName = "Gold"
+        case .platinum: tierName = "Platinum"
+        case .diamond:  tierName = "Diamond"
+        case .master:   tierName = "Master"
+        }
+        return "Rank\(tierName)\((division ?? .one).assetSuffix)"
+    }
+
+    func division(for points: Int) -> RankDivision {
+        let hi = RankTier(rawValue: rawValue + 1)?.pointsRequired ?? (pointsRequired + 1500)
+        let span = max(1, hi - pointsRequired)
+        let progress = max(0, points - pointsRequired)
+        switch progress * 3 / span {
+        case 0:  return .three
+        case 1:  return .two
+        default: return .one
+        }
+    }
+
     static func tier(for points: Int) -> RankTier {
         return allCases.reversed().first { points >= $0.pointsRequired } ?? .bronze
     }
@@ -65,6 +89,14 @@ enum RankDivision: Int, Codable, CaseIterable {
     case one   = 3  // top of tier (closest to promotion)
 
     var label: String {
+        switch self {
+        case .three: return "III"
+        case .two:   return "II"
+        case .one:   return "I"
+        }
+    }
+
+    var assetSuffix: String {
         switch self {
         case .three: return "III"
         case .two:   return "II"
@@ -96,15 +128,7 @@ struct RankInfo: Codable {
 
     /// Division within the current tier (III = entry, I = top).
     var division: RankDivision {
-        let lo = tier.pointsRequired
-        let hi = RankTier(rawValue: tier.rawValue + 1)?.pointsRequired ?? (lo + 1500)
-        let span = hi - lo
-        let progress = points - lo
-        switch progress * 3 / span {
-        case 0:  return .three
-        case 1:  return .two
-        default: return .one
-        }
+        tier.division(for: points)
     }
 
     /// e.g. "Bronze III", "Gold I", "Master I"

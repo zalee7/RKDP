@@ -96,7 +96,7 @@ struct LeaderboardRowView: View {
                     Text(title).font(.caption.italic()).foregroundStyle(AppTheme.accentBright)
                 }
                 HStack(spacing: 4) {
-                    RankBadgeView(tier: entry.rankTier)
+                    RankBadgeView(tier: entry.rankTier, division: entry.rankTier.division(for: entry.rankPoints))
                     Text("·").foregroundStyle(AppTheme.textSecondary)
                     Text("\(entry.wins)W").font(.caption).foregroundStyle(.green)
                 }
