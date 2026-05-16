@@ -46,12 +46,21 @@ enum RankTier: Int, Codable, CaseIterable, Comparable {
     var pointsRequired: Int {
         switch self {
         case .bronze:   return 0
-        case .silver:   return 500
-        case .gold:     return 1500
-        case .platinum: return 3500
-        case .diamond:  return 7000
+        case .silver:   return 600
+        case .gold:     return 1800
+        case .platinum: return 3600
+        case .diamond:  return 7200
         case .master:   return 12000
         }
+    }
+
+    var nextTier: RankTier? {
+        RankTier(rawValue: rawValue + 1)
+    }
+
+    var divisionSize: Int {
+        if let nextTier { return max(1, (nextTier.pointsRequired - pointsRequired) / 3) }
+        return 500
     }
 
     func iconAssetName(division: RankDivision? = nil) -> String {
@@ -68,14 +77,29 @@ enum RankTier: Int, Codable, CaseIterable, Comparable {
     }
 
     func division(for points: Int) -> RankDivision {
-        let hi = RankTier(rawValue: rawValue + 1)?.pointsRequired ?? (pointsRequired + 1500)
-        let span = max(1, hi - pointsRequired)
         let progress = max(0, points - pointsRequired)
-        switch progress * 3 / span {
+        switch progress / divisionSize {
         case 0:  return .three
         case 1:  return .two
         default: return .one
         }
+    }
+
+    func divisionStart(for division: RankDivision) -> Int {
+        pointsRequired + division.index * divisionSize
+    }
+
+    func divisionEndExclusive(for division: RankDivision) -> Int? {
+        if self == .master && division == .one { return nil }
+        return pointsRequired + (division.index + 1) * divisionSize
+    }
+
+    func divisionRangeLabel(for division: RankDivision) -> String {
+        let start = divisionStart(for: division)
+        if let end = divisionEndExclusive(for: division) {
+            return "\(division.label) \(start)-\(end - 1)"
+        }
+        return "\(division.label) \(start)+"
     }
 
     static func tier(for points: Int) -> RankTier {
@@ -87,6 +111,10 @@ enum RankDivision: Int, Codable, CaseIterable {
     case three = 1  // entry level within a tier
     case two   = 2
     case one   = 3  // top of tier (closest to promotion)
+
+    static let progression: [RankDivision] = [.three, .two, .one]
+
+    var index: Int { rawValue - 1 }
 
     var label: String {
         switch self {
@@ -121,18 +149,61 @@ struct RankInfo: Codable {
         return Double(wins) / Double(wins + losses)
     }
 
+    var displayTier: RankTier {
+        RankTier.tier(for: points)
+    }
+
     var pointsToNextTier: Int? {
-        guard let next = RankTier(rawValue: tier.rawValue + 1) else { return nil }
-        return next.pointsRequired - points
+        guard let next = displayTier.nextTier else { return nil }
+        return max(0, next.pointsRequired - points)
     }
 
     /// Division within the current tier (III = entry, I = top).
     var division: RankDivision {
-        tier.division(for: points)
+        displayTier.division(for: points)
+    }
+
+    var divisionStart: Int {
+        displayTier.divisionStart(for: division)
+    }
+
+    var nextDivisionBoundary: Int? {
+        displayTier.divisionEndExclusive(for: division)
+    }
+
+    var divisionProgress: Double {
+        guard let boundary = nextDivisionBoundary else { return 1 }
+        let span = max(1, boundary - divisionStart)
+        let done = max(0, min(span, points - divisionStart))
+        return Double(done) / Double(span)
+    }
+
+    var divisionProgressDisplay: String {
+        guard let boundary = nextDivisionBoundary else { return "\(points)+ pts" }
+        return "\(points) / \(boundary)"
+    }
+
+    var nextRankStepText: String {
+        guard let boundary = nextDivisionBoundary else { return "Top division" }
+        let remaining = max(0, boundary - points)
+        let nextName: String
+        switch division {
+        case .three:
+            nextName = "\(displayTier.displayName) II"
+        case .two:
+            nextName = "\(displayTier.displayName) I"
+        case .one:
+            if let nextTier = displayTier.nextTier {
+                nextName = "\(nextTier.displayName) III"
+            } else {
+                nextName = "Top division"
+            }
+        }
+        return "\(remaining) pts to \(nextName)"
     }
 
     /// e.g. "Bronze III", "Gold I", "Master I"
-    var fullDisplayName: String { "\(tier.displayName) \(division.label)" }
+    var fullDisplayName: String { "\(displayTier.displayName) \(division.label)" }
 
     /// Compact ranked record, shown as wins-losses.
     var recordDisplay: String { "\(wins)-\(losses)" }

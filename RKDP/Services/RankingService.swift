@@ -185,7 +185,7 @@ final class RankingService {
             id: user.id,
             username: user.username,
             avatarURL: user.avatarURL,
-            rankTier: rankInfo.tier,
+            rankTier: rankInfo.displayTier,
             rankPoints: rankInfo.points,
             wins: rankInfo.wins,
             bestTime: rankInfo.bestTime,
@@ -229,12 +229,12 @@ final class RankingService {
     private static func divisionScore(_ player: MatchPlayer) -> Int {
         let info = RankInfo(
             points: player.rankPoints,
-            tier: player.rankTier,
+            tier: RankTier.tier(for: player.rankPoints),
             wins: 0,
             losses: 0,
             bestTime: nil,
             bestScore: nil
         )
-        return player.rankTier.rawValue * 3 + info.division.rawValue
+        return info.displayTier.rawValue * 3 + info.division.rawValue
     }
 }

@@ -92,7 +92,7 @@ struct PostMatchRewardSnapshot {
     }
 
     private static func rankPosition(_ rank: RankInfo) -> Int {
-        rank.tier.rawValue * 3 + rank.division.rawValue
+        rank.displayTier.rawValue * 3 + rank.division.rawValue
     }
 }
 

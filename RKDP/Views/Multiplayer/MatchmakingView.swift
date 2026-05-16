@@ -207,11 +207,11 @@ struct MatchmakingView: View {
 
                     if let opp = opponent {
                         let liveRank = oppUser?.rank(for: mode)
-                        let oppRank = liveRank ?? RankInfo(points: opp.rankPoints, tier: opp.rankTier,
+                        let oppRank = liveRank ?? RankInfo(points: opp.rankPoints, tier: RankTier.tier(for: opp.rankPoints),
                                                            wins: 0, losses: 0, bestTime: nil, bestScore: nil)
                         Text(oppRank.fullDisplayName)
                             .font(.subheadline.bold())
-                            .foregroundStyle(opp.rankTier.color)
+                            .foregroundStyle(oppRank.displayTier.color)
                         RecordTextView(
                             wins: liveRank?.wins,
                             losses: liveRank?.losses,
@@ -506,13 +506,13 @@ struct MatchmakingView: View {
     private func rankPosition(_ player: MatchPlayer) -> Int {
         let info = RankInfo(
             points: player.rankPoints,
-            tier: player.rankTier,
+            tier: RankTier.tier(for: player.rankPoints),
             wins: 0,
             losses: 0,
             bestTime: nil,
             bestScore: nil
         )
-        return player.rankTier.rawValue * 3 + info.division.rawValue
+        return info.displayTier.rawValue * 3 + info.division.rawValue
     }
 
     // MARK: - Error
@@ -566,15 +566,15 @@ struct PostMatchRewardPanel: View {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
                         RankIconView(
-                            tier: displayedRank.tier,
+                            tier: displayedRank.displayTier,
                             division: displayedRank.division,
                             size: rankPulse ? 42 : 34
                         )
                         VStack(alignment: .leading, spacing: 2) {
                             Text(displayedRank.fullDisplayName)
                                 .font(.headline.bold())
-                                .foregroundStyle(displayedRank.tier.color)
-                            Text("\(snapshot.startingRank.points) -> \(snapshot.endingRank.points) pts")
+                                .foregroundStyle(displayedRank.displayTier.color)
+                            Text(displayedRank.nextRankStepText)
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textSecondary)
                         }
@@ -589,17 +589,14 @@ struct PostMatchRewardPanel: View {
                         }
                     }
 
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.white.opacity(0.14))
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(rankGain ? AppTheme.brandGradient : LinearGradient(colors: [AppTheme.danger, AppTheme.hotPink], startPoint: .leading, endPoint: .trailing))
-                                .frame(width: max(7, geo.size.width * displayedRankProgress))
-                                .shadow(color: rankColor.opacity(rankPulse ? 0.75 : 0.28), radius: rankPulse ? 10 : 4)
-                        }
-                    }
-                    .frame(height: 8)
+                    RankDivisionProgressView(
+                        info: displayedRank,
+                        height: 8,
+                        spacing: 4,
+                        showLabels: true,
+                        progressOverride: displayedRankProgress
+                    )
+                    .shadow(color: rankColor.opacity(rankPulse ? 0.65 : 0.18), radius: rankPulse ? 9 : 3)
 
                     HStack {
                         if let adjustmentLabel {
@@ -740,10 +737,7 @@ struct PostMatchRewardPanel: View {
     }
 
     private func rankProgress(_ rank: RankInfo) -> Double {
-        guard let next = RankTier(rawValue: rank.tier.rawValue + 1) else { return 1 }
-        let span = max(1, next.pointsRequired - rank.tier.pointsRequired)
-        let progress = Double(rank.points - rank.tier.pointsRequired) / Double(span)
-        return max(0, min(1, progress))
+        rank.divisionProgress
     }
 
     private func deltaText(_ value: Int) -> String {

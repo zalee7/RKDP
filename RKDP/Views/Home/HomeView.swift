@@ -198,7 +198,7 @@ struct GameModeDetailView: View {
 
                         VStack(spacing: 10) {
                             HStack {
-                                ModeFactRow(icon: "trophy.fill", title: "Rank", value: rankInfo.fullDisplayName, color: rankInfo.tier.color)
+                                ModeFactRow(icon: "trophy.fill", title: "Rank", value: rankInfo.fullDisplayName, color: rankInfo.displayTier.color)
                                 ModeFactRow(icon: "chart.bar.fill", title: "W/L", value: rankInfo.recordDisplay, color: AppTheme.teal)
                             }
                             HStack {
@@ -623,42 +623,24 @@ struct GameModeCardView: View {
 struct RankProgressMiniView: View {
     let info: RankInfo
 
-    private var progress: Double {
-        guard let next = RankTier(rawValue: info.tier.rawValue + 1) else { return 1.0 }
-        let span = Double(next.pointsRequired - info.tier.pointsRequired)
-        let done = Double(info.points - info.tier.pointsRequired)
-        return max(0, min(1, done / span))
-    }
-
-    private var pointsLabel: String {
-        if let pts = info.pointsToNextTier { return "\(info.points) / \(info.points + pts)" }
-        return "MAX"
-    }
-
     var body: some View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
-                RankIconView(tier: info.tier, division: info.division, size: 17)
+                RankIconView(tier: info.displayTier, division: info.division, size: 17)
                 Text(info.fullDisplayName)
                     .font(.caption.bold())
-                    .foregroundStyle(info.tier.color)
+                    .foregroundStyle(info.displayTier.color)
             }
             RecordTextView(
                 wins: info.wins,
                 losses: info.losses,
                 font: .system(size: 10, weight: .semibold)
             )
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.13)).frame(height: 4)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(AppTheme.accentBright)
-                        .frame(width: geo.size.width * progress, height: 4)
-                }
-            }
-            .frame(height: 4)
-            .padding(.horizontal, 10)
-            Text(pointsLabel).font(.system(size: 9)).foregroundStyle(AppTheme.textSecondary)
+            RankDivisionProgressView(info: info, height: 3, spacing: 3)
+                .padding(.horizontal, 10)
+            Text(info.divisionProgressDisplay)
+                .font(.system(size: 9))
+                .foregroundStyle(AppTheme.textSecondary)
             if let best = info.bestScore {
                 Text("Best: \(best) pts").font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
             } else if let best = info.bestTime {

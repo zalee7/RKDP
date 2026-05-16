@@ -115,9 +115,11 @@ struct ModeRankRow: View {
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 2) {
-                RankBadgeView(tier: info.tier, division: info.division, iconSize: 22, labelFont: .subheadline.bold())
-                Text("\(info.points) pts").font(.caption).foregroundStyle(AppTheme.textSecondary)
+            VStack(alignment: .trailing, spacing: 4) {
+                RankBadgeView(tier: info.displayTier, division: info.division, iconSize: 22, labelFont: .subheadline.bold())
+                RankDivisionProgressView(info: info, height: 4, spacing: 3)
+                    .frame(width: 112)
+                Text(info.nextRankStepText).font(.caption).foregroundStyle(AppTheme.textSecondary)
                 if let best = info.bestScore {
                     Text("Best \(best) pts").font(.system(size: 10)).foregroundStyle(AppTheme.accentBright)
                 } else if let best = info.bestTime {

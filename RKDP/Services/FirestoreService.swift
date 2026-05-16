@@ -99,7 +99,7 @@ final class FirestoreService {
     func updateRankEntry(userID: String, mode: GameMode, info: RankInfo, username: String) async throws {
         let entry = LeaderboardEntry(
             id: userID, username: username, avatarURL: nil,
-            rankTier: info.tier, rankPoints: info.points,
+            rankTier: info.displayTier, rankPoints: info.points,
             wins: info.wins, bestTime: info.bestTime, mode: mode
         )
         try db.collection("leaderboards")

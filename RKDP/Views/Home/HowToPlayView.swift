@@ -252,7 +252,7 @@ struct RankGuideView: View {
                     Text("Rank System")
                         .font(.title.bold())
                         .foregroundStyle(.white)
-                    Text("Each game mode has its own independent rank.\nWin matches to climb the ladder.")
+                    Text("Each game mode has its own independent rank.\nWin matches to climb divisions, then promote tiers.")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.7))
                         .multilineTextAlignment(.center)
@@ -275,6 +275,7 @@ struct RankGuideView: View {
                     infoRow(icon: "xmark.circle.fill",    color: .red,    text: "Loss: −15 pts (×difficulty multiplier)")
                     infoRow(icon: "equal.circle.fill",    color: .blue,   text: "Draw: +5 pts")
                     infoRow(icon: "arrow.left.circle.fill", color: .orange, text: "Abandon: −20 pts")
+                    infoRow(icon: "rectangle.split.3x1.fill", color: .purple, text: "Each tier has III, II, and I divisions. Fill Division I to promote.")
                     infoRow(icon: "clock.fill",           color: .purple, text: "Difficulty and opponent division set rank points; time is a tie-breaker in some modes")
                 }
                 .padding()
@@ -299,7 +300,15 @@ struct RankTierRow: View {
     let tier: RankTier
 
     private var nextPoints: Int? {
-        RankTier(rawValue: tier.rawValue + 1)?.pointsRequired
+        tier.nextTier?.pointsRequired
+    }
+
+    private var tierRangeText: String {
+        "\(tier.pointsRequired)\(nextPoints.map { " – \($0 - 1)" } ?? "+") pts"
+    }
+
+    private var sampleInfo: RankInfo {
+        RankInfo(points: tier.pointsRequired, tier: tier, wins: 0, losses: 0, bestTime: nil, bestScore: nil)
     }
 
     var body: some View {
@@ -307,18 +316,26 @@ struct RankTierRow: View {
             RankIconView(tier: tier, division: .one, size: 34)
                 .frame(width: 36)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(tier.displayName)
-                    .font(.headline)
-                    .foregroundStyle(tier.color)
-                Text("\(tier.pointsRequired)\(nextPoints.map { " – \($0 - 1)" } ?? "+") pts")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.55))
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(tier.displayName)
+                        .font(.headline)
+                        .foregroundStyle(tier.color)
+                    Text(tierRangeText)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                RankDivisionProgressView(info: sampleInfo, height: 4, spacing: 4, showLabels: true)
+                    .frame(width: 132)
+                Text(RankDivision.progression.map { tier.divisionRangeLabel(for: $0) }.joined(separator: "  ·  "))
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
 
             Spacer()
 
-            // Wager range
             let options = Wager.options(for: tier)
             if let lo = options.first?.amount, let hi = options.last?.amount {
                 Text("\(lo)–\(hi) 🪙")

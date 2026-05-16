@@ -114,6 +114,53 @@ struct RecordTextView: View {
     }
 }
 
+struct RankDivisionProgressView: View {
+    let info: RankInfo
+    var height: CGFloat = 4
+    var spacing: CGFloat = 3
+    var showLabels = false
+    var progressOverride: Double? = nil
+
+    private var tint: Color { info.displayTier.color }
+
+    var body: some View {
+        VStack(spacing: showLabels ? 5 : 0) {
+            HStack(spacing: spacing) {
+                ForEach(RankDivision.progression, id: \.self) { division in
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                                .fill(Color.white.opacity(0.13))
+                            RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                                .fill(tint)
+                                .frame(width: geo.size.width * segmentProgress(for: division))
+                        }
+                    }
+                    .frame(height: height)
+                }
+            }
+            if showLabels {
+                HStack(spacing: spacing) {
+                    ForEach(RankDivision.progression, id: \.self) { division in
+                        Text(division.label)
+                            .font(.system(size: 9, weight: .black, design: .rounded))
+                            .foregroundStyle(division == info.division ? tint : AppTheme.textSecondary)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("Rank division progress")
+        .accessibilityValue(info.nextRankStepText)
+    }
+
+    private func segmentProgress(for division: RankDivision) -> Double {
+        if division.rawValue < info.division.rawValue { return 1 }
+        if division.rawValue > info.division.rawValue { return 0 }
+        return max(0, min(1, progressOverride ?? info.divisionProgress))
+    }
+}
+
 struct NumberPadView: View {
     let size: Int        // max digit or board size for number-pad games
     let onDigit: (Int) -> Void

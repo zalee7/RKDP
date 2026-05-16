@@ -25,11 +25,11 @@ final class SoundManager {
     // MARK: - Bundled audio
 
     func playGameFound() {
-        playOneShot(.gameFound, volume: 0.9)
+        playOneShot(.gameFound, volume: 1.0)
     }
 
     func playMatchmakingLoop() {
-        playLoop(.matchmaking, volume: 0.46)
+        playLoop(.matchmaking, volume: 0.78)
     }
 
     func stopMatchmakingLoop() {

@@ -77,6 +77,10 @@ struct LeaderboardRowView: View {
         }
     }
 
+    private var rankInfo: RankInfo {
+        RankInfo(points: entry.rankPoints, tier: RankTier.tier(for: entry.rankPoints), wins: entry.wins, losses: 0, bestTime: entry.bestTime, bestScore: nil)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Text(rankBadge)
@@ -96,7 +100,7 @@ struct LeaderboardRowView: View {
                     Text(title).font(.caption.italic()).foregroundStyle(AppTheme.accentBright)
                 }
                 HStack(spacing: 4) {
-                    RankBadgeView(tier: entry.rankTier, division: entry.rankTier.division(for: entry.rankPoints))
+                    RankBadgeView(tier: rankInfo.displayTier, division: rankInfo.division)
                     Text("·").foregroundStyle(AppTheme.textSecondary)
                     Text("\(entry.wins)W").font(.caption).foregroundStyle(.green)
                 }

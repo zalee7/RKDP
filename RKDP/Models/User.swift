@@ -15,7 +15,9 @@ struct AppUser: Codable, Identifiable {
     var totalRankPoints: Int { ranks.values.reduce(0) { $0 + $1.points } }
 
     func rank(for mode: GameMode) -> RankInfo {
-        ranks[mode] ?? .empty
+        var info = ranks[mode] ?? .empty
+        info.tier = RankTier.tier(for: info.points)
+        return info
     }
 
     func completedSoloDifficulties(for mode: GameMode) -> Set<Difficulty> {
