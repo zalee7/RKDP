@@ -32,12 +32,14 @@ final class WordHuntViewModel: ObservableObject {
         self.priorBest = priorBest
         let s = seed ?? Int.random(in: 0..<Int.max)
         self.game = WordHuntGame.generate(seed: s)
+        let defaultSeconds: Int
         switch difficulty {
-        case .easy:   totalSeconds = 120
-        case .medium: totalSeconds = 90
-        case .hard:   totalSeconds = 75
-        case .expert: totalSeconds = 60
+        case .easy:   defaultSeconds = 120
+        case .medium: defaultSeconds = 90
+        case .hard:   defaultSeconds = 75
+        case .expert: defaultSeconds = 60
         }
+        self.totalSeconds = seed == nil ? defaultSeconds : 75
         startTimer()
     }
 
