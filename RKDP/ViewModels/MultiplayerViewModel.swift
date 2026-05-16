@@ -21,6 +21,7 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var matchCountdown: Int = 5
     @Published var finishedSessionID: String?
     @Published var rewardErrorMessage: String?
+    @Published var rewardSnapshot: PostMatchRewardSnapshot?
     private var countdownTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
@@ -67,6 +68,7 @@ final class MultiplayerViewModel: ObservableObject {
         matchCountdown = 5
         finishedSessionID = nil
         rewardErrorMessage = nil
+        rewardSnapshot = nil
 
         self.user = user
         self.mode = mode
@@ -310,13 +312,25 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     private func applyFinishedRewards(_ session: GameSession) async {
-        guard let userID = user?.id else { return }
+        guard let beforeUser = user else { return }
         do {
-            try await ranking.applyFinishedSession(session, for: userID)
-            user = try? await store.fetchUser(id: userID)
+            let outcome = try await ranking.applyFinishedSession(session, for: beforeUser.id)
+            user = outcome.user
+            if outcome.didApplyRewards {
+                rewardSnapshot = PostMatchRewardSnapshot.make(
+                    session: session,
+                    userID: beforeUser.id,
+                    before: beforeUser,
+                    after: outcome.user,
+                    didApplyRewards: true
+                )
+            } else {
+                rewardSnapshot = PostMatchRewardSnapshot.staticSnapshot(session: session, user: outcome.user)
+            }
             rewardErrorMessage = nil
         } catch {
             rewardErrorMessage = "Result saved. Tap to refresh rewards."
+            rewardSnapshot = PostMatchRewardSnapshot.staticSnapshot(session: session, user: beforeUser)
         }
     }
 
@@ -363,6 +377,7 @@ final class MultiplayerViewModel: ObservableObject {
         selectedWager = nil
         finishedSessionID = nil
         rewardErrorMessage = nil
+        rewardSnapshot = nil
         isForfeiting = false
     }
 

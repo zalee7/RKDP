@@ -14,6 +14,88 @@ enum SessionResult: String, Codable {
     case abandoned
 }
 
+struct PostMatchRewardSnapshot {
+    var sessionID: String
+    var startingCoins: Int
+    var endingCoins: Int
+    var coinDelta: Int
+    var startingRank: RankInfo
+    var endingRank: RankInfo
+    var rankDelta: Int
+    var didPromote: Bool
+    var didDemote: Bool
+    var mode: GameMode
+    var difficulty: Difficulty
+    var outcome: SessionResult
+    var shouldAnimate: Bool
+
+    static func make(
+        session: GameSession,
+        userID: String,
+        before: AppUser,
+        after: AppUser,
+        didApplyRewards: Bool
+    ) -> PostMatchRewardSnapshot {
+        let startingRank = before.rank(for: session.mode)
+        let endingRank = after.rank(for: session.mode)
+        let startingPosition = rankPosition(startingRank)
+        let endingPosition = rankPosition(endingRank)
+        let outcome = session.result(for: userID) ?? .draw
+        return PostMatchRewardSnapshot(
+            sessionID: session.id,
+            startingCoins: before.coins,
+            endingCoins: after.coins,
+            coinDelta: after.coins - before.coins,
+            startingRank: startingRank,
+            endingRank: endingRank,
+            rankDelta: endingRank.points - startingRank.points,
+            didPromote: endingPosition > startingPosition,
+            didDemote: endingPosition < startingPosition,
+            mode: session.mode,
+            difficulty: session.difficulty,
+            outcome: outcome,
+            shouldAnimate: didApplyRewards
+        )
+    }
+
+    static func staticSnapshot(session: GameSession, user: AppUser) -> PostMatchRewardSnapshot {
+        let rank = user.rank(for: session.mode)
+        let outcome = session.result(for: user.id) ?? .draw
+        let wager = session.players.first(where: { $0.userID == user.id })?.wager ?? 0
+        let coinDelta: Int
+        switch outcome {
+        case .win: coinDelta = session.totalPot
+        case .loss, .abandoned: coinDelta = -wager
+        case .draw: coinDelta = 0
+        }
+        return PostMatchRewardSnapshot(
+            sessionID: session.id,
+            startingCoins: user.coins,
+            endingCoins: user.coins,
+            coinDelta: coinDelta,
+            startingRank: rank,
+            endingRank: rank,
+            rankDelta: RankingService.rankDelta(
+                for: user.id,
+                mode: session.mode,
+                difficulty: session.difficulty,
+                winnerID: session.winnerID,
+                players: session.players
+            ),
+            didPromote: false,
+            didDemote: false,
+            mode: session.mode,
+            difficulty: session.difficulty,
+            outcome: outcome,
+            shouldAnimate: false
+        )
+    }
+
+    private static func rankPosition(_ rank: RankInfo) -> Int {
+        rank.tier.rawValue * 3 + rank.division.rawValue
+    }
+}
+
 struct MatchPlayer: Codable {
     var userID: String
     var username: String

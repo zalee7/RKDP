@@ -18,14 +18,23 @@ final class RankingService {
         let winnerReason: String
     }
 
+    struct AppliedPlayerOutcome {
+        let user: AppUser
+        let didApplyRewards: Bool
+    }
+
     func processOutcome(_ outcome: MatchOutcome) async throws {
         try await finishSessionIfNeeded(outcome)
     }
 
-    func applyFinishedSession(_ session: GameSession, for userID: String) async throws {
+    @discardableResult
+    func applyFinishedSession(_ session: GameSession, for userID: String) async throws -> AppliedPlayerOutcome {
         guard session.status == .finished,
-              session.players.contains(where: { $0.userID == userID }) else { return }
-        try await applyPlayerOutcome(session: session, userID: userID)
+              session.players.contains(where: { $0.userID == userID }) else {
+            let user = try await db.collection("users").document(userID).getDocument(as: AppUser.self)
+            return AppliedPlayerOutcome(user: user, didApplyRewards: false)
+        }
+        return try await applyPlayerOutcome(session: session, userID: userID)
     }
 
     static func rankDelta(
@@ -94,8 +103,8 @@ final class RankingService {
         }
     }
 
-    private func applyPlayerOutcome(session: GameSession, userID: String) async throws {
-        let updatedUser = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+    private func applyPlayerOutcome(session: GameSession, userID: String) async throws -> AppliedPlayerOutcome {
+        let appliedOutcome = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppliedPlayerOutcome, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
                 let userRef = self.db.collection("users").document(userID)
 
@@ -107,7 +116,7 @@ final class RankingService {
                 do {
                     var user = try transaction.getDocument(userRef).data(as: AppUser.self)
                     if user.appliedRankedOutcomes[session.id] == true {
-                        return user
+                        return AppliedPlayerOutcome(user: user, didApplyRewards: false)
                     }
 
                     let delta = Self.rankDelta(
@@ -151,22 +160,23 @@ final class RankingService {
 
                     let encodedUser = try Firestore.Encoder().encode(user)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)
-                    return user
+                    return AppliedPlayerOutcome(user: user, didApplyRewards: true)
                 } catch {
                     return fail(error)
                 }
             }, completion: { result, error in
                 if let error {
                     continuation.resume(throwing: error)
-                } else if let user = result as? AppUser {
-                    continuation.resume(returning: user)
+                } else if let outcome = result as? AppliedPlayerOutcome {
+                    continuation.resume(returning: outcome)
                 } else {
                     continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
                 }
             })
         }
 
-        syncLeaderboardEntry(for: updatedUser, mode: session.mode)
+        syncLeaderboardEntry(for: appliedOutcome.user, mode: session.mode)
+        return appliedOutcome
     }
 
     private func syncLeaderboardEntry(for user: AppUser, mode: GameMode) {

@@ -12,6 +12,7 @@ struct MatchmakingView: View {
     @State private var didNotifyFinished = false
     @State private var inMatchMusicEnabled = true
     @State private var showForfeitWarning = false
+    @State private var rewardAnimationFinished = false
     @Environment(\.dismiss) var dismiss
 
     private var wagerOptions: [WagerTier] {
@@ -62,7 +63,9 @@ struct MatchmakingView: View {
             vm.handleViewDisappeared()
         }
         .onChange(of: vm.finishedSessionID) { _, sessionID in
-            guard sessionID != nil, !didNotifyFinished else { return }
+            guard sessionID != nil else { return }
+            rewardAnimationFinished = false
+            guard !didNotifyFinished else { return }
             didNotifyFinished = true
             onMatchFinished()
         }
@@ -126,6 +129,7 @@ struct MatchmakingView: View {
                 Button {
                     guard let wager = selectedWager else { return }
                     didNotifyFinished = false
+                    rewardAnimationFinished = false
                     inMatchMusicEnabled = true
                     Task { await vm.startSearch(user: user, mode: mode, difficulty: difficulty, wager: wager) }
                 } label: {
@@ -349,18 +353,12 @@ struct MatchmakingView: View {
     private func resultView(session: GameSession) -> some View {
         let isWinner = session.winnerID == user.id
         let isDraw   = session.winnerID == nil
-        let rankDelta = RankingService.rankDelta(
-            for: user.id,
-            mode: session.mode,
-            difficulty: session.difficulty,
-            winnerID: session.winnerID,
-            players: session.players
-        )
-
         let results      = session.playerResults ?? vm.playerResults
         let myResult     = results[user.id]
         let opponentID   = session.players.first(where: { $0.userID != user.id })?.userID ?? ""
         let opponentResult = results[opponentID]
+        let snapshot = vm.rewardSnapshot ?? PostMatchRewardSnapshot.staticSnapshot(session: session, user: user)
+        let controlsReady = rewardAnimationFinished || !snapshot.shouldAnimate
 
         return VStack(spacing: 20) {
             Spacer()
@@ -385,31 +383,11 @@ struct MatchmakingView: View {
 
                 Divider()
 
-                HStack(spacing: 0) {
-                    VStack(spacing: 2) {
-                        Text("Rank Points").font(.caption).foregroundStyle(AppTheme.textSecondary)
-                        Text("\(rankDelta >= 0 ? "+" : "")\(rankDelta)")
-                            .font(.title3.bold())
-                            .foregroundStyle(rankDelta >= 0 ? AppTheme.success : AppTheme.danger)
-                        if let adjustmentLabel = rankAdjustmentLabel(session: session) {
-                            Text(adjustmentLabel)
-                                .font(.system(size: 10))
-                                .foregroundStyle(AppTheme.crownGold)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    if let wager = vm.selectedWager {
-                        Divider().frame(height: 40)
-                        let coinDelta = isDraw ? 0 : (isWinner ? wager.amount : -wager.amount)
-                        VStack(spacing: 2) {
-                            Text("Coins").font(.caption).foregroundStyle(AppTheme.textSecondary)
-                            Text("\(coinDelta >= 0 ? "+" : "")\(coinDelta)")
-                                .font(.title3.bold())
-                                .foregroundStyle(coinDelta >= 0 ? AppTheme.success : AppTheme.danger)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
+                PostMatchRewardPanel(
+                    snapshot: snapshot,
+                    adjustmentLabel: rankAdjustmentLabel(session: session)
+                ) {
+                    rewardAnimationFinished = true
                 }
                 .padding(.vertical, 10)
             }
@@ -444,9 +422,12 @@ struct MatchmakingView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
             }
             .padding(.horizontal)
+            .opacity(controlsReady ? 1 : 0.36)
+            .disabled(!controlsReady)
 
             Button {
                 didNotifyFinished = false
+                rewardAnimationFinished = false
                 vm.reset()
             } label: {
                 Text("Play Again")
@@ -456,8 +437,13 @@ struct MatchmakingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
+            .opacity(controlsReady ? 1 : 0.36)
+            .disabled(!controlsReady)
 
-            Button("Back to Home") { dismiss() }.foregroundStyle(.secondary)
+            Button("Back to Home") { dismiss() }
+                .foregroundStyle(.secondary)
+                .opacity(controlsReady ? 1 : 0.36)
+                .disabled(!controlsReady)
             Spacer()
         }
         .onAppear { SoundManager.shared.stopAllLoops() }
@@ -524,6 +510,229 @@ struct MatchmakingView: View {
             Button("Retry") { vm.reset() }
         }
         .padding()
+    }
+}
+
+
+struct PostMatchRewardPanel: View {
+    let snapshot: PostMatchRewardSnapshot
+    let adjustmentLabel: String?
+    let onAnimationFinished: () -> Void
+
+    @State private var displayedCoins = 0
+    @State private var displayedRankProgress = 0.0
+    @State private var coinsArrived = false
+    @State private var showEndingRank = false
+    @State private var rankPulse = false
+    @State private var hasStarted = false
+
+    private var displayedRank: RankInfo { showEndingRank ? snapshot.endingRank : snapshot.startingRank }
+    private var coinSpriteCount: Int { min(16, max(8, abs(snapshot.coinDelta) / 5)) }
+    private var rankGain: Bool { snapshot.rankDelta >= 0 }
+    private var rankColor: Color { rankGain ? AppTheme.success : AppTheme.danger }
+    private var transitionLabel: String? {
+        if snapshot.didPromote { return "Promoted" }
+        if snapshot.didDemote { return "Demoted" }
+        return nil
+    }
+    private var animationIdentity: String {
+        "\(snapshot.sessionID)-\(snapshot.shouldAnimate)-\(snapshot.startingCoins)-\(snapshot.endingCoins)-\(snapshot.rankDelta)"
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
+                    balanceChip
+                    Spacer()
+                    coinDeltaBlock
+                }
+
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        RankIconView(
+                            tier: displayedRank.tier,
+                            division: displayedRank.division,
+                            size: rankPulse ? 42 : 34
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(displayedRank.fullDisplayName)
+                                .font(.headline.bold())
+                                .foregroundStyle(displayedRank.tier.color)
+                            Text("\(snapshot.startingRank.points) -> \(snapshot.endingRank.points) pts")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("Rank Points")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                            Text(deltaText(snapshot.rankDelta))
+                                .font(.title3.bold())
+                                .foregroundStyle(rankColor)
+                        }
+                    }
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.14))
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(rankGain ? AppTheme.brandGradient : LinearGradient(colors: [AppTheme.danger, AppTheme.hotPink], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: max(7, geo.size.width * displayedRankProgress))
+                                .shadow(color: rankColor.opacity(rankPulse ? 0.75 : 0.28), radius: rankPulse ? 10 : 4)
+                        }
+                    }
+                    .frame(height: 8)
+
+                    HStack {
+                        if let adjustmentLabel {
+                            Text(adjustmentLabel)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(AppTheme.crownGold)
+                        }
+                        Spacer()
+                        if let transitionLabel {
+                            Text(transitionLabel.uppercased())
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundStyle(snapshot.didPromote ? AppTheme.crownGold : AppTheme.danger)
+                                .opacity(showEndingRank ? 1 : 0)
+                        }
+                    }
+                }
+            }
+            .padding(14)
+
+            coinSprites
+        }
+        .task(id: animationIdentity) {
+            hasStarted = false
+            await runAnimation()
+        }
+    }
+
+    private var balanceChip: some View {
+        HStack(spacing: 6) {
+            CoinIconView(size: 22)
+                .scaleEffect(coinsArrived && snapshot.coinDelta >= 0 ? 1.18 : 1)
+            Text("\(displayedCoins)")
+                .font(.headline.bold())
+                .monospacedDigit()
+                .foregroundStyle(AppTheme.textPrimary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(AppTheme.cardBackground)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var coinDeltaBlock: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("Coins")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(deltaText(snapshot.coinDelta))
+                .font(.title3.bold())
+                .foregroundStyle(snapshot.coinDelta >= 0 ? AppTheme.success : AppTheme.danger)
+        }
+    }
+
+    @ViewBuilder
+    private var coinSprites: some View {
+        if snapshot.coinDelta != 0 && snapshot.shouldAnimate {
+            ForEach(0..<coinSpriteCount, id: \.self) { index in
+                CoinIconView(size: 15)
+                    .scaleEffect(coinsArrived ? 0.34 : 1)
+                    .opacity(coinsArrived ? 0 : 1)
+                    .offset(coinOffset(index: index, arrived: coinsArrived))
+                    .animation(
+                        .interpolatingSpring(stiffness: 90, damping: 13)
+                            .delay(Double(index) * 0.035),
+                        value: coinsArrived
+                    )
+            }
+        }
+    }
+
+    private func coinOffset(index: Int, arrived: Bool) -> CGSize {
+        if snapshot.coinDelta > 0 {
+            let startX = CGFloat(210 + (index % 4) * 18)
+            let startY = CGFloat(36 + (index / 4) * 16)
+            return arrived ? CGSize(width: 22, height: 9) : CGSize(width: startX, height: startY)
+        } else {
+            let endX = CGFloat(130 + (index % 5) * 30)
+            let endY = CGFloat(96 + (index / 5) * 22)
+            return arrived ? CGSize(width: endX, height: endY) : CGSize(width: 22, height: 9)
+        }
+    }
+
+    private func runAnimation() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+        displayedCoins = snapshot.startingCoins
+        displayedRankProgress = startingBarProgress
+        showEndingRank = false
+        coinsArrived = false
+        rankPulse = false
+
+        guard snapshot.shouldAnimate else {
+            displayedCoins = snapshot.endingCoins
+            displayedRankProgress = rankProgress(snapshot.endingRank)
+            showEndingRank = true
+            onAnimationFinished()
+            return
+        }
+
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        withAnimation(.easeOut(duration: 0.85)) { coinsArrived = true }
+        await countCoins()
+
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        withAnimation(.easeInOut(duration: 0.95)) {
+            displayedRankProgress = endingBarProgress
+        }
+        try? await Task.sleep(nanoseconds: 950_000_000)
+
+        showEndingRank = true
+        displayedRankProgress = rankProgress(snapshot.endingRank)
+        if snapshot.didPromote || snapshot.didDemote {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.48)) {
+                rankPulse = true
+            }
+            try? await Task.sleep(nanoseconds: 550_000_000)
+            withAnimation(.easeOut(duration: 0.25)) { rankPulse = false }
+        }
+        onAnimationFinished()
+    }
+
+    private func countCoins() async {
+        let steps = max(1, min(18, abs(snapshot.coinDelta)))
+        for step in 1...steps {
+            displayedCoins = snapshot.startingCoins + Int(Double(snapshot.coinDelta) * Double(step) / Double(steps))
+            try? await Task.sleep(nanoseconds: 42_000_000)
+        }
+        displayedCoins = snapshot.endingCoins
+    }
+
+    private var startingBarProgress: Double { rankProgress(snapshot.startingRank) }
+
+    private var endingBarProgress: Double {
+        if snapshot.didPromote { return 1 }
+        if snapshot.didDemote { return 0 }
+        return rankProgress(snapshot.endingRank)
+    }
+
+    private func rankProgress(_ rank: RankInfo) -> Double {
+        guard let next = RankTier(rawValue: rank.tier.rawValue + 1) else { return 1 }
+        let span = max(1, next.pointsRequired - rank.tier.pointsRequired)
+        let progress = Double(rank.points - rank.tier.pointsRequired) / Double(span)
+        return max(0, min(1, progress))
+    }
+
+    private func deltaText(_ value: Int) -> String {
+        "\(value >= 0 ? "+" : "")\(value)"
     }
 }
 
