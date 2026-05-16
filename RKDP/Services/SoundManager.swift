@@ -29,7 +29,7 @@ final class SoundManager {
     }
 
     func playMatchmakingLoop() {
-        playLoop(.matchmaking, volume: 0.35)
+        playLoop(.matchmaking, volume: 0.46)
     }
 
     func stopMatchmakingLoop() {

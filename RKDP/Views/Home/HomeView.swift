@@ -154,11 +154,11 @@ private struct HomeGameCategorySection: View {
                         GameModeCardView(mode: mode, user: user) {
                             onSelect(mode)
                         }
-                        .frame(width: 204, height: 218)
+                        .frame(width: 204, height: 248)
                     }
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 2)
+                .padding(.vertical, 8)
             }
         }
     }
