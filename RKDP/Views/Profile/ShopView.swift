@@ -2,12 +2,14 @@ import SwiftUI
 
 struct ShopView: View {
     let user: AppUser
+    var onUserChanged: () -> Void = {}
     @StateObject private var vm: ShopViewModel
     @State private var selectedCategory: CosmeticCategory = .title
     @Environment(\.dismiss) var dismiss
 
-    init(user: AppUser) {
+    init(user: AppUser, onUserChanged: @escaping () -> Void = {}) {
         self.user = user
+        self.onUserChanged = onUserChanged
         _vm = StateObject(wrappedValue: ShopViewModel(user: user))
     }
 
@@ -20,7 +22,7 @@ struct ShopView: View {
                     Label("Balance:", systemImage: "circle.fill")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
-                    CoinBadgeView(amount: user.coins)
+                    CoinBadgeView(amount: vm.user.coins)
                     Spacer()
                 }
                 .padding(.vertical, 10)
@@ -66,10 +68,7 @@ struct ShopView: View {
                                     canAfford: vm.canAfford(item),
                                     isLimited: false
                                 ) {
-                                    Task {
-                                        if vm.isOwned(item) { vm.equip(item) }
-                                        else { await vm.purchase(item) }
-                                    }
+                                    Task { await handleShopAction(item) }
                                 }
                             }
                         }
@@ -83,12 +82,28 @@ struct ShopView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .tint(AppTheme.accentBright)
-            .alert("Error", isPresented: .constant(vm.errorMessage != nil)) {
+            .alert(
+                "Shop update failed",
+                isPresented: Binding(
+                    get: { vm.errorMessage != nil },
+                    set: { if !$0 { vm.errorMessage = nil } }
+                )
+            ) {
                 Button("OK") { vm.errorMessage = nil }
             } message: {
                 Text(vm.errorMessage ?? "")
             }
         }
+    }
+
+    private func handleShopAction(_ item: CosmeticItem) async {
+        let changed: Bool
+        if vm.isOwned(item) {
+            changed = await vm.equip(item)
+        } else {
+            changed = await vm.purchase(item)
+        }
+        if changed { onUserChanged() }
     }
 
     @ViewBuilder
@@ -112,10 +127,7 @@ struct ShopView: View {
                             canAfford: vm.canAfford(item),
                             isLimited: item.price > 0
                         ) {
-                            Task {
-                                if vm.isOwned(item) { vm.equip(item) }
-                                else { await vm.purchase(item) }
-                            }
+                            Task { await handleShopAction(item) }
                         }
                     }
                 }
@@ -136,7 +148,7 @@ struct ShopView: View {
                             isEquipped: vm.isEquipped(item),
                             canAfford: true,
                             isLimited: false
-                        ) { vm.equip(item) }
+                        ) { Task { await handleShopAction(item) } }
                     }
                 }
                 .padding(.horizontal)
@@ -214,6 +226,9 @@ struct ShopItemCard: View {
                                 .multilineTextAlignment(.center)
                                 .padding(8)
                         )
+                } else if item.category == .boardTheme {
+                    ShopThemePreview(themeID: item.id)
+                        .frame(height: 72)
                 } else {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(AppTheme.cardBackground)
@@ -268,9 +283,62 @@ struct ShopItemCard: View {
     private func iconForCategory(_ cat: CosmeticCategory) -> String {
         switch cat {
         case .title:       return "text.badge.star"
-        case .boardTheme:  return "square.grid.3x3.fill"
+        case .boardTheme:  return "paintpalette.fill"
         case .numberFont:  return "textformat"
         case .cellBorder:  return "rectangle.inset.filled"
         }
+    }
+}
+
+private struct ShopThemePreview: View {
+    let themeID: String
+
+    private var style: BoardThemeStyle {
+        var cosmetics = OwnedCosmetics.default
+        cosmetics.equippedBoardTheme = themeID
+        return cosmetics.themeStyle
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(style.tileGradient)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.72), lineWidth: 1.5)
+            )
+            .overlay(
+                VStack(spacing: 5) {
+                    HStack(spacing: 5) {
+                        previewCell(opacity: 0.95)
+                        previewCell(opacity: 0.72)
+                        previewCell(opacity: 0.95)
+                    }
+                    HStack(spacing: 5) {
+                        previewCell(opacity: 0.72)
+                        Circle()
+                            .fill(style.activeTraceColor)
+                            .frame(width: 13, height: 13)
+                            .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                        previewCell(opacity: 0.72)
+                    }
+                    HStack(spacing: 5) {
+                        previewCell(opacity: 0.95)
+                        previewCell(opacity: 0.72)
+                        previewCell(opacity: 0.95)
+                    }
+                }
+                .padding(10)
+            )
+            .shadow(color: style.activeTraceColor.opacity(0.28), radius: 8, x: 0, y: 4)
+    }
+
+    private func previewCell(opacity: Double) -> some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(style.cellBackground.opacity(opacity))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(style.gridLineMinor, lineWidth: 1)
+            )
+            .frame(width: 16, height: 16)
     }
 }

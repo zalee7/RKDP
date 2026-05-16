@@ -68,6 +68,35 @@ struct CoinIconView: View {
     }
 }
 
+struct RecordTextView: View {
+    let wins: Int?
+    let losses: Int?
+    var prefix: String = ""
+    var font: Font = .caption.bold()
+
+    var body: some View {
+        HStack(spacing: 2) {
+            if !prefix.isEmpty {
+                Text(prefix)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            if let wins, let losses {
+                Text("\(wins)")
+                    .foregroundStyle(AppTheme.success)
+                Text("-")
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text("\(losses)")
+                    .foregroundStyle(AppTheme.danger)
+            } else {
+                Text("--")
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+        .font(font)
+        .monospacedDigit()
+    }
+}
+
 struct NumberPadView: View {
     let size: Int        // max digit or board size for number-pad games
     let onDigit: (Int) -> Void

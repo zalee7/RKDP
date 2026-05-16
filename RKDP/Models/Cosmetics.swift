@@ -65,16 +65,60 @@ extension OwnedCosmetics {
                 tileGradient: LinearGradient(colors: [Color(hex: "FF0099"), Color(hex: "7700FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
                 activeTraceColor: Color(hex: "00FFFF")
             )
-        case "theme_gold":
+        case "theme_gold", "theme_crown_gold":
             return BoardThemeStyle(
                 cellBackground: Color(hex: "78350F").opacity(0.15),
-                selectedCell: Color(hex: "F59E0B").opacity(0.45),
-                highlightedCell: Color(hex: "FDE68A").opacity(0.15),
+                selectedCell: Color(hex: "FFD02E").opacity(0.45),
+                highlightedCell: Color(hex: "FFF0A3").opacity(0.18),
                 invalidCell: Color.red.opacity(0.25),
-                gridLineMajor: Color(hex: "F59E0B"),
-                gridLineMinor: Color(hex: "FDE68A").opacity(0.4),
-                tileGradient: LinearGradient(colors: [Color(hex: "D97706"), Color(hex: "F59E0B")], startPoint: .topLeading, endPoint: .bottomTrailing),
-                activeTraceColor: Color(hex: "FDE68A")
+                gridLineMajor: Color(hex: "FFD02E"),
+                gridLineMinor: Color(hex: "FFF0A3").opacity(0.42),
+                tileGradient: LinearGradient(colors: [Color(hex: "FFD02E"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFF0A3")
+            )
+        case "theme_color_link":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "083B5F").opacity(0.18),
+                selectedCell: Color(hex: "12C8A2").opacity(0.42),
+                highlightedCell: Color(hex: "FF2F78").opacity(0.16),
+                invalidCell: Color.red.opacity(0.25),
+                gridLineMajor: Color(hex: "12C8A2"),
+                gridLineMinor: Color.white.opacity(0.28),
+                tileGradient: LinearGradient(colors: [Color(hex: "12C8A2"), Color(hex: "FF2F78"), Color(hex: "256BFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "12C8A2")
+            )
+        case "theme_grid_duel":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "123A7A").opacity(0.16),
+                selectedCell: Color(hex: "FFD02E").opacity(0.42),
+                highlightedCell: Color(hex: "168CFF").opacity(0.18),
+                invalidCell: Color.red.opacity(0.25),
+                gridLineMajor: Color(hex: "FFD02E"),
+                gridLineMinor: Color(hex: "168CFF").opacity(0.4),
+                tileGradient: LinearGradient(colors: [Color(hex: "FFD02E"), Color(hex: "168CFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
+            )
+        case "theme_word_neon":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "24104F").opacity(0.2),
+                selectedCell: Color(hex: "FF2F78").opacity(0.44),
+                highlightedCell: Color(hex: "7B42FF").opacity(0.22),
+                invalidCell: Color.red.opacity(0.3),
+                gridLineMajor: Color(hex: "FF2F78"),
+                gridLineMinor: Color(hex: "39D5FF").opacity(0.35),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF"), Color(hex: "39D5FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "39D5FF")
+            )
+        case "theme_mine_pulse":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "28091B").opacity(0.2),
+                selectedCell: Color(hex: "FF4A7D").opacity(0.45),
+                highlightedCell: Color(hex: "FFD02E").opacity(0.18),
+                invalidCell: Color(hex: "FF4A7D").opacity(0.35),
+                gridLineMajor: Color(hex: "FF4A7D"),
+                gridLineMinor: Color(hex: "FFD02E").opacity(0.35),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF4A7D"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
             )
         default: // theme_classic
             return BoardThemeStyle(
@@ -117,7 +161,7 @@ extension EnvironmentValues {
 
 enum CosmeticCategory: String, Codable, CaseIterable {
     case title       = "Titles"
-    case boardTheme  = "Board Theme"
+    case boardTheme  = "Game Theme"
     case numberFont  = "Number Style"
     case cellBorder  = "Cell Border"
 }
@@ -145,6 +189,15 @@ struct OwnedCosmetics: Codable {
         equippedNumberFont: "font_default",
         equippedCellBorder: "border_default"
     )
+
+    mutating func equip(_ item: CosmeticItem) {
+        switch item.category {
+        case .title:       equippedTitle = item.id
+        case .boardTheme:  equippedBoardTheme = item.id
+        case .numberFont:  equippedNumberFont = item.id
+        case .cellBorder:  equippedCellBorder = item.id
+        }
+    }
 }
 
 // MARK: - Daily rotation
@@ -210,12 +263,17 @@ struct CosmeticCatalog {
     ]
 
     static let boardThemes: [CosmeticItem] = [
-        CosmeticItem(id: "theme_classic",   name: "Classic",      category: .boardTheme,  price: 0,    previewImageName: "theme_classic",   description: "The default clean look."),
-        CosmeticItem(id: "theme_dark",      name: "Dark Mode",    category: .boardTheme,  price: 200,  previewImageName: "theme_dark",      description: "Sleek dark grid on OLED-friendly black."),
-        CosmeticItem(id: "theme_ocean",     name: "Ocean",        category: .boardTheme,  price: 350,  previewImageName: "theme_ocean",     description: "Cool blues with wave-ripple highlights."),
-        CosmeticItem(id: "theme_forest",    name: "Forest",       category: .boardTheme,  price: 350,  previewImageName: "theme_forest",    description: "Earthy greens and wood-brown cells."),
-        CosmeticItem(id: "theme_neon",      name: "Neon",         category: .boardTheme,  price: 600,  previewImageName: "theme_neon",      description: "Vibrant neon glow on dark backgrounds."),
-        CosmeticItem(id: "theme_gold",      name: "Gold Edition", category: .boardTheme,  price: 1500, previewImageName: "theme_gold",      description: "Premium gold-leaf grid for Master-tier players."),
+        CosmeticItem(id: "theme_classic",    name: "Classic",     category: .boardTheme, price: 0,    previewImageName: "theme_classic",    description: "The default clean look."),
+        CosmeticItem(id: "theme_dark",       name: "Dark Mode",   category: .boardTheme, price: 200,  previewImageName: "theme_dark",       description: "Sleek dark panels for focused puzzle runs."),
+        CosmeticItem(id: "theme_ocean",      name: "Ocean",       category: .boardTheme, price: 350,  previewImageName: "theme_ocean",      description: "Cool blues for calm grid solving."),
+        CosmeticItem(id: "theme_forest",     name: "Forest",      category: .boardTheme, price: 350,  previewImageName: "theme_forest",     description: "Earthy greens for quiet board play."),
+        CosmeticItem(id: "theme_neon",       name: "Neon",        category: .boardTheme, price: 600,  previewImageName: "theme_neon",       description: "Arcade glow for fast ranked matches."),
+        CosmeticItem(id: "theme_gold",       name: "Gold Edition", category: .boardTheme, price: 1500, previewImageName: "theme_gold",       description: "Premium gold-leaf styling for top ranks."),
+        CosmeticItem(id: "theme_color_link", name: "Color Link",  category: .boardTheme, price: 700,  previewImageName: "theme_color_link", description: "Teal, pink, and blue path energy."),
+        CosmeticItem(id: "theme_grid_duel",  name: "Grid Duel",   category: .boardTheme, price: 700,  previewImageName: "theme_grid_duel",  description: "Gold and blue symmetry-board shine."),
+        CosmeticItem(id: "theme_word_neon",  name: "Word Neon",   category: .boardTheme, price: 650,  previewImageName: "theme_word_neon",  description: "Hot word-game glow with electric accents."),
+        CosmeticItem(id: "theme_mine_pulse", name: "Mine Pulse",  category: .boardTheme, price: 650,  previewImageName: "theme_mine_pulse", description: "Pink and gold hazard-board contrast."),
+        CosmeticItem(id: "theme_crown_gold", name: "Crown Gold",  category: .boardTheme, price: 1200, previewImageName: "theme_crown_gold", description: "Icon-inspired crown gold with jewel pink."),
     ]
 
     static let numberFonts: [CosmeticItem] = [

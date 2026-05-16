@@ -13,19 +13,26 @@ struct HomeView: View {
                 AppTheme.backgroundGradient.ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 18) {
+                        HomeBrandHeader()
                         if let user = auth.user { userHeader(user: user) }
 
-                        HStack {
-                            Text("Choose Your Game")
-                                .font(.title2.bold())
-                                .foregroundStyle(AppTheme.textPrimary)
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Choose Your Game")
+                                    .font(.headline.bold())
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                Text("Pick a mode, practice, or queue ranked")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            }
                             Spacer()
                             Button { showHowToPlay = true } label: {
                                 Image(systemName: "questionmark.circle.fill")
-                                    .font(.title3)
+                                    .font(.title2)
                                     .foregroundStyle(AppTheme.accentBright)
                             }
+                            .accessibilityLabel("How to play")
                         }
                         .padding(.horizontal)
 
@@ -55,9 +62,6 @@ struct HomeView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("GridDuel").font(.headline.bold()).foregroundStyle(AppTheme.textPrimary)
-                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showShop = true } label: {
                         Image(systemName: "bag.fill").foregroundStyle(AppTheme.accentBright)
@@ -78,7 +82,11 @@ struct HomeView: View {
                 if let user = auth.user { ProfileView(user: user).environmentObject(auth) }
             }
             .sheet(isPresented: $showShop) {
-                if let user = auth.user { ShopView(user: user) }
+                if let user = auth.user {
+                    ShopView(user: user) {
+                        Task { await auth.refreshUser() }
+                    }
+                }
             }
             .sheet(isPresented: $showHowToPlay) { HowToPlayView() }
         }
@@ -99,6 +107,24 @@ struct HomeView: View {
             }
             Spacer()
         }
+        .padding(.horizontal)
+    }
+}
+
+private struct HomeBrandHeader: View {
+    var body: some View {
+        VStack(spacing: 3) {
+            Text("Grid Duel")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(AppTheme.brandGradient)
+                .shadow(color: AppTheme.crownGold.opacity(0.32), radius: 12, x: 0, y: 4)
+            Text("Ranked Puzzle Arena")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+                .textCase(.uppercase)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 6)
         .padding(.horizontal)
     }
 }
@@ -612,9 +638,11 @@ struct RankProgressMiniView: View {
                     .font(.caption.bold())
                     .foregroundStyle(info.tier.color)
             }
-            Text(info.recordDisplay)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AppTheme.textSecondary)
+            RecordTextView(
+                wins: info.wins,
+                losses: info.losses,
+                font: .system(size: 10, weight: .semibold)
+            )
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.13)).frame(height: 3)

@@ -208,9 +208,12 @@ struct MatchmakingView: View {
                         Text(oppRank.fullDisplayName)
                             .font(.subheadline.bold())
                             .foregroundStyle(opp.rankTier.color)
-                        Text("W/L \(liveRank?.recordDisplay ?? "--")")
-                            .font(.caption.bold())
-                            .foregroundStyle(AppTheme.textSecondary)
+                        RecordTextView(
+                            wins: liveRank?.wins,
+                            losses: liveRank?.losses,
+                            prefix: "W/L ",
+                            font: .caption.bold()
+                        )
                     }
                 }
             }

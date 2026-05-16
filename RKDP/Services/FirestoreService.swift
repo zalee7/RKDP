@@ -1,6 +1,20 @@
 import Foundation
 import FirebaseFirestore
 
+enum FirestoreServiceError: LocalizedError {
+    case insufficientCoins
+    case missingUpdatedUser
+
+    var errorDescription: String? {
+        switch self {
+        case .insufficientCoins:
+            return "You do not have enough coins for that item."
+        case .missingUpdatedUser:
+            return "Could not refresh your shop purchase. Please try again."
+        }
+    }
+}
+
 final class FirestoreService {
     static let shared = FirestoreService()
     private let db = Firestore.firestore()
@@ -30,6 +44,43 @@ final class FirestoreService {
     func updateCosmetics(userID: String, cosmetics: OwnedCosmetics) async throws {
         let encoded = try Firestore.Encoder().encode(cosmetics)
         try await db.collection("users").document(userID).updateData(["cosmetics": encoded])
+    }
+
+    func purchaseCosmetic(userID: String, item: CosmeticItem) async throws -> AppUser {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    if !user.cosmetics.purchasedIDs.contains(item.id) {
+                        guard user.coins >= item.price else { return fail(FirestoreServiceError.insufficientCoins) }
+                        user.coins -= item.price
+                        user.cosmetics.purchasedIDs.insert(item.id)
+                    }
+                    user.cosmetics.equip(item)
+
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
     }
 
     // MARK: - Rankings / Leaderboards
