@@ -274,14 +274,9 @@ extension Difficulty {
             case .expert: return 600
             }
         case .anagram:
-            return AnagramGame.totalSeconds(for: self)
+            return 60
         case .wordHunt:
-            switch self {
-            case .easy: return 120
-            case .medium: return 90
-            case .hard: return 75
-            case .expert: return 60
-            }
+            return 75
         case .wordle:
             return 0
         }
