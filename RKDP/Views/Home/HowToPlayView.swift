@@ -85,7 +85,7 @@ struct HowToPlayView: View {
                         HStack {
                             Text(mode.difficultyLabel(d)).font(.subheadline.bold()).foregroundStyle(.white)
                             Spacer()
-                            Text("×\(String(format: "%.1f", mode.pointMultiplier(for: d))) points").font(.caption).foregroundStyle(.white.opacity(0.6))
+                            Text("\(String(format: "%.1f", mode.pointMultiplier(for: d)))x ranked points").font(.caption).foregroundStyle(.white.opacity(0.6))
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color.white.opacity(0.07))
@@ -118,8 +118,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players receive the same generated puzzle.",
-                    "First to correctly complete it wins.",
-                    "Winner takes the full coin pot and earns rank points.",
+                    "Completion beats incomplete boards.",
+                    "If both complete, faster time wins; on timeout, valid progress decides.",
                 ]),
             ]
         case .minesweeper:
@@ -137,8 +137,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get identically seeded boards.",
-                    "Fastest clear wins. Exploding loses immediately.",
-                    "Higher grid sizes award more rank points.",
+                    "Hitting a mine loses against an opponent who stays safe.",
+                    "Otherwise, clears win; safe cells and time break remaining ties.",
                 ]),
             ]
         case .colorLink:
@@ -155,8 +155,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same seeded board.",
-                    "A completed full board wins.",
-                    "If neither player finishes, higher board fill wins before solved pair count.",
+                    "Completed full boards beat incomplete boards.",
+                    "If neither player finishes, board fill wins before solved pair count and time.",
                 ]),
             ]
         case .gridlock:
@@ -180,20 +180,20 @@ struct HowToPlayView: View {
         case .anagram:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "You and your opponent receive the same scrambled word.",
-                    "Unscramble it correctly before your opponent does.",
-                    "Longer words and harder difficulties award more rank points.",
+                    "Use the letter set to make as many valid words as possible.",
+                    "Longer words score more points.",
+                    "The match ends when the timer expires.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
-                    "Tap letter tiles in the bank to move them to your answer row.",
+                    "Tap letter tiles to build a word.",
                     "Tap a placed tile to return it to the bank.",
-                    "Use Shuffle to randomise the bank order for a fresh look.",
-                    "Hit Submit when you have your answer — wrong guesses add 5s.",
-                    "Tap the lightbulb to reveal a one-line hint.",
+                    "Use Shuffle to randomize the bank order for a fresh look.",
+                    "Submit valid words to add them to your score.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "First correct answer wins the coin pot.",
-                    "Wrong submissions add a 5-second penalty to your time.",
+                    "Both players get the same seeded letters.",
+                    "Highest score when the timer ends wins.",
+                    "Ties use word count, then longest word.",
                 ]),
             ]
         case .wordHunt:
@@ -211,8 +211,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same 4×4 grid.",
-                    "After 90 seconds whoever found more total points wins.",
-                    "Ties go to the player who found the most distinct words.",
+                    "Highest score when the timer ends wins.",
+                    "Ties use word count, then longest word.",
                 ]),
             ]
         case .wordle:
@@ -275,7 +275,7 @@ struct RankGuideView: View {
                     infoRow(icon: "xmark.circle.fill",    color: .red,    text: "Loss: −15 pts (×difficulty multiplier)")
                     infoRow(icon: "equal.circle.fill",    color: .blue,   text: "Draw: +5 pts")
                     infoRow(icon: "arrow.left.circle.fill", color: .orange, text: "Abandon: −20 pts")
-                    infoRow(icon: "clock.fill",           color: .purple, text: "Faster solves earn the same points — speed just wins the pot")
+                    infoRow(icon: "clock.fill",           color: .purple, text: "Difficulty and opponent division set rank points; time is a tie-breaker in some modes")
                 }
                 .padding()
                 .background(Color.white.opacity(0.07))
