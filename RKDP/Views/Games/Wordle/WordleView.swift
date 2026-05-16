@@ -76,10 +76,14 @@ struct WordleView: View {
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
+        .onChange(of: vm.roundResults.count) { _, count in
+            guard count > 0, sessionID != nil else { return }
+            reportMatchResult(isFinal: vm.isMatchOver)
+        }
         .onChange(of: vm.isMatchOver) { _, finished in
             if finished {
                 if sessionID == nil { reportSoloResult() }
-                reportMatchResult()
+                reportMatchResult(isFinal: true)
             }
         }
     }
@@ -276,9 +280,12 @@ struct WordleView: View {
         onSoloResult(result)
     }
 
-    private func reportMatchResult() {
-        guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
+    private func reportMatchResult(isFinal: Bool) {
+        guard sessionID != nil, let userID else { return }
+        if isFinal {
+            guard !didReportMatchResult else { return }
+            didReportMatchResult = true
+        }
         let solved = vm.roundResults.filter(\.solved)
         let totalGuesses = solved.reduce(0) { $0 + $1.guessCount }
         var summary: [String: String] = [
@@ -286,7 +293,8 @@ struct WordleView: View {
             "totalGuesses": "\(totalGuesses)",
             "failedRounds": "\(vm.roundResults.filter { !$0.solved }.count)",
             "roundCount": "\(vm.roundResults.count)",
-            "maxGuesses": "\(vm.maxGuesses)"
+            "maxGuesses": "\(vm.maxGuesses)",
+            "isFinal": isFinal ? "true" : "false"
         ]
         for (idx, result) in vm.roundResults.enumerated() {
             let round = idx + 1

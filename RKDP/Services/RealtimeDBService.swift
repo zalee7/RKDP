@@ -1,6 +1,12 @@
 import Foundation
 import FirebaseDatabase
 
+struct RematchUpdate {
+    let requests: Set<String>
+    let newSessionID: String?
+    let error: String?
+}
+
 // Manages live session state (move sync, ready signals, finish times)
 final class RealtimeDBService {
     static let shared = RealtimeDBService()
@@ -49,6 +55,45 @@ final class RealtimeDBService {
                 }
             }
             onUpdate(results)
+        }
+    }
+
+    // MARK: - Rematch
+
+    func requestRematch(sessionID: String, userID: String) async throws {
+        try await sessionRef(sessionID).child("rematch").child("requests").child(userID).setValue(true)
+    }
+
+    func cancelRematch(sessionID: String, userID: String) async throws {
+        try await sessionRef(sessionID).child("rematch").child("requests").child(userID).removeValue()
+    }
+
+    func publishRematchSessionID(oldSessionID: String, newSessionID: String) async throws {
+        try await sessionRef(oldSessionID).child("rematch").child("newSessionID").setValue(newSessionID)
+    }
+
+    func publishRematchError(sessionID: String, message: String) async throws {
+        try await sessionRef(sessionID).child("rematch").child("error").setValue(message)
+    }
+
+
+    func clearRematchError(sessionID: String) async throws {
+        try await sessionRef(sessionID).child("rematch").child("error").removeValue()
+    }
+
+    func listenForRematch(sessionID: String, onUpdate: @escaping (RematchUpdate) -> Void) -> DatabaseHandle {
+        sessionRef(sessionID).child("rematch").observe(.value) { snapshot in
+            let dict = snapshot.value as? [String: Any] ?? [:]
+            let rawRequests = dict["requests"] as? [String: Any] ?? [:]
+            let requests = Set(rawRequests.compactMap { key, value -> String? in
+                if let bool = value as? Bool, bool { return key }
+                return nil
+            })
+            onUpdate(RematchUpdate(
+                requests: requests,
+                newSessionID: dict["newSessionID"] as? String,
+                error: dict["error"] as? String
+            ))
         }
     }
 

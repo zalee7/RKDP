@@ -22,6 +22,10 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var finishedSessionID: String?
     @Published var rewardErrorMessage: String?
     @Published var rewardSnapshot: PostMatchRewardSnapshot?
+    @Published var rematchRequests: Set<String> = []
+    @Published var rematchErrorMessage: String?
+    @Published var isStartingRematch = false
+    @Published var dismissedRematchInviteSessionID: String?
     private var countdownTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
@@ -34,8 +38,10 @@ final class MultiplayerViewModel: ObservableObject {
     private var sessionListener: ListenerRegistration?
 
     // Realtime DB handles
-    private var rtdbHandles: [DatabaseHandle] = []
+    private var rtdbHandles: [(sessionID: String, handle: DatabaseHandle)] = []
     private var currentSessionID: String?
+    private var rematchListeningSessionID: String?
+    private var rematchPublishedSessionID: String?
     private var gameTimer: Timer?
     private var activeSearchID: UUID?
     private var isForfeiting = false
@@ -69,6 +75,7 @@ final class MultiplayerViewModel: ObservableObject {
         finishedSessionID = nil
         rewardErrorMessage = nil
         rewardSnapshot = nil
+        clearRematchState()
 
         self.user = user
         self.mode = mode
@@ -167,7 +174,7 @@ final class MultiplayerViewModel: ObservableObject {
                 self?.listenForSessionStatus(sessionID: session.id)
             }
         }
-        rtdbHandles.append(handle)
+        rtdbHandles.append((session.id, handle))
     }
 
     private func listenForSessionStatus(sessionID: String) {
@@ -177,7 +184,7 @@ final class MultiplayerViewModel: ObservableObject {
                 guard let self, session.status == .finished else { return }
                 self.gameTimer?.invalidate()
                 if let results = session.playerResults {
-                    self.playerResults = results
+                    self.playerResults = self.playerResults.merging(results) { _, sessionResult in sessionResult }
                 }
                 await self.applyFinishedRewards(session)
                 self.state = .finished(session: session)
@@ -187,7 +194,12 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func submitResult(_ result: MatchPlayerResult, session: GameSession) async {
-        guard result.userID == user?.id, playerResults[result.userID] == nil else { return }
+        guard result.userID == user?.id else { return }
+        if let existing = playerResults[result.userID] {
+            guard session.mode == .wordle,
+                  !existing.isFinalWordleResult,
+                  result.wordleRoundCount >= existing.wordleRoundCount else { return }
+        }
         do {
             try await rtdb.submitResult(sessionID: session.id, result: result)
             playerResults[result.userID] = result
@@ -205,7 +217,7 @@ final class MultiplayerViewModel: ObservableObject {
                 }
             }
         }
-        rtdbHandles.append(handle)
+        rtdbHandles.append((session.id, handle))
     }
 
     private func resolveMatch(session: GameSession, results: [String: MatchPlayerResult]) async {
@@ -311,6 +323,144 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+
+    func beginRematchListening(session: GameSession) {
+        guard session.status == .finished else { return }
+        if rematchListeningSessionID == session.id { return }
+        rematchListeningSessionID = session.id
+        rematchRequests = []
+        rematchErrorMessage = nil
+        dismissedRematchInviteSessionID = nil
+        rematchPublishedSessionID = nil
+
+        let handle = rtdb.listenForRematch(sessionID: session.id) { [weak self] update in
+            Task { @MainActor in
+                await self?.handleRematchUpdate(update, session: session)
+            }
+        }
+        rtdbHandles.append((session.id, handle))
+    }
+
+    func requestRematch(session: GameSession) async {
+        guard let user else { return }
+        guard let player = session.players.first(where: { $0.userID == user.id }) else { return }
+        guard user.coins >= player.wager else {
+            rematchErrorMessage = "Not enough coins for rematch."
+            return
+        }
+        beginRematchListening(session: session)
+        dismissedRematchInviteSessionID = nil
+        rematchErrorMessage = nil
+        do {
+            try? await rtdb.clearRematchError(sessionID: session.id)
+            try await rtdb.requestRematch(sessionID: session.id, userID: user.id)
+            rematchRequests.insert(user.id)
+        } catch {
+            rematchErrorMessage = error.localizedDescription
+        }
+    }
+
+    func cancelRematch(session: GameSession) async {
+        guard let userID = user?.id else { return }
+        do {
+            try await rtdb.cancelRematch(sessionID: session.id, userID: userID)
+            rematchRequests.remove(userID)
+        } catch {
+            rematchErrorMessage = error.localizedDescription
+        }
+    }
+
+    func declineRematch(session: GameSession) async {
+        dismissedRematchInviteSessionID = session.id
+        rematchErrorMessage = nil
+        try? await rtdb.publishRematchError(sessionID: session.id, message: "Rematch declined.")
+    }
+
+    private func handleRematchUpdate(_ update: RematchUpdate, session: GameSession) async {
+        rematchRequests = update.requests
+        if let error = update.error {
+            rematchErrorMessage = error
+            isStartingRematch = false
+            return
+        }
+        if let newSessionID = update.newSessionID {
+            await enterRematchSession(id: newSessionID)
+            return
+        }
+        guard shouldCreateRematch(from: session, requests: update.requests), !isStartingRematch else { return }
+        await createAndPublishRematch(from: session)
+    }
+
+    private func shouldCreateRematch(from session: GameSession, requests: Set<String>) -> Bool {
+        guard let userID = user?.id else { return false }
+        let playerIDs = session.players.map(\.userID)
+        guard playerIDs.count == 2, playerIDs.allSatisfy({ requests.contains($0) }) else { return false }
+        return userID == playerIDs.sorted().first
+    }
+
+    private func createAndPublishRematch(from session: GameSession) async {
+        guard rematchPublishedSessionID == nil else { return }
+        isStartingRematch = true
+        do {
+            let rematch = try await store.createRematchSession(from: session)
+            rematchPublishedSessionID = rematch.id
+            try await rtdb.publishRematchSessionID(oldSessionID: session.id, newSessionID: rematch.id)
+            await enterRematchSession(rematch)
+        } catch FirestoreServiceError.insufficientCoins {
+            let message = "Not enough coins for rematch."
+            rematchErrorMessage = message
+            try? await rtdb.publishRematchError(sessionID: session.id, message: message)
+            isStartingRematch = false
+        } catch {
+            rematchErrorMessage = error.localizedDescription
+            isStartingRematch = false
+        }
+    }
+
+    private func enterRematchSession(id sessionID: String) async {
+        guard rematchPublishedSessionID != sessionID else { return }
+        rematchPublishedSessionID = sessionID
+        do {
+            let session = try await store.fetchSession(id: sessionID)
+            await enterRematchSession(session)
+        } catch {
+            rematchErrorMessage = error.localizedDescription
+            isStartingRematch = false
+        }
+    }
+
+    private func enterRematchSession(_ session: GameSession) async {
+        guard let user, session.players.contains(where: { $0.userID == user.id }) else { return }
+        removeRealtimeObservers()
+        sessionListener?.remove()
+        sessionListener = nil
+        countdownTask?.cancel()
+        countdownTask = nil
+        gameTimer?.invalidate()
+        currentSessionID = session.id
+        rematchListeningSessionID = nil
+        rematchRequests = []
+        dismissedRematchInviteSessionID = nil
+        rematchErrorMessage = nil
+        isStartingRematch = false
+        playerResults = [:]
+        elapsedSeconds = 0
+        matchCountdown = 5
+        finishedSessionID = nil
+        rewardErrorMessage = nil
+        rewardSnapshot = nil
+        mode = session.mode
+        difficulty = session.difficulty
+        if let me = session.players.first(where: { $0.userID == user.id }) {
+            selectedWager = WagerTier(rank: user.rank(for: session.mode).displayTier, label: "Rematch", amount: me.wager)
+        }
+        if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
+            opponentUser = try? await store.fetchUser(id: opponentID)
+        }
+        state = .matchFound(session: session)
+        startMatchCountdown(session: session)
+    }
+
     private func applyFinishedRewards(_ session: GameSession) async {
         guard let beforeUser = user else { return }
         do {
@@ -352,6 +502,29 @@ final class MultiplayerViewModel: ObservableObject {
         sessionListener = nil
     }
 
+
+    private func removeRealtimeObservers() {
+        rtdbHandles.forEach { item in
+            rtdb.removeObserver(handle: item.handle, sessionID: item.sessionID)
+        }
+        rtdbHandles = []
+    }
+
+    private func cancelLocalRematchRequestIfNeeded() {
+        guard let sessionID = rematchListeningSessionID,
+              let userID = user?.id,
+              rematchRequests.contains(userID) else { return }
+        Task { try? await rtdb.cancelRematch(sessionID: sessionID, userID: userID) }
+    }
+
+    private func clearRematchState() {
+        rematchRequests = []
+        rematchErrorMessage = nil
+        isStartingRematch = false
+        dismissedRematchInviteSessionID = nil
+        rematchPublishedSessionID = nil
+    }
+
     func reset() {
         activeSearchID = nil
         tearDownListeners()
@@ -365,10 +538,10 @@ final class MultiplayerViewModel: ObservableObject {
                 try? await store.clearPendingSession(userID: user.id)
             }
         }
-        let sid = currentSessionID ?? ""
-        rtdbHandles.forEach { rtdb.removeObserver(handle: $0, sessionID: sid) }
-        rtdbHandles = []
+        cancelLocalRematchRequestIfNeeded()
+        removeRealtimeObservers()
         currentSessionID = nil
+        rematchListeningSessionID = nil
         gameTimer?.invalidate()
         state = .idle
         elapsedSeconds = 0
@@ -378,6 +551,7 @@ final class MultiplayerViewModel: ObservableObject {
         finishedSessionID = nil
         rewardErrorMessage = nil
         rewardSnapshot = nil
+        clearRematchState()
         isForfeiting = false
     }
 
@@ -435,8 +609,9 @@ struct MatchResolution {
 
 enum MatchResolver {
     static func canResolve(session: GameSession, results: [String: MatchPlayerResult]) -> Bool {
-        if session.mode == .wordle, hasClinchedWordleResult(results) {
-            return true
+        if session.mode == .wordle {
+            if hasClinchedWordleResult(results) { return true }
+            return results.count >= session.players.count && results.values.allSatisfy(\.isFinalWordleResult)
         }
         return results.count >= session.players.count
     }

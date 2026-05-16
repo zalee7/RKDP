@@ -171,6 +171,38 @@ final class FirestoreService {
         try await db.collection("sessions").document(id).updateData(data)
     }
 
+    func createRematchSession(from oldSession: GameSession) async throws -> GameSession {
+        let refreshedPlayers = try await oldSession.players.asyncMap { player -> MatchPlayer in
+            let latestUser = try await fetchUser(id: player.userID)
+            guard latestUser.coins >= player.wager else { throw FirestoreServiceError.insufficientCoins }
+            let rank = latestUser.rank(for: oldSession.mode)
+            return MatchPlayer(
+                userID: latestUser.id,
+                username: latestUser.username,
+                wager: player.wager,
+                finishTime: nil,
+                rankTier: rank.displayTier,
+                rankPoints: rank.points
+            )
+        }
+
+        let suffix = UUID().uuidString.prefix(8)
+        let sessionID = "\(oldSession.id)_rematch_\(Int(Date().timeIntervalSince1970))_\(suffix)"
+        var session = GameSession(
+            id: sessionID,
+            mode: oldSession.mode,
+            difficulty: oldSession.difficulty,
+            status: .waiting,
+            players: refreshedPlayers,
+            seed: Int.random(in: 0..<Int.max),
+            puzzleData: "",
+            createdAt: Date()
+        )
+        session.playerIDs = refreshedPlayers.map(\.userID)
+        try db.collection("sessions").document(sessionID).setData(from: session)
+        return session
+    }
+
     // MARK: - Matchmaking
 
     /// Write this player into the queue, then attempt to pair with anyone already waiting.
@@ -366,5 +398,17 @@ final class FirestoreService {
         db.collection("matchmaking")
             .document("\(mode.rawValue)_\(difficulty.rawValue)")
             .collection("queue")
+    }
+}
+
+
+private extension Sequence {
+    func asyncMap<T>(_ transform: (Element) async throws -> T) async throws -> [T] {
+        var values: [T] = []
+        for element in self {
+            let value = try await transform(element)
+            values.append(value)
+        }
+        return values
     }
 }

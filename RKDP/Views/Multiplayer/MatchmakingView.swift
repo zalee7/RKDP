@@ -314,7 +314,7 @@ struct MatchmakingView: View {
                     Task { await vm.submitResult(result, session: session) }
                 }
 
-                if let myResult = vm.playerResults[user.id] {
+                if let myResult = vm.playerResults[user.id], session.mode != .wordle || myResult.isFinalWordleResult {
                     VStack(spacing: 10) {
                         ProgressView()
                         Text(myResult.status)
@@ -353,7 +353,7 @@ struct MatchmakingView: View {
     private func resultView(session: GameSession) -> some View {
         let isWinner = session.winnerID == user.id
         let isDraw   = session.winnerID == nil
-        let results      = session.playerResults ?? vm.playerResults
+        let results      = vm.playerResults.merging(session.playerResults ?? [:]) { _, sessionResult in sessionResult }
         let myResult     = results[user.id]
         let opponentID   = session.players.first(where: { $0.userID != user.id })?.userID ?? ""
         let opponentResult = results[opponentID]
@@ -425,20 +425,7 @@ struct MatchmakingView: View {
             .opacity(controlsReady ? 1 : 0.36)
             .disabled(!controlsReady)
 
-            Button {
-                didNotifyFinished = false
-                rewardAnimationFinished = false
-                vm.reset()
-            } label: {
-                Text("Play Again")
-                    .frame(maxWidth: .infinity).padding()
-                    .background(mode.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
-            .opacity(controlsReady ? 1 : 0.36)
-            .disabled(!controlsReady)
+            rematchControl(session: session, controlsReady: controlsReady)
 
             Button("Back to Home") { dismiss() }
                 .foregroundStyle(.secondary)
@@ -446,10 +433,101 @@ struct MatchmakingView: View {
                 .disabled(!controlsReady)
             Spacer()
         }
-        .onAppear { SoundManager.shared.stopAllLoops() }
+        .onAppear {
+            SoundManager.shared.stopAllLoops()
+            vm.beginRematchListening(session: session)
+        }
         .sheet(isPresented: $showBreakdown) {
             MatchBreakdownView(session: session, currentUserID: user.id, results: results)
         }
+    }
+
+    @ViewBuilder
+    private func rematchControl(session: GameSession, controlsReady: Bool) -> some View {
+        let myID = user.id
+        let opponentID = session.players.first(where: { $0.userID != myID })?.userID
+        let requested = vm.rematchRequests.contains(myID)
+        let opponentRequested = opponentID.map { vm.rematchRequests.contains($0) } ?? false
+        let inviteDismissed = vm.dismissedRematchInviteSessionID == session.id
+        let bothRequested = requested && opponentRequested
+
+        VStack(spacing: 8) {
+            if let error = vm.rematchErrorMessage {
+                Text(error)
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.warning)
+                    .multilineTextAlignment(.center)
+            }
+
+            if vm.isStartingRematch || bothRequested {
+                Label("Starting rematch...", systemImage: "arrow.triangle.2.circlepath")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(AppTheme.cardBackground)
+                    .foregroundStyle(AppTheme.accentBright)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+            } else if requested {
+                Button {
+                    Task { await vm.cancelRematch(session: session) }
+                } label: {
+                    Label("Waiting for opponent... Tap to cancel", systemImage: "hourglass")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppTheme.cardBackground)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+                }
+                .disabled(!controlsReady)
+            } else if opponentRequested && !inviteDismissed {
+                VStack(spacing: 8) {
+                    Text("Opponent wants a rematch")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.accentBright)
+                    HStack(spacing: 10) {
+                        Button {
+                            Task { await vm.declineRematch(session: session) }
+                        } label: {
+                            Text("Decline")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(AppTheme.cardBackground)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+                        }
+                        Button {
+                            didNotifyFinished = false
+                            Task { await vm.requestRematch(session: session) }
+                        } label: {
+                            Text("Accept")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(mode.accentColor)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                }
+                .disabled(!controlsReady)
+            } else {
+                Button {
+                    didNotifyFinished = false
+                    Task { await vm.requestRematch(session: session) }
+                } label: {
+                    Label("Request Rematch", systemImage: "arrow.triangle.2.circlepath")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(mode.accentColor)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(!controlsReady)
+            }
+        }
+        .padding(.horizontal)
+        .opacity(controlsReady ? 1 : 0.36)
     }
 
     private func performanceColumn(label: String, result: MatchPlayerResult?, highlight: Bool) -> some View {

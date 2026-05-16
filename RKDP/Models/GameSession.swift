@@ -120,6 +120,12 @@ struct MatchPlayerResult: Codable, Equatable {
     var wordCount: Int { Int(summary["wordCount"] ?? "0") ?? 0 }
     var solvedRounds: Int { Int(summary["solvedRounds"] ?? "0") ?? 0 }
     var totalGuesses: Int { Int(summary["totalGuesses"] ?? "0") ?? 0 }
+    var failedRounds: Int { Int(summary["failedRounds"] ?? "0") ?? 0 }
+    var wordleRoundCount: Int { Int(summary["roundCount"] ?? "0") ?? 0 }
+    var isFinalWordleResult: Bool {
+        guard mode == .wordle else { return true }
+        return summary["isFinal"] == "true" || solvedRounds >= 2 || failedRounds >= 2 || wordleRoundCount >= 3
+    }
     var hitMine: Bool { summary["hitMine"] == "true" }
     var moveCount: Int { Int(summary["moves"] ?? "0") ?? 0 }
     var solvedPairs: Int { Int(summary["solvedPairs"] ?? "0") ?? 0 }
