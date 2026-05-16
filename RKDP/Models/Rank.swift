@@ -110,6 +110,9 @@ struct RankInfo: Codable {
     /// e.g. "Bronze III", "Gold I", "Master I"
     var fullDisplayName: String { "\(tier.displayName) \(division.label)" }
 
+    /// Compact ranked record, shown as wins-losses.
+    var recordDisplay: String { "\(wins)-\(losses)" }
+
     static let empty = RankInfo(
         points: 0,
         tier: .bronze,
