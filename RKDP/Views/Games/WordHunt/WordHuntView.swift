@@ -54,7 +54,9 @@ struct WordHuntView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 12)
 
+                // Fixed height so the grid never shifts when the banner appears/disappears
                 wordFeedbackBanner
+                    .frame(height: 44)
 
                 letterGrid
                     .padding(.horizontal, 20)
@@ -211,13 +213,12 @@ struct WordHuntView: View {
             .onChanged { value in
                 let loc = value.location
                 if vm.currentPath.isEmpty {
-                    lastDragLocation = loc
                     let (r, c) = floorCell(loc, cellSize: cellSize)
                     vm.startPath(row: r, col: c)
-                } else if let prev = lastDragLocation {
-                    interpolatePath(from: prev, to: loc, cellSize: cellSize)
-                    lastDragLocation = loc
+                } else {
+                    snapExtend(to: loc, cellSize: cellSize)
                 }
+                lastDragLocation = loc
             }
             .onEnded { _ in
                 vm.submitPath()
@@ -225,23 +226,52 @@ struct WordHuntView: View {
             }
     }
 
-    /// Floor-division mapping: point → (row, col). Correct for every position in the cell.
+    /// Floor-division mapping: point → (row, col).
     private func floorCell(_ p: CGPoint, cellSize: CGFloat) -> (Int, Int) {
         let col = max(0, min(WordHuntGame.gridSize - 1, Int(p.x / cellSize)))
         let row = max(0, min(WordHuntGame.gridSize - 1, Int(p.y / cellSize)))
         return (row, col)
     }
 
-    /// Walk the straight line prev→current and feed every new cell to extendPath.
-    private func interpolatePath(from prev: CGPoint, to current: CGPoint, cellSize: CGFloat) {
-        let dx = current.x - prev.x
-        let dy = current.y - prev.y
-        let steps = max(1, Int((max(abs(dx), abs(dy)) / (cellSize * 0.4)).rounded(.up)))
-        for i in 1...steps {
-            let t = CGFloat(i) / CGFloat(steps)
-            let pt = CGPoint(x: prev.x + dx * t, y: prev.y + dy * t)
-            let (r, c) = floorCell(pt, cellSize: cellSize)
-            vm.extendPath(row: r, col: c)
+    /// Snap-to-nearest-adjacent-cell: among all 8 neighbours of the last path cell,
+    /// pick the one whose center is closest to the finger. Then recurse if the finger
+    /// has moved far enough to cross another cell boundary, so fast drags still catch
+    /// every cell. This naturally handles diagonals — the diagonal neighbour wins
+    /// whenever the finger is in its quadrant.
+    private func snapExtend(to point: CGPoint, cellSize: CGFloat) {
+        guard let last = vm.currentPath.last else { return }
+        let gridSize = WordHuntGame.gridSize
+
+        var bestDist = CGFloat.infinity
+        var bestCell: (Int, Int)? = nil
+
+        for dr in -1...1 {
+            for dc in -1...1 {
+                guard dr != 0 || dc != 0 else { continue }
+                let r = last.row + dr
+                let c = last.col + dc
+                guard r >= 0, r < gridSize, c >= 0, c < gridSize else { continue }
+                let cx = (CGFloat(c) + 0.5) * cellSize
+                let cy = (CGFloat(r) + 0.5) * cellSize
+                let dist = hypot(point.x - cx, point.y - cy)
+                if dist < bestDist { bestDist = dist; bestCell = (r, c) }
+            }
+        }
+
+        guard let (nr, nc) = bestCell else { return }
+        // Only move if the finger has crossed more than half a cell from the current center
+        let lastCX = (CGFloat(last.col) + 0.5) * cellSize
+        let lastCY = (CGFloat(last.row) + 0.5) * cellSize
+        guard hypot(point.x - lastCX, point.y - lastCY) > cellSize * 0.45 else { return }
+
+        vm.extendPath(row: nr, col: nc)
+
+        // Recurse: if the drag jumped far, keep snapping until we catch up
+        if let newLast = vm.currentPath.last, (newLast.row != nr || newLast.col != nc) { return }
+        let newCX = (CGFloat(nc) + 0.5) * cellSize
+        let newCY = (CGFloat(nr) + 0.5) * cellSize
+        if hypot(point.x - newCX, point.y - newCY) > cellSize * 0.9 {
+            snapExtend(to: point, cellSize: cellSize)
         }
     }
 
