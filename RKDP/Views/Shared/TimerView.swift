@@ -34,24 +34,26 @@ struct RankBadgeView: View {
     let tier: RankTier
     var division: RankDivision? = nil
     var showLabel = true
+    var iconSize: CGFloat? = nil
+    var labelFont: Font = .caption.bold()
 
     var body: some View {
-        HStack(spacing: 4) {
-            RankIconView(tier: tier, division: division, size: showLabel ? 18 : 22)
+        HStack(spacing: 5) {
+            RankIconView(tier: tier, division: division, size: iconSize ?? (showLabel ? 18 : 22))
             if showLabel {
                 if let div = division {
                     Text("\(tier.displayName) \(div.label)")
-                        .font(.caption.bold())
+                        .font(labelFont)
                         .foregroundStyle(tier.color)
                 } else {
                     Text(tier.displayName)
-                        .font(.caption.bold())
+                        .font(labelFont)
                         .foregroundStyle(tier.color)
                 }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
         .background(tier.color.opacity(0.15))
         .clipShape(Capsule())
     }

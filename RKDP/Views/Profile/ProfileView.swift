@@ -108,15 +108,15 @@ struct ModeRankRow: View {
         HStack {
             RoundedRectangle(cornerRadius: 8)
                 .fill(AppTheme.modeGradient(mode))
-                .frame(width: 32, height: 32)
-                .overlay(Image(systemName: mode.icon).font(.caption).foregroundStyle(.white))
+                .frame(width: 38, height: 38)
+                .overlay(Image(systemName: mode.icon).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white))
 
             Text(mode.displayName).foregroundStyle(AppTheme.textPrimary)
 
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                RankBadgeView(tier: info.tier, division: info.division)
+                RankBadgeView(tier: info.tier, division: info.division, iconSize: 22, labelFont: .subheadline.bold())
                 Text("\(info.points) pts").font(.caption).foregroundStyle(AppTheme.textSecondary)
                 if let best = info.bestScore {
                     Text("Best \(best) pts").font(.system(size: 10)).foregroundStyle(AppTheme.accentBright)

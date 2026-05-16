@@ -571,8 +571,8 @@ struct GameModeCardView: View {
             VStack(spacing: 11) {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppTheme.modeGradient(mode))
-                    .frame(width: 72, height: 72)
-                    .overlay(Image(systemName: mode.icon).font(.system(size: 32, weight: .semibold)).foregroundStyle(.white))
+                    .frame(width: 86, height: 86)
+                    .overlay(Image(systemName: mode.icon).font(.system(size: 38, weight: .semibold)).foregroundStyle(.white))
                     .shadow(color: AppTheme.modeShadow(mode), radius: 8)
 
                 Text(mode.displayName)
@@ -633,7 +633,7 @@ struct RankProgressMiniView: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
-                RankIconView(tier: info.tier, division: info.division, size: 14)
+                RankIconView(tier: info.tier, division: info.division, size: 17)
                 Text(info.fullDisplayName)
                     .font(.caption.bold())
                     .foregroundStyle(info.tier.color)
@@ -645,14 +645,14 @@ struct RankProgressMiniView: View {
             )
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.13)).frame(height: 3)
+                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.13)).frame(height: 4)
                     RoundedRectangle(cornerRadius: 2)
                         .fill(AppTheme.accentBright)
-                        .frame(width: geo.size.width * progress, height: 3)
+                        .frame(width: geo.size.width * progress, height: 4)
                 }
             }
-            .frame(height: 3)
-            .padding(.horizontal, 12)
+            .frame(height: 4)
+            .padding(.horizontal, 10)
             Text(pointsLabel).font(.system(size: 9)).foregroundStyle(AppTheme.textSecondary)
             if let best = info.bestScore {
                 Text("Best: \(best) pts").font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
