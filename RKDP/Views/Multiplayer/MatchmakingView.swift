@@ -202,11 +202,15 @@ struct MatchmakingView: View {
                     }
 
                     if let opp = opponent {
-                        let oppRank = RankInfo(points: opp.rankPoints, tier: opp.rankTier,
-                                              wins: 0, losses: 0, bestTime: nil, bestScore: nil)
+                        let liveRank = oppUser?.rank(for: mode)
+                        let oppRank = liveRank ?? RankInfo(points: opp.rankPoints, tier: opp.rankTier,
+                                                           wins: 0, losses: 0, bestTime: nil, bestScore: nil)
                         Text(oppRank.fullDisplayName)
                             .font(.subheadline.bold())
                             .foregroundStyle(opp.rankTier.color)
+                        Text("W/L \(liveRank?.recordDisplay ?? "--")")
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.textSecondary)
                     }
                 }
             }
