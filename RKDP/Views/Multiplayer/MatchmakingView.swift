@@ -13,10 +13,23 @@ struct MatchmakingView: View {
     @State private var inMatchMusicEnabled = true
     @State private var showForfeitWarning = false
     @State private var rewardAnimationFinished = false
+    @State private var showCompatibilityHint = false
     @Environment(\.dismiss) var dismiss
 
     private var wagerOptions: [WagerTier] {
         Wager.options(for: user.rank(for: mode).tier)
+    }
+
+    private var shouldShowQueueCriteria: Bool {
+        mode == .wordle || mode == .anagram
+    }
+
+    private var queueSettingTitle: String {
+        mode == .wordle ? "Guesses" : mode == .anagram ? "Word length" : "Difficulty"
+    }
+
+    private var rankTierForQueue: RankTier {
+        user.rank(for: mode).tier
     }
 
     private var shouldBlockDismiss: Bool {
@@ -99,6 +112,11 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                 }
 
+                if shouldShowQueueCriteria {
+                    queueCriteriaCard(wager: selectedWager, includeHint: true)
+                        .padding(.horizontal)
+                }
+
                 Text("Choose Your Wager").font(.title3.bold())
 
                 VStack(spacing: 12) {
@@ -147,6 +165,44 @@ struct MatchmakingView: View {
         }
     }
 
+    private func queueCriteriaCard(wager: WagerTier?, includeHint: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                    .foregroundStyle(AppTheme.accentBright)
+                Text("Queue Criteria")
+                    .font(.subheadline.bold())
+                Spacer()
+            }
+            queueCriterionRow(title: "Mode", value: mode.displayName)
+            queueCriterionRow(title: queueSettingTitle, value: mode.difficultyLabel(difficulty))
+            queueCriterionRow(title: "Wager", value: wager.map { "\($0.amount) coins" } ?? "Choose a wager")
+            queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
+            if includeHint {
+                Text("Word modes only pair players with the same setting, wager, and rank tier.")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(14)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private func queueCriterionRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+            Spacer()
+            Text(value)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+        }
+    }
+
     // MARK: - Searching
 
     private var searchingView: some View {
@@ -157,14 +213,35 @@ struct MatchmakingView: View {
                 .padding()
             Text("Finding a match…")
                 .font(.title3.bold())
-            if let wager = vm.selectedWager {
+            if shouldShowQueueCriteria {
+                Text("Searching for same settings")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(AppTheme.accentBright)
+                queueCriteriaCard(wager: vm.selectedWager, includeHint: false)
+                    .padding(.horizontal)
+                if showCompatibilityHint {
+                    Text("Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), wager, and rank tier.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+            } else if let wager = vm.selectedWager {
                 Text("Wager: \(wager.amount) coins").foregroundStyle(.secondary)
             }
             Button("Cancel") { Task { await vm.cancelSearch() } }
                 .foregroundStyle(.red)
             Spacer()
         }
-        .onAppear { SoundManager.shared.playMatchmakingLoop() }
+        .onAppear {
+            SoundManager.shared.playMatchmakingLoop()
+            showCompatibilityHint = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                if case .searching = vm.state {
+                    showCompatibilityHint = true
+                }
+            }
+        }
         .onDisappear { SoundManager.shared.stopMatchmakingLoop() }
     }
 

@@ -66,12 +66,12 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
 
     var winConditionText: String {
         switch self {
-        case .sudoku:      return "Complete the puzzle; progress breaks timeout ties"
-        case .minesweeper: return "Avoid mines; clear status, safe cells, then time decide"
-        case .colorLink:   return "Complete the board; fill and pairs break ties"
-        case .gridlock:    return "Make the grid symmetrical in fewer moves"
-        case .anagram:     return "Timer ends; score, words, then longest word decide"
-        case .wordHunt:    return "Timer ends; score, words, then longest word decide"
+        case .sudoku:      return "Complete the puzzle; progress then time break timeout ties"
+        case .minesweeper: return "Avoid mines; clears, safe cells, then time decide"
+        case .colorLink:   return "Complete the board; fill, pairs, then time break ties"
+        case .gridlock:    return "Make the grid symmetrical; moves then time break finish ties"
+        case .anagram:     return "Timer ends; score, word count, then longest word decide"
+        case .wordHunt:    return "Timer ends; score, word count, then longest word decide"
         case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"
         }
     }

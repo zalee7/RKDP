@@ -50,12 +50,7 @@ struct AnagramGame {
     // MARK: - Timer per difficulty
 
     static func totalSeconds(for difficulty: Difficulty) -> Int {
-        switch difficulty {
-        case .easy:   return 120
-        case .medium: return 100
-        case .hard:   return 90
-        case .expert: return 75
-        }
+        60
     }
 
     // MARK: - Internals

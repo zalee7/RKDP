@@ -35,6 +35,7 @@ final class MultiplayerViewModel: ObservableObject {
     // Firestore listeners
     private var userDocListener: ListenerRegistration?
     private var queueListener: ListenerRegistration?
+    private var matchDiscoveryListener: ListenerRegistration?
     private var sessionListener: ListenerRegistration?
 
     // Realtime DB handles
@@ -91,8 +92,17 @@ final class MultiplayerViewModel: ObservableObject {
             try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
             guard isCurrentSearch(searchID) else { return }
 
-            // 1. Listen on our user doc before entering the queue so a fast pair
-            //    cannot write pendingSessionID before we are watching for it.
+            // 1. Listen for sessions that include us. This avoids requiring one
+            //    player to write pendingSessionID into the opponent's user doc.
+            matchDiscoveryListener = store.listenForActiveSession(
+                userID: user.id,
+                mode: mode,
+                difficulty: difficulty
+            ) { [weak self] session in
+                Task { await self?.consumeDiscoveredMatch(session: session, searchID: searchID) }
+            }
+
+            // Keep the old own-user listener as a harmless fallback for existing sessions.
             userDocListener = store.listenForMatch(userID: user.id) { [weak self] sessionID, pendingSearchID in
                 Task { await self?.consumeMatch(sessionID: sessionID, pendingSearchID: pendingSearchID, searchID: searchID) }
             }
@@ -132,34 +142,43 @@ final class MultiplayerViewModel: ObservableObject {
         state = .idle
     }
 
-    /// Called when pendingSessionID appears on our user doc
+    /// Called when pendingSessionID appears on our own user doc.
     private func consumeMatch(sessionID: String, pendingSearchID: String?, searchID: UUID) async {
         guard isCurrentSearch(searchID), let user else { return }
         guard pendingSearchID == searchID.uuidString else {
             try? await store.clearPendingSession(userID: user.id)
             return
         }
-        tearDownListeners()
-        try? await store.clearPendingSession(userID: user.id)
         do {
             let session = try await store.fetchSession(id: sessionID)
-            guard isCurrentSearch(searchID) else { return }
-            guard session.mode == mode,
-                  session.difficulty == difficulty,
-                  session.players.contains(where: { $0.userID == user.id }) else {
-                return
-            }
-            // Fetch opponent for display on the match-found screen
-            let oppID = session.players.first { $0.userID != user.id }?.userID
-            if let oppID { opponentUser = try? await store.fetchUser(id: oppID) }
-            guard isCurrentSearch(searchID) else { return }
-            activeSearchID = nil
-            state = .matchFound(session: session)
-            startMatchCountdown(session: session)
+            await enterFoundMatch(session, searchID: searchID)
         } catch {
             guard isCurrentSearch(searchID) else { return }
             state = .error(error.localizedDescription)
         }
+    }
+
+    private func consumeDiscoveredMatch(session: GameSession, searchID: UUID) async {
+        await enterFoundMatch(session, searchID: searchID)
+    }
+
+    private func enterFoundMatch(_ session: GameSession, searchID: UUID) async {
+        guard isCurrentSearch(searchID), let user else { return }
+        guard session.mode == mode,
+              session.difficulty == difficulty,
+              session.players.contains(where: { $0.userID == user.id }) else {
+            return
+        }
+        tearDownListeners()
+        try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+        try? await store.clearPendingSession(userID: user.id)
+
+        let oppID = session.players.first { $0.userID != user.id }?.userID
+        if let oppID { opponentUser = try? await store.fetchUser(id: oppID) }
+        guard isCurrentSearch(searchID) else { return }
+        activeSearchID = nil
+        state = .matchFound(session: session)
+        startMatchCountdown(session: session)
     }
 
     // MARK: - Session
@@ -498,6 +517,8 @@ final class MultiplayerViewModel: ObservableObject {
         userDocListener = nil
         queueListener?.remove()
         queueListener = nil
+        matchDiscoveryListener?.remove()
+        matchDiscoveryListener = nil
         sessionListener?.remove()
         sessionListener = nil
     }

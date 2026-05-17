@@ -54,10 +54,6 @@ struct WordHuntView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 12)
 
-                // Fixed height so the grid never shifts when the banner appears/disappears
-                wordFeedbackBanner
-                    .frame(height: 44)
-
                 letterGrid
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
@@ -68,6 +64,14 @@ struct WordHuntView: View {
                 foundWordsList
                     .padding(.top, 8)
             }
+
+            VStack {
+                wordFeedbackBanner
+                    .padding(.top, 74)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .allowsHitTesting(false)
 
             if vm.isFinished && sessionID == nil { finishedOverlay }
         }
@@ -136,7 +140,7 @@ struct WordHuntView: View {
                 case .invalid:
                     HStack(spacing: 8) {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                        Text(vm.currentWord.isEmpty ? "Not a word" : "Not a word")
+                        Text("Not a word")
                     }
                 case .alreadyFound:
                     HStack(spacing: 8) {

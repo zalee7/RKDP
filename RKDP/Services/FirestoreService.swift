@@ -141,6 +141,29 @@ final class FirestoreService {
             }
     }
 
+    func listenForActiveSession(
+        userID: String,
+        mode: GameMode,
+        difficulty: Difficulty,
+        onMatch: @escaping (GameSession) -> Void
+    ) -> ListenerRegistration {
+        db.collection("sessions")
+            .whereField("playerIDs", arrayContains: userID)
+            .whereField("status", isEqualTo: SessionStatus.inProgress.rawValue)
+            .addSnapshotListener { snapshot, _ in
+                guard let documents = snapshot?.documents else { return }
+                let recentCutoff = Date().addingTimeInterval(-600)
+                let sessions = documents.compactMap { try? $0.data(as: GameSession.self) }
+                guard let session = sessions.first(where: {
+                    $0.mode == mode &&
+                    $0.difficulty == difficulty &&
+                    $0.createdAt >= recentCutoff &&
+                    $0.players.contains(where: { $0.userID == userID })
+                }) else { return }
+                onMatch(session)
+            }
+    }
+
     func updateSession(_ session: GameSession) async throws {
         try db.collection("sessions").document(session.id).setData(from: session, merge: true)
     }
@@ -301,7 +324,7 @@ final class FirestoreService {
               (hostQueue["rankTier"] as? Int) == tier.rawValue,
               (opponentQueue["wager"] as? Int) == wager,
               (opponentQueue["rankTier"] as? Int) == tier.rawValue,
-              let opponentSearchID = opponentQueue["searchID"] as? String else {
+              opponentQueue["searchID"] is String else {
             return
         }
 
@@ -349,19 +372,15 @@ final class FirestoreService {
         // Create session
         try db.collection("sessions").document(sessionID).setData(from: session)
 
-        // Notify both players by writing pendingSessionID to their user docs
-        try await db.collection("users").document(hostUser.id).updateData([
+        // Leave opponent-owned documents untouched. Both players discover the match
+        // through their own participant-scoped session listener.
+        try? await db.collection("users").document(hostUser.id).updateData([
             "pendingSessionID": sessionID,
             "pendingSearchID": searchID
         ])
-        try await db.collection("users").document(opponentID).updateData([
-            "pendingSessionID": sessionID,
-            "pendingSearchID": opponentSearchID
-        ])
 
-        // Clean up queue
-        try await queueRef.document(hostUser.id).delete()
-        try await queueRef.document(opponentID).delete()
+        // Each client removes its own queue entry after observing the session.
+        try? await queueRef.document(hostUser.id).delete()
     }
 
     func leaveMatchmakingQueue(userID: String, mode: GameMode, difficulty: Difficulty) async throws {

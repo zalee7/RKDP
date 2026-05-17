@@ -202,7 +202,7 @@ struct GameModeDetailView: View {
                                 ModeFactRow(icon: "chart.bar.fill", title: "W/L", value: rankInfo.recordDisplay, color: AppTheme.teal)
                             }
                             HStack {
-                                ModeFactRow(icon: "timer", title: "Ranked timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
+                                ModeFactRow(icon: "timer", title: "Timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
                                 ModeFactRow(icon: "star.fill", title: "Rank Points", value: "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x ranked points", color: .yellow)
                             }
                         }

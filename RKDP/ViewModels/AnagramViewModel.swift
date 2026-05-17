@@ -28,7 +28,7 @@ final class AnagramViewModel: ObservableObject {
 
     init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil) {
         self.difficulty = difficulty
-        self.totalSeconds = seed == nil ? AnagramGame.totalSeconds(for: difficulty) : 60
+        self.totalSeconds = AnagramGame.totalSeconds(for: difficulty)
         self.userID = userID
         self.priorBest = priorBest
         let g = AnagramGame.generate(difficulty: difficulty, seed: seed)

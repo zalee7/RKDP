@@ -119,7 +119,7 @@ struct HowToPlayView: View {
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players receive the same generated puzzle.",
                     "Completion beats incomplete boards.",
-                    "If both complete, faster time wins; on timeout, valid progress decides.",
+                    "If both complete, faster time wins; if neither finishes, valid progress decides, then time.",
                 ]),
             ]
         case .minesweeper:
@@ -138,7 +138,7 @@ struct HowToPlayView: View {
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get identically seeded boards.",
                     "Hitting a mine loses against an opponent who stays safe.",
-                    "Otherwise, clears win; safe cells and time break remaining ties.",
+                    "If both stay safe, clears win; safe cells and time break remaining ties.",
                 ]),
             ]
         case .colorLink:
@@ -155,8 +155,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same seeded board.",
-                    "Completed full boards beat incomplete boards.",
-                    "If neither player finishes, board fill wins before solved pair count and time.",
+                    "Full board completion beats incomplete boards.",
+                    "If neither player finishes, board fill wins before solved pair count, then time.",
                 ]),
             ]
         case .gridlock:
@@ -173,8 +173,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players receive the same seeded symmetry puzzle.",
-                    "Completion wins; if both finish, fewer moves wins before time.",
-                    "If neither player finishes, higher symmetry percent wins.",
+                    "Completion wins; if both finish, fewer moves wins, then time.",
+                    "If neither player finishes, higher symmetry percent wins, then fewer moves and time.",
                 ]),
             ]
         case .anagram:
@@ -182,7 +182,7 @@ struct HowToPlayView: View {
                 RuleSection(title: "Objective", bullets: [
                     "Use the letter set to make as many valid words as possible.",
                     "Longer words score more points.",
-                    "The match ends when the timer expires.",
+                    "The round ends when the 1:00 timer expires.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
                     "Tap letter tiles to build a word.",
@@ -192,7 +192,7 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same seeded letters.",
-                    "Highest score when the timer ends wins.",
+                    "Highest score when the 1:00 timer ends wins.",
                     "Ties use word count, then longest word.",
                 ]),
             ]
@@ -202,7 +202,8 @@ struct HowToPlayView: View {
                     "Find as many hidden words as you can in the 4×4 letter grid.",
                     "Words must be 3 or more letters and traced through adjacent tiles.",
                     "Tiles can only be used once per word; diagonal connections count.",
-                    "Longer words score more points — a 7-letter word earns 5 pts!",
+                    "Longer words score more points — a 7-letter word earns 5 pts.",
+                    "The round ends when the 1:15 timer expires.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
                     "Drag your finger across adjacent tiles to trace a word.",
@@ -211,7 +212,7 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same 4×4 grid.",
-                    "Highest score when the timer ends wins.",
+                    "Highest score when the 1:15 timer ends wins.",
                     "Ties use word count, then longest word.",
                 ]),
             ]

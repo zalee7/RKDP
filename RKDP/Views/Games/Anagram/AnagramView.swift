@@ -169,10 +169,10 @@ struct AnagramView: View {
         }
     }
 
-    // MARK: - Found words (vertical list)
+    // MARK: - Found words
 
     private var foundWordsScroll: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Words Found")
                     .font(.caption.bold())
@@ -192,32 +192,42 @@ struct AnagramView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 10)
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(spacing: 6) {
-                        ForEach(vm.sortedFoundWords, id: \.self) { word in
-                            HStack {
-                                Text(word.capitalized)
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(AppTheme.textPrimary)
-                                Spacer()
-                                Text("+\(AnagramGame.score(for: word)) pt\(AnagramGame.score(for: word) == 1 ? "" : "s")")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(AppTheme.accentBright)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(AppTheme.modeAccent(.anagram).opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.modeAccent(.anagram).opacity(0.25), lineWidth: 1))
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                        }
+                LetterWrapLayout(spacing: 6) {
+                    ForEach(vm.sortedFoundWords.prefix(12), id: \.self) { word in
+                        foundWordChip(word)
+                            .transition(.scale.combined(with: .opacity))
                     }
-                    .padding(.horizontal)
-                    .animation(.spring(response: 0.3), value: vm.foundWords)
                 }
-                .frame(maxHeight: 160)
+                .padding(.horizontal)
+                .frame(maxWidth: .infinity)
+                .animation(.spring(response: 0.3), value: vm.foundWords)
+
+                if vm.sortedFoundWords.count > 12 {
+                    Text("+\(vm.sortedFoundWords.count - 12) more")
+                        .font(.caption2.bold())
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 2)
+                }
             }
         }
+    }
+
+    private func foundWordChip(_ word: String) -> some View {
+        let score = AnagramGame.score(for: word)
+        return HStack(spacing: 6) {
+            Text(word.capitalized)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+            Text("+\(score)")
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.accentBright)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(AppTheme.modeAccent(.anagram).opacity(0.16))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppTheme.modeAccent(.anagram).opacity(0.28), lineWidth: 1))
     }
 
     // MARK: - Placed (current word)
