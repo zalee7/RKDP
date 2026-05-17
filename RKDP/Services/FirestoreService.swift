@@ -259,7 +259,8 @@ final class FirestoreService {
         db.collection("sessions")
             .whereField("playerIDs", arrayContains: userID)
             .whereField("status", isEqualTo: SessionStatus.inProgress.rawValue)
-            .addSnapshotListener { snapshot, _ in
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Match discovery listener error: \(error.localizedDescription)") }
                 guard let documents = snapshot?.documents else { return }
                 let recentCutoff = Date().addingTimeInterval(-600)
                 let sessions = documents.compactMap { try? $0.data(as: GameSession.self) }
@@ -370,7 +371,7 @@ final class FirestoreService {
         // 3. Only the player with the LARGER uid creates the session (deterministic tiebreak)
         guard user.id > opponentID else { return }
 
-        try await createAndNotify(
+        _ = try await createAndNotify(
             hostUser: user, wager: wager, tier: tier, searchID: searchID,
             opponentDoc: opponentDoc,
             mode: mode, difficulty: difficulty,
@@ -387,7 +388,8 @@ final class FirestoreService {
         let queueRef = queueCollection(mode: mode, difficulty: difficulty)
 
         let myTier = user.rank(for: mode).tier.rawValue
-        return queueRef.addSnapshotListener { [weak self] snapshot, _ in
+        return queueRef.addSnapshotListener { [weak self] snapshot, error in
+            if let error { print("Matchmaking queue listener error: \(error.localizedDescription)") }
             guard let self, let snapshot else { return }
             let others = snapshot.documents.filter {
                 $0.documentID != user.id &&
@@ -396,20 +398,32 @@ final class FirestoreService {
             }
             guard let opponentDoc = others.first else { return }
 
-            // Only the larger-uid player creates
-            guard user.id > opponentDoc.documentID else { return }
+            let opponentID = opponentDoc.documentID
             let tier = user.rank(for: mode).tier
 
             Task {
                 do {
-                    try await self.createAndNotify(
-                        hostUser: user, wager: wager, tier: tier, searchID: searchID,
-                        opponentDoc: opponentDoc,
-                        mode: mode, difficulty: difficulty,
-                        queueRef: queueRef
-                    )
+                    if user.id > opponentID {
+                        if let sessionID = try await self.createAndNotify(
+                            hostUser: user, wager: wager, tier: tier, searchID: searchID,
+                            opponentDoc: opponentDoc,
+                            mode: mode, difficulty: difficulty,
+                            queueRef: queueRef
+                        ) {
+                            onPaired(sessionID)
+                        }
+                    } else if let creatorSearchID = opponentDoc.data()["searchID"] as? String,
+                              let sessionID = try await self.waitForExistingSessionID(
+                        userID: user.id,
+                        opponentID: opponentID,
+                        mode: mode,
+                        difficulty: difficulty,
+                        creatorSearchID: creatorSearchID
+                    ) {
+                        onPaired(sessionID)
+                    }
                 } catch {
-                    // Session may have already been created by a re-fire — ignore
+                    // A concurrent listener may have already handled this pairing.
                 }
             }
         }
@@ -420,7 +434,7 @@ final class FirestoreService {
         opponentDoc: QueryDocumentSnapshot,
         mode: GameMode, difficulty: Difficulty,
         queueRef: CollectionReference
-    ) async throws {
+    ) async throws -> String? {
         let opponentID       = opponentDoc.documentID
 
         // A listener callback may already be in flight when a player cancels.
@@ -435,7 +449,7 @@ final class FirestoreService {
               (opponentQueue["wager"] as? Int) == wager,
               (opponentQueue["rankTier"] as? Int) == tier.rawValue,
               opponentQueue["searchID"] is String else {
-            return
+            return nil
         }
 
         let opponentUsername = opponentQueue["username"] as? String ?? "Opponent"
@@ -443,24 +457,25 @@ final class FirestoreService {
         let opponentTierRaw  = opponentQueue["rankTier"] as? Int    ?? 0
         let opponentTier     = RankTier(rawValue: opponentTierRaw) ?? .bronze
 
-        // Derive a deterministic session ID so simultaneous creates are idempotent
-        let pair = [hostUser.id, opponentID].sorted().joined(separator: "_")
-        var sessionID = "\(pair)_\(mode.rawValue)_\(difficulty.rawValue)"
+        // Include this queue attempt in the ID so a new match never reuses old
+        // Realtime Database ready/results nodes from a previous game.
+        let sessionID = makeSessionID(
+            userID: hostUser.id,
+            opponentID: opponentID,
+            mode: mode,
+            difficulty: difficulty,
+            creatorSearchID: searchID
+        )
 
         let opponentRankPoints = opponentQueue["rankPoints"] as? Int ?? 0
 
-        // Allow rematches: only block if a session between these players is actively in progress
         let existing = try await db.collection("sessions").document(sessionID).getDocument()
         if existing.exists {
             let status = existing.data()?["status"] as? String ?? ""
             if status == SessionStatus.inProgress.rawValue || status == SessionStatus.waiting.rawValue {
-                return  // concurrent duplicate create — bail
+                return sessionID
             }
-            // Previous session is finished/abandoned — use a time-bucketed ID for the rematch
-            let bucket = Int(Date().timeIntervalSince1970 / 300)  // 5-minute window keeps idempotency
-            sessionID = "\(sessionID)_r\(bucket)"
-            let rematchDoc = try await db.collection("sessions").document(sessionID).getDocument()
-            guard !rematchDoc.exists else { return }
+            return nil
         }
 
         let seed = Int.random(in: 0..<Int.max)
@@ -491,6 +506,72 @@ final class FirestoreService {
 
         // Each client removes its own queue entry after observing the session.
         try? await queueRef.document(hostUser.id).delete()
+        return sessionID
+    }
+
+    private func waitForExistingSessionID(
+        userID: String,
+        opponentID: String,
+        mode: GameMode,
+        difficulty: Difficulty,
+        creatorSearchID: String
+    ) async throws -> String? {
+        let delays: [UInt64] = [0, 250_000_000, 750_000_000, 1_500_000_000]
+        for delay in delays {
+            if delay > 0 { try await Task.sleep(nanoseconds: delay) }
+            if let sessionID = try await findExistingSessionID(
+                userID: userID,
+                opponentID: opponentID,
+                mode: mode,
+                difficulty: difficulty,
+                creatorSearchID: creatorSearchID
+            ) {
+                return sessionID
+            }
+        }
+        return nil
+    }
+
+    private func findExistingSessionID(
+        userID: String,
+        opponentID: String,
+        mode: GameMode,
+        difficulty: Difficulty,
+        creatorSearchID: String
+    ) async throws -> String? {
+        let sessionID = makeSessionID(
+            userID: userID,
+            opponentID: opponentID,
+            mode: mode,
+            difficulty: difficulty,
+            creatorSearchID: creatorSearchID
+        )
+        let document = try await db.collection("sessions").document(sessionID).getDocument()
+        guard document.exists,
+              let status = document.data()?["status"] as? String,
+              status == SessionStatus.inProgress.rawValue || status == SessionStatus.waiting.rawValue,
+              let session = try? document.data(as: GameSession.self),
+              session.mode == mode,
+              session.difficulty == difficulty,
+              session.players.contains(where: { $0.userID == userID }) else { return nil }
+        return sessionID
+    }
+
+    private func makeSessionID(
+        userID: String,
+        opponentID: String,
+        mode: GameMode,
+        difficulty: Difficulty,
+        creatorSearchID: String
+    ) -> String {
+        let baseID = sessionIDBase(userID: userID, opponentID: opponentID, mode: mode, difficulty: difficulty)
+        let attemptID = String(creatorSearchID.prefix(12)).replacingOccurrences(of: "-", with: "")
+        return "\(baseID)_s\(attemptID)"
+    }
+
+    private func sessionIDBase(userID: String, opponentID: String, mode: GameMode, difficulty: Difficulty) -> String {
+        let pair = [userID, opponentID].sorted().joined(separator: "_")
+        return "\(pair)_\(mode.rawValue)_\(difficulty.rawValue)"
     }
 
     func leaveMatchmakingQueue(userID: String, mode: GameMode, difficulty: Difficulty) async throws {

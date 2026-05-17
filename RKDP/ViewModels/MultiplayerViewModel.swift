@@ -115,7 +115,9 @@ final class MultiplayerViewModel: ObservableObject {
             //    any opponent who joins after us
             queueListener = store.listenForQueueMatch(
                 user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString
-            ) { _ in /* session creation is handled inside listenForQueueMatch */ }
+            ) { [weak self] sessionID in
+                Task { await self?.consumeMatch(sessionID: sessionID, pendingSearchID: searchID.uuidString, searchID: searchID) }
+            }
 
             // 3. Write to queue and try to pair immediately
             try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString)

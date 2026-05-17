@@ -175,32 +175,7 @@ final class RankingService {
             })
         }
 
-        syncLeaderboardEntry(for: appliedOutcome.user, mode: session.mode)
         return appliedOutcome
-    }
-
-    private func syncLeaderboardEntry(for user: AppUser, mode: GameMode) {
-        let rankInfo = user.rank(for: mode)
-        let entry = LeaderboardEntry(
-            id: user.id,
-            username: user.username,
-            avatarURL: user.avatarURL,
-            rankTier: rankInfo.displayTier,
-            rankPoints: rankInfo.points,
-            wins: rankInfo.wins,
-            bestTime: rankInfo.bestTime,
-            mode: mode,
-            equippedTitle: user.cosmetics.equippedTitle
-        )
-        do {
-            try db.collection("leaderboards")
-                .document(mode.rawValue)
-                .collection("entries")
-                .document(user.id)
-                .setData(from: entry, merge: true)
-        } catch {
-            // Rank and coins are already saved on the user record; leaderboard sync can retry later.
-        }
     }
 
     private static func adjustedRankBase(
