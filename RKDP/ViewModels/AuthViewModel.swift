@@ -60,6 +60,7 @@ final class AuthViewModel: ObservableObject {
     private func loadUser(firebaseUser: FirebaseAuth.User) async {
         do {
             var loadedUser = try await store.fetchUser(id: firebaseUser.uid)
+            loadedUser = await syncRankedPurchases(for: loadedUser)
             loadedUser = await applyPendingRankedOutcomes(for: loadedUser)
             user = loadedUser
         } catch {
@@ -73,13 +74,23 @@ final class AuthViewModel: ObservableObject {
                 email: firebaseUser.email ?? ""
             )
             try? await store.createUser(newUser)
-            user = newUser
+            user = await syncRankedPurchases(for: newUser)
         }
     }
 
     func refreshUser() async {
         guard let firebaseUser = Auth.auth().currentUser else { return }
         await loadUser(firebaseUser: firebaseUser)
+    }
+
+    private func syncRankedPurchases(for loadedUser: AppUser) async -> AppUser {
+        do {
+            let productIDs = try await RankedStoreKitService.shared.currentEntitlementProductIDs()
+            guard !productIDs.isEmpty else { return loadedUser }
+            return try await store.syncRankedAccessEntitlements(userID: loadedUser.id, productIDs: productIDs)
+        } catch {
+            return loadedUser
+        }
     }
 
     private func applyPendingRankedOutcomes(for loadedUser: AppUser) async -> AppUser {

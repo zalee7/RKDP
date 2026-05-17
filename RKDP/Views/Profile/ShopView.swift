@@ -5,6 +5,7 @@ struct ShopView: View {
     var onUserChanged: () -> Void = {}
     @StateObject private var vm: ShopViewModel
     @State private var selectedCategory: CosmeticCategory = .title
+    @State private var showRankedPassStore = false
     @Environment(\.dismiss) var dismiss
 
     init(user: AppUser, onUserChanged: @escaping () -> Void = {}) {
@@ -27,6 +28,12 @@ struct ShopView: View {
                 }
                 .padding(.vertical, 10)
                 .background(AppTheme.cardBackground)
+
+                RankedPassShopBanner(user: vm.user) {
+                    showRankedPassStore = true
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
 
                 // Category tabs
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -81,6 +88,11 @@ struct ShopView: View {
             .navigationTitle("Shop")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .sheet(isPresented: $showRankedPassStore) {
+                RankedAccessStoreView(user: vm.user) {
+                    onUserChanged()
+                }
+            }
             .tint(AppTheme.accentBright)
             .alert(
                 "Shop update failed",
@@ -155,6 +167,41 @@ struct ShopView: View {
             }
         }
         .padding(.vertical)
+    }
+}
+
+
+private struct RankedPassShopBanner: View {
+    let user: AppUser
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AppTheme.brandGradient)
+                    .frame(width: 50, height: 50)
+                    .overlay(Image(systemName: "crown.fill").font(.title3.bold()).foregroundStyle(.white))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Ranked Pass")
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text(user.rankedAccess.allModesUnlocked ? "All ranked modes unlocked" : "Daily entries, ad tickets, and permanent unlocks")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.accentBright)
+            }
+            .padding(12)
+            .background(AppTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 

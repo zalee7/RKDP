@@ -62,6 +62,10 @@ final class MultiplayerViewModel: ObservableObject {
             state = .error("Not enough coins for this wager.")
             return
         }
+        guard user.rankedAccess.canStartRanked(mode: mode) else {
+            state = .error("No ranked entry is available for this mode today.")
+            return
+        }
 
         let searchID = UUID()
         activeSearchID = searchID
@@ -169,6 +173,13 @@ final class MultiplayerViewModel: ObservableObject {
               session.players.contains(where: { $0.userID == user.id }) else {
             return
         }
+        guard await consumeRankedEntryIfNeeded(for: session) else {
+            try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+            try? await store.clearPendingSession(userID: user.id)
+            activeSearchID = nil
+            return
+        }
+
         tearDownListeners()
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
         try? await store.clearPendingSession(userID: user.id)
@@ -367,6 +378,10 @@ final class MultiplayerViewModel: ObservableObject {
             rematchErrorMessage = "Not enough coins for rematch."
             return
         }
+        guard user.rankedAccess.canStartRanked(mode: session.mode) else {
+            rematchErrorMessage = "No ranked entry is available for this mode today."
+            return
+        }
         beginRematchListening(session: session)
         dismissedRematchInviteSessionID = nil
         rematchErrorMessage = nil
@@ -450,6 +465,10 @@ final class MultiplayerViewModel: ObservableObject {
 
     private func enterRematchSession(_ session: GameSession) async {
         guard let user, session.players.contains(where: { $0.userID == user.id }) else { return }
+        guard await consumeRankedEntryIfNeeded(for: session) else {
+            isStartingRematch = false
+            return
+        }
         removeRealtimeObservers()
         sessionListener?.remove()
         sessionListener = nil
@@ -478,6 +497,17 @@ final class MultiplayerViewModel: ObservableObject {
         }
         state = .matchFound(session: session)
         startMatchCountdown(session: session)
+    }
+
+    private func consumeRankedEntryIfNeeded(for session: GameSession) async -> Bool {
+        guard let currentUser = user else { return false }
+        do {
+            user = try await store.consumeRankedEntry(userID: currentUser.id, mode: session.mode, sessionID: session.id)
+            return true
+        } catch {
+            state = .error(error.localizedDescription)
+            return false
+        }
     }
 
     private func applyFinishedRewards(_ session: GameSession) async {

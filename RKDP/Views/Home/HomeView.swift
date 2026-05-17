@@ -172,6 +172,7 @@ struct GameModeDetailView: View {
     @Environment(\.dismiss) var dismiss
     @State private var selectedDifficulty: Difficulty
     @State private var destination: NavigationPath = .init()
+    @State private var showRankedAccessStore = false
 
     init(mode: GameMode) {
         self.mode = mode
@@ -185,6 +186,25 @@ struct GameModeDetailView: View {
     }
     private var rankedLockedReason: String? {
         mode.rankedLockReason(for: selectedDifficulty)
+    }
+    private var hasRankedEntry: Bool {
+        user?.rankedAccess.canStartRanked(mode: mode) ?? false
+    }
+    private var rankedButtonTitle: String {
+        if rankedLockedReason != nil { return "Ranked Locked" }
+        return hasRankedEntry ? "Ranked Match" : "Ranked Access"
+    }
+    private var rankedButtonSubtitle: String {
+        if let rankedLockedReason { return rankedLockedReason }
+        if hasRankedEntry {
+            let status = user?.rankedAccess.statusText(for: mode) ?? "Free entry available"
+            return "Queue \(mode.difficultyLabel(selectedDifficulty)) · \(status)"
+        }
+        return "Watch ad or unlock ranked"
+    }
+    private var rankedButtonIcon: String {
+        if rankedLockedReason != nil { return "lock.fill" }
+        return hasRankedEntry ? "flag.checkered.2.crossed" : "lock.open.fill"
     }
 
     var body: some View {
@@ -205,6 +225,7 @@ struct GameModeDetailView: View {
                                 ModeFactRow(icon: "timer", title: "Timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
                                 ModeFactRow(icon: "star.fill", title: "Rank Points", value: "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x ranked points", color: .yellow)
                             }
+                            RankedAccessMeterView(mode: mode, user: user)
                         }
                         .padding(.horizontal)
 
@@ -248,13 +269,17 @@ struct GameModeDetailView: View {
                             }
 
                             LobbyActionButton(
-                                title: rankedLockedReason == nil ? "Ranked Match" : "Ranked Locked",
-                                subtitle: rankedLockedReason ?? "Queue \(mode.difficultyLabel(selectedDifficulty))",
-                                icon: rankedLockedReason == nil ? "flag.checkered.2.crossed" : "lock.fill",
+                                title: rankedButtonTitle,
+                                subtitle: rankedButtonSubtitle,
+                                icon: rankedButtonIcon,
                                 gradient: AppTheme.modeGradient(mode),
                                 disabled: rankedLockedReason != nil || user == nil
                             ) {
-                                destination.append("ranked")
+                                if hasRankedEntry {
+                                    destination.append("ranked")
+                                } else {
+                                    showRankedAccessStore = true
+                                }
                             }
                         }
                         .padding(.horizontal)
@@ -269,6 +294,13 @@ struct GameModeDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }.foregroundStyle(AppTheme.accentBright)
+                }
+            }
+            .sheet(isPresented: $showRankedAccessStore) {
+                if let user {
+                    RankedAccessStoreView(user: user, focusedMode: mode) {
+                        Task { await auth.refreshUser() }
+                    }
                 }
             }
             .navigationDestination(for: String.self) { dest in
@@ -325,6 +357,54 @@ struct GameModeDetailView: View {
             if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
         }
         return "No solo best yet"
+    }
+}
+
+
+private struct RankedAccessMeterView: View {
+    let mode: GameMode
+    let user: AppUser?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .foregroundStyle(color)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ranked Entry")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(statusText)
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+            }
+            Spacer()
+            if let access = user?.rankedAccess, !access.hasPermanentAccess(to: mode) {
+                Text("Ads \(access.rewardedAdsRemaining(for: mode))/\(RankedAccess.rewardedAdsPerModePerDay)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(AppTheme.accentBright)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var statusText: String {
+        guard let user else { return "Sign in to play ranked" }
+        return user.rankedAccess.statusText(for: mode)
+    }
+
+    private var iconName: String {
+        guard let user else { return "person.crop.circle.badge.exclamationmark" }
+        return user.rankedAccess.canStartRanked(mode: mode) ? "ticket.fill" : "ticket"
+    }
+
+    private var color: Color {
+        guard let user else { return AppTheme.textSecondary }
+        return user.rankedAccess.canStartRanked(mode: mode) ? AppTheme.teal : AppTheme.crownGold
     }
 }
 

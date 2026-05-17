@@ -4,6 +4,8 @@ import FirebaseFirestore
 enum FirestoreServiceError: LocalizedError {
     case insufficientCoins
     case missingUpdatedUser
+    case rankedAccessUnavailable
+    case rewardedAdLimitReached
 
     var errorDescription: String? {
         switch self {
@@ -11,6 +13,10 @@ enum FirestoreServiceError: LocalizedError {
             return "You do not have enough coins for that item."
         case .missingUpdatedUser:
             return "Could not refresh your shop purchase. Please try again."
+        case .rankedAccessUnavailable:
+            return "No ranked entry is available for this mode today."
+        case .rewardedAdLimitReached:
+            return "You have reached today's rewarded ad limit for ranked entries."
         }
     }
 }
@@ -65,6 +71,109 @@ final class FirestoreService {
                     }
                     user.cosmetics.equip(item)
 
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+    // MARK: - Ranked Access
+
+    func syncRankedAccessEntitlements(userID: String, productIDs: Set<String>) async throws -> AppUser {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    user.rankedAccess.applyPurchasedProductIDs(productIDs)
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+    func grantRewardedRankedTicket(userID: String, mode: GameMode, dayKey: String = RankedAccess.todayKey()) async throws -> AppUser {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    do {
+                        try user.rankedAccess.grantRewardedTicket(for: mode, dayKey: dayKey)
+                    } catch RankedAccessError.rewardedLimitReached {
+                        return fail(FirestoreServiceError.rewardedAdLimitReached)
+                    }
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+    func consumeRankedEntry(userID: String, mode: GameMode, sessionID: String, dayKey: String = RankedAccess.todayKey()) async throws -> AppUser {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    do {
+                        _ = try user.rankedAccess.consumeEntry(for: mode, sessionID: sessionID, dayKey: dayKey)
+                    } catch RankedAccessError.noEntryAvailable {
+                        return fail(FirestoreServiceError.rankedAccessUnavailable)
+                    }
                     let encodedUser = try Firestore.Encoder().encode(user)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)
                     return user
@@ -198,6 +307,7 @@ final class FirestoreService {
         let refreshedPlayers = try await oldSession.players.asyncMap { player -> MatchPlayer in
             let latestUser = try await fetchUser(id: player.userID)
             guard latestUser.coins >= player.wager else { throw FirestoreServiceError.insufficientCoins }
+            guard latestUser.rankedAccess.canStartRanked(mode: oldSession.mode) else { throw FirestoreServiceError.rankedAccessUnavailable }
             let rank = latestUser.rank(for: oldSession.mode)
             return MatchPlayer(
                 userID: latestUser.id,
