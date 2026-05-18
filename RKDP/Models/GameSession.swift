@@ -14,6 +14,11 @@ enum SessionResult: String, Codable {
     case abandoned
 }
 
+enum SessionKind: String, Codable {
+    case ranked
+    case exhibition
+}
+
 struct PostMatchRewardSnapshot {
     var sessionID: String
     var startingCoins: Int
@@ -64,8 +69,8 @@ struct PostMatchRewardSnapshot {
         let wager = session.players.first(where: { $0.userID == user.id })?.wager ?? 0
         let coinDelta: Int
         switch outcome {
-        case .win: coinDelta = session.totalPot
-        case .loss, .abandoned: coinDelta = -wager
+        case .win: coinDelta = session.isRanked ? session.totalPot : 0
+        case .loss, .abandoned: coinDelta = session.isRanked ? -wager : 0
         case .draw: coinDelta = 0
         }
         return PostMatchRewardSnapshot(
@@ -75,13 +80,13 @@ struct PostMatchRewardSnapshot {
             coinDelta: coinDelta,
             startingRank: rank,
             endingRank: rank,
-            rankDelta: RankingService.rankDelta(
+            rankDelta: session.isRanked ? RankingService.rankDelta(
                 for: user.id,
                 mode: session.mode,
                 difficulty: session.difficulty,
                 winnerID: session.winnerID,
                 players: session.players
-            ),
+            ) : 0,
             didPromote: false,
             didDemote: false,
             mode: session.mode,
@@ -219,8 +224,11 @@ struct GameSession: Codable, Identifiable {
     var winnerID: String?
     var playerResults: [String: MatchPlayerResult]?
     var winnerReason: String?
+    var matchKind: SessionKind = .ranked
 
     var totalPot: Int { players.reduce(0) { $0 + $1.wager } }
+    var isRanked: Bool { matchKind == .ranked }
+    var isExhibition: Bool { matchKind == .exhibition }
 
     func result(for userID: String) -> SessionResult? {
         guard status == .finished else { return nil }
@@ -230,7 +238,7 @@ struct GameSession: Codable, Identifiable {
 
     // Rank points awarded per outcome, scaled by difficulty and time
     func rankPointsDelta(for userID: String) -> Int {
-        guard let result = result(for: userID) else { return 0 }
+        guard isRanked, let result = result(for: userID) else { return 0 }
         let base: Int
         switch result {
         case .win:       base = 30
@@ -239,6 +247,50 @@ struct GameSession: Codable, Identifiable {
         case .abandoned: base = -20
         }
         return Int(Double(base) * mode.pointMultiplier(for: difficulty))
+    }
+}
+
+extension GameSession {
+    enum CodingKeys: String, CodingKey {
+        case id, mode, difficulty, status, players, playerIDs, seed, puzzleData, createdAt, startedAt, finishedAt, winnerID, playerResults, winnerReason, matchKind
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        mode = try c.decode(GameMode.self, forKey: .mode)
+        difficulty = try c.decode(Difficulty.self, forKey: .difficulty)
+        status = try c.decode(SessionStatus.self, forKey: .status)
+        players = try c.decode([MatchPlayer].self, forKey: .players)
+        playerIDs = try c.decodeIfPresent([String].self, forKey: .playerIDs)
+        seed = try c.decode(Int.self, forKey: .seed)
+        puzzleData = try c.decodeIfPresent(String.self, forKey: .puzzleData) ?? ""
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
+        finishedAt = try c.decodeIfPresent(Date.self, forKey: .finishedAt)
+        winnerID = try c.decodeIfPresent(String.self, forKey: .winnerID)
+        playerResults = try c.decodeIfPresent([String: MatchPlayerResult].self, forKey: .playerResults)
+        winnerReason = try c.decodeIfPresent(String.self, forKey: .winnerReason)
+        matchKind = (try? c.decode(SessionKind.self, forKey: .matchKind)) ?? .ranked
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(mode, forKey: .mode)
+        try c.encode(difficulty, forKey: .difficulty)
+        try c.encode(status, forKey: .status)
+        try c.encode(players, forKey: .players)
+        try c.encodeIfPresent(playerIDs, forKey: .playerIDs)
+        try c.encode(seed, forKey: .seed)
+        try c.encode(puzzleData, forKey: .puzzleData)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(startedAt, forKey: .startedAt)
+        try c.encodeIfPresent(finishedAt, forKey: .finishedAt)
+        try c.encodeIfPresent(winnerID, forKey: .winnerID)
+        try c.encodeIfPresent(playerResults, forKey: .playerResults)
+        try c.encodeIfPresent(winnerReason, forKey: .winnerReason)
+        try c.encode(matchKind, forKey: .matchKind)
     }
 }
 

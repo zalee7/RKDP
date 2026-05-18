@@ -29,7 +29,8 @@ final class RankingService {
 
     @discardableResult
     func applyFinishedSession(_ session: GameSession, for userID: String) async throws -> AppliedPlayerOutcome {
-        guard session.status == .finished,
+        guard session.isRanked,
+              session.status == .finished,
               session.players.contains(where: { $0.userID == userID }) else {
             let user = try await db.collection("users").document(userID).getDocument(as: AppUser.self)
             return AppliedPlayerOutcome(user: user, didApplyRewards: false)

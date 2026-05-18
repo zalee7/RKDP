@@ -14,15 +14,38 @@ final class ShopViewModel: ObservableObject {
         self.ownedCosmetics = user.cosmetics
     }
 
-    // For titles: only show today's rotation + already-owned titles
+    // For titles: only show today's rotation + already-owned titles.
     func items(for category: CosmeticCategory) -> [CosmeticItem] {
+        let items: [CosmeticItem]
         if category == .title {
             let todayIDs = Set(DailyRotation.todaysTitles().map(\.id))
-            return CosmeticCatalog.allTitles.filter { item in
+            items = CosmeticCatalog.allTitles.filter { item in
                 item.price == 0 || todayIDs.contains(item.id) || isOwned(item)
             }
+        } else {
+            items = CosmeticCatalog.all.filter { $0.category == category }
         }
-        return CosmeticCatalog.all.filter { $0.category == category }
+        return sortedForOwnership(items)
+    }
+
+    var ownedItems: [CosmeticItem] {
+        sortedForOwnership(CosmeticCatalog.all.filter { isOwned($0) })
+    }
+
+    private func sortedForOwnership(_ items: [CosmeticItem]) -> [CosmeticItem] {
+        items.sorted { lhs, rhs in
+            let leftRank = ownershipSortRank(lhs)
+            let rightRank = ownershipSortRank(rhs)
+            if leftRank != rightRank { return leftRank < rightRank }
+            if lhs.category != rhs.category { return lhs.category.rawValue < rhs.category.rawValue }
+            return lhs.name < rhs.name
+        }
+    }
+
+    private func ownershipSortRank(_ item: CosmeticItem) -> Int {
+        if isEquipped(item) { return 0 }
+        if isOwned(item) { return 1 }
+        return 2
     }
 
     var nextRotationDate: Date { DailyRotation.nextRotationDate }

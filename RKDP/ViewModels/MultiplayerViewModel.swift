@@ -134,6 +134,35 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    func startExhibition(user: AppUser, session: GameSession) async {
+        activeSearchID = nil
+        tearDownListeners()
+        countdownTask?.cancel()
+        countdownTask = nil
+        gameTimer?.invalidate()
+        removeRealtimeObservers()
+        clearRematchState()
+
+        self.user = user
+        self.mode = session.mode
+        self.difficulty = session.difficulty
+        self.selectedWager = nil
+        playerResults = [:]
+        opponentUser = nil
+        elapsedSeconds = 0
+        matchCountdown = 5
+        finishedSessionID = nil
+        rewardErrorMessage = nil
+        rewardSnapshot = nil
+        currentSessionID = session.id
+
+        if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
+            opponentUser = try? await store.fetchUser(id: opponentID)
+        }
+        state = .matchFound(session: session)
+        startMatchCountdown(session: session)
+    }
+
     func cancelSearch() async {
         guard let user else { return }
         activeSearchID = nil
@@ -218,7 +247,12 @@ final class MultiplayerViewModel: ObservableObject {
                 if let results = session.playerResults {
                     self.playerResults = self.playerResults.merging(results) { _, sessionResult in sessionResult }
                 }
-                await self.applyFinishedRewards(session)
+                if session.isRanked {
+                    await self.applyFinishedRewards(session)
+                } else {
+                    self.rewardSnapshot = nil
+                    self.rewardErrorMessage = nil
+                }
                 self.state = .finished(session: session)
                 self.finishedSessionID = session.id
             }
@@ -273,7 +307,12 @@ final class MultiplayerViewModel: ObservableObject {
         do {
             try await ranking.processOutcome(outcome)
             let updated = try await store.fetchSession(id: session.id)
-            await applyFinishedRewards(updated)
+            if updated.isRanked {
+                await applyFinishedRewards(updated)
+            } else {
+                rewardSnapshot = nil
+                rewardErrorMessage = nil
+            }
             state = .finished(session: updated)
             finishedSessionID = updated.id
         } catch {
@@ -299,7 +338,7 @@ final class MultiplayerViewModel: ObservableObject {
             progress: 0,
             status: "Forfeited",
             summary: ["forfeit": "true"],
-            details: ["Quit the active ranked match."]
+            details: [session.isRanked ? "Quit the active ranked match." : "Left the exhibition match."]
         )
 
         let opponentResult = playerResults[opponent.userID] ?? MatchPlayerResult(
@@ -311,7 +350,7 @@ final class MultiplayerViewModel: ObservableObject {
             progress: 0,
             status: "Won by forfeit",
             summary: ["forfeitWin": "true"],
-            details: ["Opponent forfeited before the match was completed."]
+            details: [session.isRanked ? "Opponent forfeited before the match was completed." : "Opponent left the exhibition match."]
         )
 
         var results = playerResults
@@ -336,7 +375,12 @@ final class MultiplayerViewModel: ObservableObject {
         do {
             try await ranking.processOutcome(outcome)
             let updated = try await store.fetchSession(id: session.id)
-            await applyFinishedRewards(updated)
+            if updated.isRanked {
+                await applyFinishedRewards(updated)
+            } else {
+                rewardSnapshot = nil
+                rewardErrorMessage = nil
+            }
             state = .finished(session: updated)
             finishedSessionID = updated.id
             if resetAfterProcessing {
@@ -357,7 +401,7 @@ final class MultiplayerViewModel: ObservableObject {
 
 
     func beginRematchListening(session: GameSession) {
-        guard session.status == .finished else { return }
+        guard session.isRanked, session.status == .finished else { return }
         if rematchListeningSessionID == session.id { return }
         rematchListeningSessionID = session.id
         rematchRequests = []
@@ -374,7 +418,7 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func requestRematch(session: GameSession) async {
-        guard let user else { return }
+        guard session.isRanked, let user else { return }
         guard let player = session.players.first(where: { $0.userID == user.id }) else { return }
         guard user.coins >= player.wager else {
             rematchErrorMessage = "Not enough coins for rematch."
@@ -502,6 +546,7 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     private func consumeRankedEntryIfNeeded(for session: GameSession) async -> Bool {
+        guard session.isRanked else { return true }
         guard let currentUser = user else { return false }
         do {
             user = try await store.consumeRankedEntry(userID: currentUser.id, mode: session.mode, sessionID: session.id)
@@ -513,6 +558,11 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     private func applyFinishedRewards(_ session: GameSession) async {
+        guard session.isRanked else {
+            rewardSnapshot = nil
+            rewardErrorMessage = nil
+            return
+        }
         guard let beforeUser = user else { return }
         do {
             let outcome = try await ranking.applyFinishedSession(session, for: beforeUser.id)
@@ -648,7 +698,7 @@ final class MultiplayerViewModel: ObservableObject {
     func abortMatchFound(session: GameSession) async {
         countdownTask?.cancel()
         countdownTask = nil
-        if let userID = user?.id {
+        if session.isRanked, let userID = user?.id {
             try? await store.updateCoins(userID: userID, delta: -1)
         }
         reset()

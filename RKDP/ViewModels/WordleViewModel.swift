@@ -40,6 +40,7 @@ final class WordleViewModel: ObservableObject {
     let maxGuesses: Int
     let totalRounds: Int    // 3 for solo, 1 for multiplayer context (MatchmakingView wraps)
     private let baseSeed: Int
+    private let targetWords: [String]?
 
     // Current round state
     @Published var game: WordleGame
@@ -64,10 +65,11 @@ final class WordleViewModel: ObservableObject {
     }
     var didSolveRound: Bool { guesses.last?.isSolved == true }
 
-    init(difficulty: Difficulty, seed: Int? = nil, totalRounds: Int = 3) {
+    init(difficulty: Difficulty, seed: Int? = nil, totalRounds: Int = 3, targetWords: [String]? = nil) {
         self.difficulty   = difficulty
         self.totalRounds  = totalRounds
         self.baseSeed     = seed ?? Int.random(in: 0..<Int.max)
+        self.targetWords  = targetWords
         self.maxGuesses   = {
             switch difficulty {
             case .easy:   return 7
@@ -76,7 +78,7 @@ final class WordleViewModel: ObservableObject {
             case .expert: return 4
             }
         }()
-        self.game = WordleGame(seed: self.baseSeed, round: 0)
+        self.game = WordleGame(seed: self.baseSeed, round: 0, targetWords: targetWords)
         startTimer()
     }
 
@@ -152,7 +154,7 @@ final class WordleViewModel: ObservableObject {
     }
 
     func startNextRound() {
-        game         = WordleGame(seed: baseSeed, round: currentRound)
+        game         = WordleGame(seed: baseSeed, round: currentRound, targetWords: targetWords)
         guesses      = []
         currentInput = ""
         letterStates = [:]

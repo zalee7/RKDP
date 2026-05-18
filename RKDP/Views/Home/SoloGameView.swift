@@ -7,6 +7,7 @@ struct SoloGameView: View {
     let user: AppUser?
     var sessionID: String? = nil
     var seed: Int? = nil
+    var puzzleData: String? = nil
     var onMatchResult: (MatchPlayerResult) -> Void = { _ in }
     var onSoloResult: (SoloGameResult) -> Void = { _ in }
     var onPlayAgain: () -> Void = {}
@@ -35,11 +36,11 @@ struct SoloGameView: View {
             case .gridlock:
                 GridlockView(difficulty: difficulty, userID: user?.id, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             case .anagram:
-                AnagramView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+                AnagramView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             case .wordHunt:
                 WordHuntView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             case .wordle:
-                WordleView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+                WordleView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             }
         }
         .id(runID)

@@ -6,6 +6,11 @@ enum FirestoreServiceError: LocalizedError {
     case missingUpdatedUser
     case rankedAccessUnavailable
     case rewardedAdLimitReached
+    case friendRequestAlreadyPending
+    case friendshipAlreadyExists
+    case invalidFriendAction
+    case notFriends
+    case exhibitionInviteExpired
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +22,16 @@ enum FirestoreServiceError: LocalizedError {
             return "No ranked entry is available for this mode today."
         case .rewardedAdLimitReached:
             return "You have reached today's rewarded ad limit for ranked entries."
+        case .friendRequestAlreadyPending:
+            return "A friend request is already pending."
+        case .friendshipAlreadyExists:
+            return "You are already friends."
+        case .invalidFriendAction:
+            return "That friend action is no longer available."
+        case .notFriends:
+            return "You can only invite accepted friends."
+        case .exhibitionInviteExpired:
+            return "That exhibition invite expired."
         }
     }
 }
@@ -322,14 +337,15 @@ final class FirestoreService {
 
         let suffix = UUID().uuidString.prefix(8)
         let sessionID = "\(oldSession.id)_rematch_\(Int(Date().timeIntervalSince1970))_\(suffix)"
+        let seed = Int.random(in: 0..<Int.max)
         var session = GameSession(
             id: sessionID,
             mode: oldSession.mode,
             difficulty: oldSession.difficulty,
             status: .waiting,
             players: refreshedPlayers,
-            seed: Int.random(in: 0..<Int.max),
-            puzzleData: "",
+            seed: seed,
+            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: oldSession.mode, difficulty: oldSession.difficulty, seed: seed),
             createdAt: Date()
         )
         session.playerIDs = refreshedPlayers.map(\.userID)
@@ -489,7 +505,7 @@ final class FirestoreService {
                 MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints)
             ],
             seed: seed,
-            puzzleData: "",
+            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
             createdAt: Date()
         )
         session.playerIDs = [hostUser.id, opponentID]
@@ -610,6 +626,231 @@ final class FirestoreService {
             .collection("queue")
     }
 }
+
+    // MARK: - Friends / Exhibition
+
+    func searchUsers(username: String, excluding currentUserID: String) async throws -> [AppUser] {
+        let snapshot = try await db.collection("users")
+            .whereField("username", isEqualTo: username)
+            .limit(to: 10)
+            .getDocuments()
+        return try snapshot.documents
+            .map { try $0.data(as: AppUser.self) }
+            .filter { $0.id != currentUserID }
+    }
+
+    func sendFriendRequest(from user: AppUser, to target: AppUser) async throws {
+        guard user.id != target.id else { throw FirestoreServiceError.invalidFriendAction }
+        let friendshipID = friendshipID(user.id, target.id)
+        let requestID = friendshipID
+        let friendshipDoc = try await db.collection("friendships").document(friendshipID).getDocument()
+        if friendshipDoc.exists { throw FirestoreServiceError.friendshipAlreadyExists }
+
+        let requestRef = db.collection("friendRequests").document(requestID)
+        if let existing = try? await requestRef.getDocument(as: FriendRequest.self), existing.status == .pending {
+            throw FirestoreServiceError.friendRequestAlreadyPending
+        }
+
+        let request = FriendRequest(
+            id: requestID,
+            fromID: user.id,
+            fromUsername: user.username,
+            toID: target.id,
+            toUsername: target.username,
+            status: .pending,
+            createdAt: Date()
+        )
+        try requestRef.setData(from: request, merge: true)
+    }
+
+    func acceptFriendRequest(_ request: FriendRequest, currentUserID: String) async throws {
+        guard request.toID == currentUserID, request.status == .pending else { throw FirestoreServiceError.invalidFriendAction }
+        let requestRef = db.collection("friendRequests").document(request.id)
+        let friendshipRef = db.collection("friendships").document(friendshipID(request.fromID, request.toID))
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+                do {
+                    let requestDoc = try transaction.getDocument(requestRef)
+                    guard let status = requestDoc.data()?["status"] as? String,
+                          status == FriendRequestStatus.pending.rawValue else {
+                        return fail(FirestoreServiceError.invalidFriendAction)
+                    }
+                    let friendship = Friendship(
+                        id: friendshipRef.documentID,
+                        userIDs: [request.fromID, request.toID].sorted(),
+                        usernames: [request.fromID: request.fromUsername, request.toID: request.toUsername],
+                        createdAt: Date()
+                    )
+                    let friendshipData = try Firestore.Encoder().encode(friendship)
+                    transaction.updateData(["status": FriendRequestStatus.accepted.rawValue], forDocument: requestRef)
+                    transaction.setData(friendshipData, forDocument: friendshipRef, merge: true)
+                    return true
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { _, error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            })
+        }
+    }
+
+    func declineFriendRequest(_ request: FriendRequest, currentUserID: String) async throws {
+        guard request.toID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
+        try await db.collection("friendRequests").document(request.id).updateData(["status": FriendRequestStatus.declined.rawValue])
+    }
+
+    func cancelFriendRequest(_ request: FriendRequest, currentUserID: String) async throws {
+        guard request.fromID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
+        try await db.collection("friendRequests").document(request.id).updateData(["status": FriendRequestStatus.canceled.rawValue])
+    }
+
+    func createExhibitionInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty) async throws -> ExhibitionInvite {
+        let friendshipDoc = try await db.collection("friendships").document(friendshipID(user.id, friend.userID)).getDocument()
+        guard friendshipDoc.exists else { throw FirestoreServiceError.notFriends }
+        let now = Date()
+        let invite = ExhibitionInvite(
+            id: UUID().uuidString,
+            fromID: user.id,
+            fromUsername: user.username,
+            toID: friend.userID,
+            toUsername: friend.username,
+            mode: mode,
+            difficulty: difficulty,
+            status: .pending,
+            createdAt: now,
+            expiresAt: now.addingTimeInterval(120),
+            sessionID: nil
+        )
+        try db.collection("exhibitionInvites").document(invite.id).setData(from: invite)
+        return invite
+    }
+
+    func acceptExhibitionInvite(_ invite: ExhibitionInvite, currentUser: AppUser) async throws -> GameSession {
+        guard invite.toID == currentUser.id else { throw FirestoreServiceError.invalidFriendAction }
+        guard !invite.isExpired else {
+            try? await expireExhibitionInvite(invite.id)
+            throw FirestoreServiceError.exhibitionInviteExpired
+        }
+
+        let fromUser = try await fetchUser(id: invite.fromID)
+        let sessionID = "exhibition_\(invite.id)_\(UUID().uuidString.prefix(8))"
+        let seed = Int.random(in: 0..<Int.max)
+        var session = GameSession(
+            id: sessionID,
+            mode: invite.mode,
+            difficulty: invite.difficulty,
+            status: .waiting,
+            players: [
+                MatchPlayer(userID: invite.fromID, username: fromUser.username, wager: 0, rankTier: fromUser.rank(for: invite.mode).displayTier, rankPoints: fromUser.rank(for: invite.mode).points),
+                MatchPlayer(userID: currentUser.id, username: currentUser.username, wager: 0, rankTier: currentUser.rank(for: invite.mode).displayTier, rankPoints: currentUser.rank(for: invite.mode).points)
+            ],
+            seed: seed,
+            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: invite.mode, difficulty: invite.difficulty, seed: seed),
+            createdAt: Date(),
+            matchKind: .exhibition
+        )
+        session.playerIDs = [invite.fromID, currentUser.id]
+
+        let inviteRef = db.collection("exhibitionInvites").document(invite.id)
+        let sessionRef = db.collection("sessions").document(sessionID)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+                do {
+                    let inviteDoc = try transaction.getDocument(inviteRef)
+                    guard let status = inviteDoc.data()?["status"] as? String,
+                          status == ExhibitionInviteStatus.pending.rawValue else {
+                        return fail(FirestoreServiceError.invalidFriendAction)
+                    }
+                    let encoded = try Firestore.Encoder().encode(session)
+                    transaction.setData(encoded, forDocument: sessionRef)
+                    transaction.updateData([
+                        "status": ExhibitionInviteStatus.accepted.rawValue,
+                        "sessionID": sessionID
+                    ], forDocument: inviteRef)
+                    return true
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { _, error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            })
+        }
+        return session
+    }
+
+    func declineExhibitionInvite(_ invite: ExhibitionInvite, currentUserID: String) async throws {
+        guard invite.toID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
+        try await db.collection("exhibitionInvites").document(invite.id).updateData(["status": ExhibitionInviteStatus.declined.rawValue])
+    }
+
+    private func expireExhibitionInvite(_ inviteID: String) async throws {
+        try await db.collection("exhibitionInvites").document(inviteID).updateData(["status": ExhibitionInviteStatus.expired.rawValue])
+    }
+
+    func listenForFriends(userID: String, onChange: @escaping ([Friendship]) -> Void) -> ListenerRegistration {
+        db.collection("friendships")
+            .whereField("userIDs", arrayContains: userID)
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Friends listener error: \(error.localizedDescription)") }
+                onChange(snapshot?.documents.compactMap { try? $0.data(as: Friendship.self) } ?? [])
+            }
+    }
+
+    func listenForIncomingFriendRequests(userID: String, onChange: @escaping ([FriendRequest]) -> Void) -> ListenerRegistration {
+        db.collection("friendRequests")
+            .whereField("toID", isEqualTo: userID)
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Incoming friend requests listener error: \(error.localizedDescription)") }
+                let requests = snapshot?.documents.compactMap { try? $0.data(as: FriendRequest.self) }
+                    .filter { $0.status == .pending } ?? []
+                onChange(requests)
+            }
+    }
+
+    func listenForOutgoingFriendRequests(userID: String, onChange: @escaping ([FriendRequest]) -> Void) -> ListenerRegistration {
+        db.collection("friendRequests")
+            .whereField("fromID", isEqualTo: userID)
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Outgoing friend requests listener error: \(error.localizedDescription)") }
+                let requests = snapshot?.documents.compactMap { try? $0.data(as: FriendRequest.self) }
+                    .filter { $0.status == .pending } ?? []
+                onChange(requests)
+            }
+    }
+
+    func listenForIncomingExhibitionInvites(userID: String, onChange: @escaping ([ExhibitionInvite]) -> Void) -> ListenerRegistration {
+        db.collection("exhibitionInvites")
+            .whereField("toID", isEqualTo: userID)
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Incoming exhibition invite listener error: \(error.localizedDescription)") }
+                let invites = snapshot?.documents.compactMap { try? $0.data(as: ExhibitionInvite.self) }
+                    .filter { $0.status == .pending && !$0.isExpired } ?? []
+                onChange(invites)
+            }
+    }
+
+    func listenForOutgoingExhibitionInvites(userID: String, onChange: @escaping ([ExhibitionInvite]) -> Void) -> ListenerRegistration {
+        db.collection("exhibitionInvites")
+            .whereField("fromID", isEqualTo: userID)
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Outgoing exhibition invite listener error: \(error.localizedDescription)") }
+                let invites = snapshot?.documents.compactMap { try? $0.data(as: ExhibitionInvite.self) }
+                    .filter { ($0.status == .pending && !$0.isExpired) || ($0.status == .accepted && $0.sessionID != nil) } ?? []
+                onChange(invites)
+            }
+    }
+
+    private func friendshipID(_ a: String, _ b: String) -> String {
+        [a, b].sorted().joined(separator: "_")
+    }
 
 
 private extension Sequence {

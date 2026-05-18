@@ -20,6 +20,7 @@ struct WordleView: View {
         user: AppUser? = nil,
         sessionID: String? = nil,
         seed: Int? = nil,
+        puzzleData: String? = nil,
         onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
         onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
         onPlayAgain: @escaping () -> Void = {},
@@ -39,7 +40,8 @@ struct WordleView: View {
         _vm = StateObject(wrappedValue: WordleViewModel(
             difficulty: difficulty,
             seed: seed,
-            totalRounds: rounds
+            totalRounds: rounds,
+            targetWords: MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.targets
         ))
     }
 
@@ -76,6 +78,10 @@ struct WordleView: View {
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
+        .onChange(of: vm.guesses.count) { _, count in
+            guard count > 0, sessionID != nil else { return }
+            reportMatchResult(isFinal: false)
+        }
         .onChange(of: vm.roundResults.count) { _, count in
             guard count > 0, sessionID != nil else { return }
             reportMatchResult(isFinal: vm.isMatchOver)
@@ -286,33 +292,63 @@ struct WordleView: View {
             guard !didReportMatchResult else { return }
             didReportMatchResult = true
         }
-        let solved = vm.roundResults.filter(\.solved)
-        let totalGuesses = solved.reduce(0) { $0 + $1.guessCount }
+
+        var rounds = vm.roundResults
+        let latestCompletedMatchesCurrent = vm.roundResults.last?.targetWord == vm.game.targetWord && vm.roundResults.last?.guesses.count == vm.guesses.count
+        let hasCurrentPartial = !vm.guesses.isEmpty && vm.currentRound < vm.totalRounds && !latestCompletedMatchesCurrent
+        if hasCurrentPartial {
+            let solved = vm.didSolveRound
+            rounds.append(WordleRoundResult(
+                targetWord: vm.game.targetWord,
+                guessCount: solved ? vm.guesses.count : vm.guesses.count,
+                solved: solved,
+                guesses: vm.guesses
+            ))
+        }
+
+        let solved = rounds.filter(\.solved)
+        let completedFailedRounds = vm.roundResults.filter { !$0.solved }.count
+        let totalSolvedGuesses = solved.reduce(0) { $0 + $1.guessCount }
         var summary: [String: String] = [
             "solvedRounds": "\(solved.count)",
-            "totalGuesses": "\(totalGuesses)",
-            "failedRounds": "\(vm.roundResults.filter { !$0.solved }.count)",
-            "roundCount": "\(vm.roundResults.count)",
+            "totalGuesses": "\(totalSolvedGuesses)",
+            "failedRounds": "\(completedFailedRounds)",
+            "roundCount": "\(rounds.count)",
             "maxGuesses": "\(vm.maxGuesses)",
             "isFinal": isFinal ? "true" : "false"
         ]
-        for (idx, result) in vm.roundResults.enumerated() {
+        if hasCurrentPartial {
+            summary["notFinishedBeforeClinch"] = "true"
+        }
+        for (idx, result) in rounds.enumerated() {
             let round = idx + 1
             summary["round\(round)Target"] = result.targetWord
             summary["round\(round)Solved"] = result.solved ? "true" : "false"
-            summary["round\(round)GuessCount"] = "\(result.guessCount)"
+            summary["round\(round)GuessCount"] = "\(result.guesses.count)"
             summary["round\(round)Guesses"] = encodeWordleGuesses(result.guesses)
+            if hasCurrentPartial && idx == rounds.count - 1 {
+                summary["round\(round)Partial"] = "true"
+            }
         }
+
+        let completed = solved.count >= 2
+        let status = hasCurrentPartial && !isFinal
+            ? "\(solved.count)/\(vm.totalRounds) solved · round \(vm.currentRound + 1)"
+            : "\(solved.count)/\(vm.totalRounds) solved"
+
         onMatchResult(MatchPlayerResult(
             userID: userID,
             mode: .wordle,
-            completed: solved.count >= 2,
+            completed: completed,
             elapsedSeconds: vm.elapsedSeconds,
             score: solved.count,
             progress: Double(solved.count) / Double(max(1, vm.totalRounds)),
-            status: "\(solved.count)/\(vm.totalRounds) solved",
+            status: status,
             summary: summary,
-            details: vm.roundResults.enumerated().map { idx, result in
+            details: rounds.enumerated().map { idx, result in
+                if summary["round\(idx + 1)Partial"] == "true" {
+                    return "Round \(idx + 1): \(result.targetWord) in progress"
+                }
                 if result.solved {
                     return "Round \(idx + 1): \(result.targetWord) in \(result.guessCount)"
                 }

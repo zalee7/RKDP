@@ -1,10 +1,27 @@
 import SwiftUI
 
+
+private enum ShopSection: Hashable, CaseIterable {
+    case myItems
+    case category(CosmeticCategory)
+
+    static var allCases: [ShopSection] {
+        [.myItems] + CosmeticCategory.allCases.map { .category($0) }
+    }
+
+    var title: String {
+        switch self {
+        case .myItems: return "My Items"
+        case .category(let category): return category.rawValue
+        }
+    }
+}
+
 struct ShopView: View {
     let user: AppUser
     var onUserChanged: () -> Void = {}
     @StateObject private var vm: ShopViewModel
-    @State private var selectedCategory: CosmeticCategory = .title
+    @State private var selectedSection: ShopSection = .myItems
     @State private var showRankedPassStore = false
     @Environment(\.dismiss) var dismiss
 
@@ -38,13 +55,13 @@ struct ShopView: View {
                 // Category tabs
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(CosmeticCategory.allCases, id: \.self) { cat in
-                            Button { selectedCategory = cat } label: {
-                                Text(cat.rawValue)
-                                    .font(.subheadline.weight(selectedCategory == cat ? .bold : .regular))
+                        ForEach(ShopSection.allCases, id: \.self) { section in
+                            Button { selectedSection = section } label: {
+                                Text(section.title)
+                                    .font(.subheadline.weight(selectedSection == section ? .bold : .regular))
                                     .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(selectedCategory == cat ? AppTheme.royalBlue : AppTheme.cardBackground)
-                                    .foregroundStyle(selectedCategory == cat ? .white : AppTheme.textSecondary)
+                                    .background(selectedSection == section ? AppTheme.crownGold : AppTheme.cardBackground)
+                                    .foregroundStyle(selectedSection == section ? .white : AppTheme.textSecondary)
                                     .clipShape(Capsule())
                             }
                         }
@@ -56,30 +73,23 @@ struct ShopView: View {
                 Divider()
 
                 // Rotation countdown banner (titles only)
-                if selectedCategory == .title {
+                if selectedSection == .category(.title) {
                     RotationCountdownBanner(nextDate: vm.nextRotationDate)
                 }
 
                 // Items
-                let items = vm.items(for: selectedCategory)
                 ScrollView {
-                    if selectedCategory == .title {
-                        titleGrid(items: items)
-                    } else {
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                            ForEach(items) { item in
-                                ShopItemCard(
-                                    item: item,
-                                    isOwned: vm.isOwned(item),
-                                    isEquipped: vm.isEquipped(item),
-                                    canAfford: vm.canAfford(item),
-                                    isLimited: false
-                                ) {
-                                    Task { await handleShopAction(item) }
-                                }
-                            }
+                    switch selectedSection {
+                    case .myItems:
+                        myItemsGrid(items: vm.ownedItems)
+                    case .category(let category):
+                        let items = vm.items(for: category)
+                        if category == .title {
+                            titleGrid(items: items)
+                        } else {
+                            itemGrid(items: items)
+                                .padding()
                         }
-                        .padding()
                     }
                 }
             }
@@ -116,6 +126,55 @@ struct ShopView: View {
             changed = await vm.purchase(item)
         }
         if changed { onUserChanged() }
+    }
+
+    private func itemGrid(items: [CosmeticItem]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            ForEach(items) { item in
+                ShopItemCard(
+                    item: item,
+                    isOwned: vm.isOwned(item),
+                    isEquipped: vm.isEquipped(item),
+                    canAfford: vm.canAfford(item),
+                    isLimited: item.category == .title && item.price > 0 && vm.isInTodaysRotation(item)
+                ) {
+                    Task { await handleShopAction(item) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func myItemsGrid(items: [CosmeticItem]) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if items.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(AppTheme.crownGold)
+                    Text("No owned cosmetics yet")
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("Bought and equipped items will live here for quick access.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(24)
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                .padding()
+            } else {
+                Text("Owned Cosmetics")
+                    .font(.headline.bold())
+                    .padding(.horizontal)
+                itemGrid(items: items)
+                    .padding(.horizontal)
+            }
+        }
+        .padding(.vertical)
     }
 
     @ViewBuilder
@@ -253,8 +312,8 @@ struct ShopItemCard: View {
     }
 
     var actionColor: Color {
-        if isEquipped { return AppTheme.cardBorder }
-        if isOwned    { return AppTheme.royalBlue }
+        if isEquipped { return AppTheme.teal.opacity(0.72) }
+        if isOwned    { return AppTheme.crownGold }
         return canAfford ? AppTheme.crownGold : AppTheme.cardBorder
     }
 
@@ -297,9 +356,20 @@ struct ShopItemCard: View {
                             .foregroundStyle(.white)
                             .clipShape(Capsule())
                     }
-                    if isOwned {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(AppTheme.teal)
+                    if isEquipped {
+                        Text("EQUIPPED")
+                            .font(.system(size: 9, weight: .black))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(AppTheme.teal)
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
+                    } else if isOwned {
+                        Text("OWNED")
+                            .font(.system(size: 9, weight: .black))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(AppTheme.royalBlue)
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
                     }
                 }
                 .padding(6)

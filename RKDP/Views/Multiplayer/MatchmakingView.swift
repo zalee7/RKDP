@@ -4,7 +4,8 @@ struct MatchmakingView: View {
     let user: AppUser
     let mode: GameMode
     let difficulty: Difficulty
-    var onMatchFinished: () -> Void = {}
+    let initialSession: GameSession?
+    var onMatchFinished: () -> Void
 
     @StateObject private var vm = MultiplayerViewModel()
     @State private var selectedWager: WagerTier?
@@ -14,7 +15,24 @@ struct MatchmakingView: View {
     @State private var showForfeitWarning = false
     @State private var rewardAnimationFinished = false
     @State private var showCompatibilityHint = false
+    @State private var didStartInitialSession = false
     @Environment(\.dismiss) var dismiss
+
+    init(user: AppUser, mode: GameMode, difficulty: Difficulty, onMatchFinished: @escaping () -> Void = {}) {
+        self.user = user
+        self.mode = mode
+        self.difficulty = difficulty
+        self.initialSession = nil
+        self.onMatchFinished = onMatchFinished
+    }
+
+    init(exhibitionSession: GameSession, user: AppUser, onMatchFinished: @escaping () -> Void = {}) {
+        self.user = user
+        self.mode = exhibitionSession.mode
+        self.difficulty = exhibitionSession.difficulty
+        self.initialSession = exhibitionSession
+        self.onMatchFinished = onMatchFinished
+    }
 
     private var wagerOptions: [WagerTier] {
         Wager.options(for: user.rank(for: mode).tier)
@@ -67,10 +85,11 @@ struct MatchmakingView: View {
             }
         }
         .foregroundStyle(AppTheme.textPrimary)
-        .navigationTitle("Ranked Match")
+        .navigationTitle(initialSession?.isExhibition == true ? "Exhibition Match" : "Ranked Match")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(shouldBlockDismiss)
         .interactiveDismissDisabled(shouldBlockDismiss)
+        .onAppear { startInitialSessionIfNeeded() }
         .onDisappear {
             SoundManager.shared.stopAllLoops()
             vm.handleViewDisappeared()
@@ -82,15 +101,21 @@ struct MatchmakingView: View {
             didNotifyFinished = true
             onMatchFinished()
         }
-        .alert("Forfeit ranked match?", isPresented: $showForfeitWarning) {
+        .alert(activeInMatchSession?.isExhibition == true ? "Leave exhibition match?" : "Forfeit ranked match?", isPresented: $showForfeitWarning) {
             Button("Keep Playing", role: .cancel) {}
-            Button("Forfeit", role: .destructive) {
+            Button(activeInMatchSession?.isExhibition == true ? "Leave" : "Forfeit", role: .destructive) {
                 guard let session = activeInMatchSession else { return }
                 Task { await vm.forfeitMatch(session: session) }
             }
         } message: {
-            Text("Quitting now counts as a ranked loss and forfeits your wager.")
+            Text(activeInMatchSession?.isExhibition == true ? "Leaving ends the exhibition for both players. No rank or coins are affected." : "Quitting now counts as a ranked loss and forfeits your wager.")
         }
+    }
+
+    private func startInitialSessionIfNeeded() {
+        guard let initialSession, !didStartInitialSession else { return }
+        didStartInitialSession = true
+        Task { await vm.startExhibition(user: user, session: initialSession) }
     }
 
     // MARK: - Wager picker
@@ -254,7 +279,7 @@ struct MatchmakingView: View {
         return VStack(spacing: 24) {
             Spacer()
 
-            Text("Match Found!")
+            Text(session.isExhibition ? "Exhibition Ready!" : "Match Found!")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.textPrimary)
 
@@ -321,14 +346,14 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textPrimary)
             }
 
-            Text("Game starts automatically…")
+            Text(session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
 
             Button {
                 Task { await vm.abortMatchFound(session: session) }
             } label: {
-                Label("Abort (−1 coin)", systemImage: "xmark.circle")
+                Label(session.isExhibition ? "Leave Exhibition" : "Abort (-1 coin)", systemImage: "xmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(.red)
             }
@@ -367,7 +392,7 @@ struct MatchmakingView: View {
                 Button {
                     showForfeitWarning = true
                 } label: {
-                    Label("Quit", systemImage: "flag.slash.fill")
+                    Label(session.isExhibition ? "Leave" : "Quit", systemImage: "flag.slash.fill")
                         .labelStyle(.iconOnly)
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
@@ -386,7 +411,8 @@ struct MatchmakingView: View {
                     difficulty: session.difficulty,
                     user: vm.user,
                     sessionID: session.id,
-                    seed: session.seed
+                    seed: session.seed,
+                    puzzleData: session.puzzleData
                 ) { result in
                     Task { await vm.submitResult(result, session: session) }
                 }
@@ -434,8 +460,8 @@ struct MatchmakingView: View {
         let myResult     = results[user.id]
         let opponentID   = session.players.first(where: { $0.userID != user.id })?.userID ?? ""
         let opponentResult = results[opponentID]
-        let snapshot = vm.rewardSnapshot ?? PostMatchRewardSnapshot.staticSnapshot(session: session, user: user)
-        let controlsReady = rewardAnimationFinished || !snapshot.shouldAnimate
+        let snapshot = session.isRanked ? (vm.rewardSnapshot ?? PostMatchRewardSnapshot.staticSnapshot(session: session, user: user)) : nil
+        let controlsReady = snapshot.map { rewardAnimationFinished || !$0.shouldAnimate } ?? true
 
         return VStack(spacing: 20) {
             Spacer()
@@ -460,20 +486,33 @@ struct MatchmakingView: View {
 
                 Divider()
 
-                PostMatchRewardPanel(
-                    snapshot: snapshot,
-                    adjustmentLabel: rankAdjustmentLabel(session: session)
-                ) {
-                    rewardAnimationFinished = true
+                if let snapshot {
+                    PostMatchRewardPanel(
+                        snapshot: snapshot,
+                        adjustmentLabel: rankAdjustmentLabel(session: session)
+                    ) {
+                        rewardAnimationFinished = true
+                    }
+                    .padding(.vertical, 10)
+                } else {
+                    VStack(spacing: 4) {
+                        Text("Exhibition Match")
+                            .font(.headline.bold())
+                            .foregroundStyle(AppTheme.accentBright)
+                        Text("No rank, coins, tickets, or W/L changed.")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
                 }
-                .padding(.vertical, 10)
             }
             .background(AppTheme.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
             .padding(.horizontal)
 
-            if let rewardError = vm.rewardErrorMessage {
+            if session.isRanked, let rewardError = vm.rewardErrorMessage {
                 Button {
                     Task { await vm.retryFinishedRewards(session: session) }
                 } label: {
@@ -491,28 +530,40 @@ struct MatchmakingView: View {
 
             Button { showBreakdown = true } label: {
                 Label("Match Breakdown", systemImage: "list.bullet.rectangle")
+                    .font(.headline.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(AppTheme.crownGold)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: AppTheme.crownGold.opacity(0.28), radius: 8, x: 0, y: 4)
+            }
+            .padding(.horizontal)
+            .opacity(controlsReady ? 1 : 0.36)
+            .disabled(!controlsReady)
+
+            if session.isRanked {
+                rematchControl(session: session, controlsReady: controlsReady)
+            }
+
+            Button { dismiss() } label: {
+                Label(session.isExhibition ? "Back to Friends" : "Back to Home", systemImage: "house.fill")
+                    .font(.headline.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(AppTheme.cardBackground)
-                    .foregroundStyle(mode.accentColor)
+                    .foregroundStyle(AppTheme.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
             }
             .padding(.horizontal)
             .opacity(controlsReady ? 1 : 0.36)
             .disabled(!controlsReady)
-
-            rematchControl(session: session, controlsReady: controlsReady)
-
-            Button("Back to Home") { dismiss() }
-                .foregroundStyle(.secondary)
-                .opacity(controlsReady ? 1 : 0.36)
-                .disabled(!controlsReady)
             Spacer()
         }
         .onAppear {
             SoundManager.shared.stopAllLoops()
-            vm.beginRematchListening(session: session)
+            if session.isRanked { vm.beginRematchListening(session: session) }
         }
         .sheet(isPresented: $showBreakdown) {
             MatchBreakdownView(session: session, currentUserID: user.id, results: results)
@@ -581,7 +632,7 @@ struct MatchmakingView: View {
                             Text("Accept")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(mode.accentColor)
+                                .background(AppTheme.crownGold)
                                 .foregroundStyle(.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
@@ -596,7 +647,7 @@ struct MatchmakingView: View {
                     Label("Request Rematch", systemImage: "arrow.triangle.2.circlepath")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(mode.accentColor)
+                        .background(AppTheme.crownGold)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
@@ -960,9 +1011,9 @@ struct MatchBreakdownView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding()
-        .background(AppTheme.cardBackground)
+        .background(Color.black.opacity(0.34))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.28), lineWidth: 1.2))
     }
 
     private func playerBreakdownCard(_ player: MatchPlayer) -> some View {
@@ -1007,9 +1058,9 @@ struct MatchBreakdownView: View {
             }
         }
         .padding()
-        .background(AppTheme.cardBackground)
+        .background(Color.black.opacity(0.34))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.28), lineWidth: 1.2))
     }
 
     private func statGrid(_ stats: [(String, String)]) -> some View {
@@ -1027,8 +1078,9 @@ struct MatchBreakdownView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-                .background(Color.white.opacity(0.08))
+                .background(Color.black.opacity(0.24))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
             }
         }
     }
@@ -1043,6 +1095,13 @@ struct MatchBreakdownView: View {
             ("Status", result.completed ? "Complete" : "Incomplete")
         ])
 
+        if result.summary["isFinal"] != "true" {
+            Text("Not finished before clinch.")
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.warning)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
         if rounds.isEmpty {
             detailLines(result.details.isEmpty ? ["No Wordle round details were stored for this match."] : result.details)
         } else {
@@ -1054,9 +1113,9 @@ struct MatchBreakdownView: View {
                                 .font(.caption.bold())
                                 .foregroundStyle(AppTheme.textSecondary)
                             Spacer()
-                            Text(round.solved ? "Solved" : "Failed")
+                            Text(round.isPartial ? "Not finished" : (round.solved ? "Solved" : "Failed"))
                                 .font(.caption.bold())
-                                .foregroundStyle(round.solved ? AppTheme.success : AppTheme.danger)
+                                .foregroundStyle(round.isPartial ? AppTheme.warning : (round.solved ? AppTheme.success : AppTheme.danger))
                         }
                         Text("Word: \(round.target)")
                             .font(.subheadline.bold())
@@ -1075,8 +1134,9 @@ struct MatchBreakdownView: View {
                         }
                     }
                     .padding(10)
-                    .background(Color.white.opacity(0.08))
+                    .background(Color.black.opacity(0.24))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
                 }
             }
         }
@@ -1086,9 +1146,9 @@ struct MatchBreakdownView: View {
         HStack(spacing: 5) {
             ForEach(Array(guess.word.enumerated()), id: \.offset) { idx, char in
                 Text(String(char))
-                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .font(.system(size: 15, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 32, height: 32)
                     .background(wordleColor(guess.results.indices.contains(idx) ? guess.results[idx] : "A"))
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1))
@@ -1100,8 +1160,8 @@ struct MatchBreakdownView: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(details.prefix(8), id: \.self) { detail in
                 Text(displayDetail(detail))
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -1202,7 +1262,8 @@ struct MatchBreakdownView: View {
                     target: result.summary["round\(idx)Target"] ?? "-----",
                     solved: result.summary["round\(idx)Solved"] == "true",
                     guessCount: Int(result.summary["round\(idx)GuessCount"] ?? "0") ?? 0,
-                    guesses: parseEncodedGuesses(result.summary["round\(idx)Guesses"] ?? "")
+                    guesses: parseEncodedGuesses(result.summary["round\(idx)Guesses"] ?? ""),
+                    isPartial: result.summary["round\(idx)Partial"] == "true"
                 )
             }
         }
@@ -1222,10 +1283,10 @@ struct MatchBreakdownView: View {
             guard let colon = detail.firstIndex(of: ":") else { return nil }
             let body = detail[detail.index(after: colon)...].trimmingCharacters(in: .whitespaces)
             if let range = body.range(of: " in ") {
-                return WordleBreakdownRound(index: idx + 1, target: String(body[..<range.lowerBound]), solved: true, guessCount: Int(body[range.upperBound...]) ?? 0, guesses: [])
+                return WordleBreakdownRound(index: idx + 1, target: String(body[..<range.lowerBound]), solved: true, guessCount: Int(body[range.upperBound...]) ?? 0, guesses: [], isPartial: false)
             }
             if let range = body.range(of: " failed") {
-                return WordleBreakdownRound(index: idx + 1, target: String(body[..<range.lowerBound]), solved: false, guessCount: 0, guesses: [])
+                return WordleBreakdownRound(index: idx + 1, target: String(body[..<range.lowerBound]), solved: false, guessCount: 0, guesses: [], isPartial: false)
             }
             return nil
         }
@@ -1258,6 +1319,7 @@ private struct WordleBreakdownRound: Identifiable {
     let solved: Bool
     let guessCount: Int
     let guesses: [WordleBreakdownGuess]
+    let isPartial: Bool
     var id: Int { index }
 }
 

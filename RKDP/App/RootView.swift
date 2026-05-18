@@ -20,6 +20,11 @@ struct MainTabView: View {
             HomeView()
                 .tabItem { Label("Play", systemImage: "gamecontroller.fill") }
 
+            if let user = auth.user {
+                FriendsView(user: user)
+                    .tabItem { Label("Friends", systemImage: "person.2.fill") }
+            }
+
             LeaderboardView()
                 .tabItem { Label("Leaderboard", systemImage: "chart.bar.fill") }
 

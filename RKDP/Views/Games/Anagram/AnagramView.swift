@@ -20,6 +20,7 @@ struct AnagramView: View {
         user: AppUser? = nil,
         sessionID: String? = nil,
         seed: Int? = nil,
+        puzzleData: String? = nil,
         onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
         onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
         onPlayAgain: @escaping () -> Void = {},
@@ -39,7 +40,8 @@ struct AnagramView: View {
             difficulty: difficulty,
             userID: user?.id,
             priorBest: user?.rank(for: .anagram).bestScore,
-            seed: seed
+            seed: seed,
+            puzzleData: MultiplayerPuzzleDataFactory.decodeAnagram(puzzleData)
         ))
     }
 

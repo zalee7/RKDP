@@ -26,12 +26,12 @@ final class AnagramViewModel: ObservableObject {
         case tooShort
     }
 
-    init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil) {
+    init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil, puzzleData: AnagramPuzzleData? = nil) {
         self.difficulty = difficulty
         self.totalSeconds = AnagramGame.totalSeconds(for: difficulty)
         self.userID = userID
         self.priorBest = priorBest
-        let g = AnagramGame.generate(difficulty: difficulty, seed: seed)
+        let g = AnagramGame.generate(difficulty: difficulty, seed: seed, puzzleData: puzzleData)
         self.game = g
         self.bank = g.letters.enumerated().map { ($0.offset, $0.element) }
         self.placed = []
