@@ -106,6 +106,16 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+
+    func grantTesterRankedAccess() async {
+        guard let currentUser = user else { return }
+        do {
+            user = try await store.setTesterRankedAccess(userID: currentUser.id, enabled: true)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func recordSoloResult(_ result: SoloGameResult) async {
         guard var user else { return }
         if result.completed {

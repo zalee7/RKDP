@@ -38,7 +38,7 @@ struct SoloGameView: View {
             case .anagram:
                 AnagramView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             case .wordHunt:
-                WordHuntView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+                WordHuntView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             case .wordle:
                 WordleView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             }

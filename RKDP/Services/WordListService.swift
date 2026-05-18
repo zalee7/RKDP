@@ -73,6 +73,11 @@ struct AnagramPuzzleData: Codable {
     let difficulty: String
 }
 
+struct WordHuntPuzzleData: Codable {
+    let wordBankVersion: String
+    let gridRows: [String]
+}
+
 enum MultiplayerPuzzleDataFactory {
     static func encoded(mode: GameMode, difficulty: Difficulty, seed: Int, rounds: Int? = nil) -> String {
         switch mode {
@@ -92,6 +97,13 @@ enum MultiplayerPuzzleDataFactory {
                 difficulty: difficulty.rawValue
             )
             return encode(data)
+        case .wordHunt:
+            let game = WordHuntGame.generate(seed: seed)
+            let data = WordHuntPuzzleData(
+                wordBankVersion: WordListService.wordBankVersion,
+                gridRows: game.grid.map { String($0) }
+            )
+            return encode(data)
         default:
             return ""
         }
@@ -103,6 +115,10 @@ enum MultiplayerPuzzleDataFactory {
 
     static func decodeAnagram(_ raw: String?) -> AnagramPuzzleData? {
         decode(AnagramPuzzleData.self, from: raw)
+    }
+
+    static func decodeWordHunt(_ raw: String?) -> WordHuntPuzzleData? {
+        decode(WordHuntPuzzleData.self, from: raw)
     }
 
     private static func encode<T: Encodable>(_ value: T) -> String {

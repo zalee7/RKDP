@@ -5,6 +5,7 @@ struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) var dismiss
     @StateObject private var shop: ShopViewModel
+    @State private var isGrantingTesterAccess = false
 
     init(user: AppUser) {
         self.user = user
@@ -32,6 +33,29 @@ struct ProfileView: View {
                                 .foregroundStyle(AppTheme.accentBright)
                             Text(user.email).font(.caption).foregroundStyle(AppTheme.textSecondary)
                             CoinBadgeView(amount: user.coins)
+
+                            #if DEBUG
+                            Button {
+                                Task {
+                                    isGrantingTesterAccess = true
+                                    await auth.grantTesterRankedAccess()
+                                    isGrantingTesterAccess = false
+                                }
+                            } label: {
+                                Label(
+                                    auth.user?.rankedAccess.allModesUnlocked == true ? "Tester Ranked Access On" : "Enable Tester Ranked Access",
+                                    systemImage: auth.user?.rankedAccess.allModesUnlocked == true ? "checkmark.seal.fill" : "hammer.fill"
+                                )
+                                .font(.caption.bold())
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(AppTheme.crownGold.opacity(0.2))
+                                .foregroundStyle(AppTheme.crownGold)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(AppTheme.crownGold.opacity(0.45), lineWidth: 1))
+                            }
+                            .disabled(isGrantingTesterAccess || auth.user?.rankedAccess.allModesUnlocked == true)
+                            #endif
                         }
                         .padding(.top, 24)
 

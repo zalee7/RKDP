@@ -21,6 +21,7 @@ struct WordHuntView: View {
         user: AppUser? = nil,
         sessionID: String? = nil,
         seed: Int? = nil,
+        puzzleData: String? = nil,
         onMatchResult: @escaping (MatchPlayerResult) -> Void = { _ in },
         onSoloResult: @escaping (SoloGameResult) -> Void = { _ in },
         onPlayAgain: @escaping () -> Void = {},
@@ -40,7 +41,8 @@ struct WordHuntView: View {
             difficulty: difficulty,
             userID: user?.id,
             priorBest: user?.rank(for: .wordHunt).bestScore,
-            seed: seed
+            seed: seed,
+            puzzleData: MultiplayerPuzzleDataFactory.decodeWordHunt(puzzleData)
         ))
     }
 
