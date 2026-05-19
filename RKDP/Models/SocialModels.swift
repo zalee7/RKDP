@@ -53,6 +53,7 @@ enum ExhibitionInviteStatus: String, Codable {
     case declined
     case expired
     case canceled
+    case completed
 }
 
 struct ExhibitionInvite: Codable, Identifiable, Equatable {

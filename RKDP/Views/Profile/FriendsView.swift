@@ -38,7 +38,10 @@ struct FriendsView: View {
                     Task { await vm.sendInvite(from: user, to: friend, mode: mode, difficulty: difficulty) }
                 }
             }
-            .fullScreenCover(item: $vm.activeExhibitionSession, onDismiss: { vm.activeExhibitionSession = nil }) { session in
+            .fullScreenCover(item: $vm.activeExhibitionSession, onDismiss: {
+                Task { await vm.closeActiveExhibitionInvite() }
+                vm.activeExhibitionSession = nil
+            }) { session in
                 NavigationStack {
                     MatchmakingView(exhibitionSession: session, user: user) {
                         Task { await auth.refreshUser() }

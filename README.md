@@ -72,22 +72,6 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    function idContainsCurrentUser(documentID) {
-      return signedIn() && documentID.matches('(^|_)' + request.auth.uid + '(_|$)');
-    }
-
-    function isFriendRequestParticipant(data) {
-      return signedIn() && (request.auth.uid == data.fromID || request.auth.uid == data.toID);
-    }
-
-    function isFriendshipParticipant(data) {
-      return signedIn() && request.auth.uid in data.userIDs;
-    }
-
-    function isExhibitionInviteParticipant(data) {
-      return signedIn() && (request.auth.uid == data.fromID || request.auth.uid == data.toID);
-    }
-
     match /users/{uid} {
       allow read: if signedIn();
       allow write: if isSelf(uid);
@@ -103,41 +87,24 @@ service cloud.firestore {
     }
 
     match /matchmaking/{queue}/queue/{uid} {
-      allow read, write: if isSelf(uid);
+      allow read: if signedIn();
+      allow create, update, delete: if isSelf(uid);
     }
 
+    // Temporary social beta rules. These keep users/leaderboards protected but
+    // allow signed-in players to test friend requests and exhibition invites.
     match /friendRequests/{requestID} {
-      allow read: if idContainsCurrentUser(requestID) || isFriendRequestParticipant(resource.data);
-      allow create: if isFriendRequestParticipant(request.resource.data)
-        && request.resource.data.fromID == request.auth.uid
-        && request.resource.data.toID != request.auth.uid
-        && request.resource.data.status == "pending";
-      allow update: if (idContainsCurrentUser(requestID) || isFriendRequestParticipant(resource.data))
-        && isFriendRequestParticipant(request.resource.data)
-        && request.resource.data.fromID == resource.data.fromID
-        && request.resource.data.toID == resource.data.toID;
+      allow read, create, update: if signedIn();
       allow delete: if false;
     }
 
     match /friendships/{friendshipID} {
-      allow read: if idContainsCurrentUser(friendshipID) || isFriendshipParticipant(resource.data);
-      allow create: if idContainsCurrentUser(friendshipID)
-        && isFriendshipParticipant(request.resource.data)
-        && request.resource.data.userIDs is list
-        && request.resource.data.userIDs.size() == 2;
+      allow read, create: if signedIn();
       allow update, delete: if false;
     }
 
     match /exhibitionInvites/{inviteID} {
-      allow read: if isExhibitionInviteParticipant(resource.data);
-      allow create: if isExhibitionInviteParticipant(request.resource.data)
-        && request.resource.data.fromID == request.auth.uid
-        && request.resource.data.toID != request.auth.uid
-        && request.resource.data.status == "pending";
-      allow update: if isExhibitionInviteParticipant(resource.data)
-        && isExhibitionInviteParticipant(request.resource.data)
-        && request.resource.data.fromID == resource.data.fromID
-        && request.resource.data.toID == resource.data.toID;
+      allow read, create, update: if signedIn();
       allow delete: if false;
     }
   }

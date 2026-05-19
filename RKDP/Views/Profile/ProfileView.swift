@@ -71,6 +71,35 @@ struct ProfileView: View {
                             }
                         }
 
+
+                        // Owned cosmetics
+                        sectionCard(title: "Owned Cosmetics") {
+                            let ownedItems = shop.ownedItems
+                            if ownedItems.isEmpty {
+                                Text("Bought cosmetics will appear here for quick equipping.")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            } else {
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                    ForEach(ownedItems) { item in
+                                        ShopItemCard(
+                                            item: item,
+                                            isOwned: true,
+                                            isEquipped: shop.isEquipped(item),
+                                            canAfford: true,
+                                            isLimited: false
+                                        ) {
+                                            Task {
+                                                if await shop.equip(item) {
+                                                    await auth.refreshUser()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Career stats
                         sectionCard(title: "Career Stats") {
                             let totalWins   = user.ranks.values.reduce(0) { $0 + $1.wins }

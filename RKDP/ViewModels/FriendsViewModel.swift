@@ -12,6 +12,7 @@ final class FriendsViewModel: ObservableObject {
     @Published var searchResults: [AppUser] = []
     @Published var errorMessage: String?
     @Published var activeExhibitionSession: GameSession?
+    private var activeExhibitionInviteID: String?
 
     private let store = FirestoreService.shared
     private var listeners: [ListenerRegistration] = []
@@ -115,6 +116,7 @@ final class FriendsViewModel: ObservableObject {
         do {
             let session = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
             handledSessionIDs.insert(session.id)
+            activeExhibitionInviteID = invite.id
             activeExhibitionSession = session
             errorMessage = nil
         } catch {
@@ -131,6 +133,17 @@ final class FriendsViewModel: ObservableObject {
         }
     }
 
+
+    func closeActiveExhibitionInvite() async {
+        guard let inviteID = activeExhibitionInviteID else { return }
+        activeExhibitionInviteID = nil
+        do {
+            try await store.completeExhibitionInvite(inviteID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func openAcceptedInviteIfNeeded(_ invites: [ExhibitionInvite]) async {
         guard let invite = invites.first(where: { $0.status == .accepted && $0.sessionID != nil }),
               let sessionID = invite.sessionID,
@@ -138,6 +151,7 @@ final class FriendsViewModel: ObservableObject {
         do {
             let session = try await store.fetchSession(id: sessionID)
             handledSessionIDs.insert(sessionID)
+            activeExhibitionInviteID = invite.id
             activeExhibitionSession = session
         } catch {
             errorMessage = error.localizedDescription

@@ -2,16 +2,14 @@ import SwiftUI
 
 
 private enum ShopSection: Hashable, CaseIterable {
-    case myItems
     case category(CosmeticCategory)
 
     static var allCases: [ShopSection] {
-        [.myItems] + CosmeticCategory.allCases.map { .category($0) }
+        CosmeticCategory.allCases.map { .category($0) }
     }
 
     var title: String {
         switch self {
-        case .myItems: return "My Items"
         case .category(let category): return category.rawValue
         }
     }
@@ -21,7 +19,7 @@ struct ShopView: View {
     let user: AppUser
     var onUserChanged: () -> Void = {}
     @StateObject private var vm: ShopViewModel
-    @State private var selectedSection: ShopSection = .myItems
+    @State private var selectedSection: ShopSection = .category(.title)
     @State private var showRankedPassStore = false
     @Environment(\.dismiss) var dismiss
 
@@ -80,11 +78,12 @@ struct ShopView: View {
                 // Items
                 ScrollView {
                     switch selectedSection {
-                    case .myItems:
-                        myItemsGrid(items: vm.ownedItems)
                     case .category(let category):
                         let items = vm.items(for: category)
-                        if category == .title {
+                        if items.isEmpty {
+                            emptyStoreState(category: category)
+                                .padding()
+                        } else if category == .title {
                             titleGrid(items: items)
                         } else {
                             itemGrid(items: items)
@@ -145,87 +144,36 @@ struct ShopView: View {
     }
 
     @ViewBuilder
-    private func myItemsGrid(items: [CosmeticItem]) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if items.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(AppTheme.crownGold)
-                    Text("No owned cosmetics yet")
-                        .font(.headline.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-                    Text("Bought and equipped items will live here for quick access.")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(24)
-                .background(AppTheme.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
-                .padding()
-            } else {
-                Text("Owned Cosmetics")
-                    .font(.headline.bold())
-                    .padding(.horizontal)
-                itemGrid(items: items)
-                    .padding(.horizontal)
-            }
+    private func titleGrid(items: [CosmeticItem]) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Today's Titles")
+                .font(.headline.bold())
+                .padding(.horizontal)
+
+            itemGrid(items: items)
+                .padding(.horizontal)
         }
         .padding(.vertical)
     }
 
-    @ViewBuilder
-    private func titleGrid(items: [CosmeticItem]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Today's rotation
-            let todayItems = items.filter { vm.isInTodaysRotation($0) || $0.price == 0 }
-            let ownedOther = items.filter { !vm.isInTodaysRotation($0) && $0.price > 0 && vm.isOwned($0) }
-
-            if !todayItems.isEmpty {
-                Text("Today's Titles")
-                    .font(.headline)
-                    .padding(.horizontal)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    ForEach(todayItems) { item in
-                        ShopItemCard(
-                            item: item,
-                            isOwned: vm.isOwned(item),
-                            isEquipped: vm.isEquipped(item),
-                            canAfford: vm.canAfford(item),
-                            isLimited: item.price > 0
-                        ) {
-                            Task { await handleShopAction(item) }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            if !ownedOther.isEmpty {
-                Divider().padding(.horizontal)
-                Text("Owned")
-                    .font(.headline)
-                    .padding(.horizontal)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    ForEach(ownedOther) { item in
-                        ShopItemCard(
-                            item: item,
-                            isOwned: true,
-                            isEquipped: vm.isEquipped(item),
-                            canAfford: true,
-                            isLimited: false
-                        ) { Task { await handleShopAction(item) } }
-                    }
-                }
-                .padding(.horizontal)
-            }
+    private func emptyStoreState(category: CosmeticCategory) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: category == .title ? "clock.arrow.circlepath" : "bag.fill")
+                .font(.largeTitle.bold())
+                .foregroundStyle(AppTheme.crownGold)
+            Text(category == .title ? "No new titles today" : "Everything here is owned")
+                .font(.headline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+            Text("Owned cosmetics now live on your Profile for faster equipping.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.center)
         }
-        .padding(.vertical)
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
     }
 }
 

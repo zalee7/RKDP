@@ -720,8 +720,11 @@ final class FirestoreService {
                         usernames: [request.fromID: request.fromUsername, request.toID: request.toUsername],
                         createdAt: Date()
                     )
+                    var updatedRequest = request
+                    updatedRequest.status = .accepted
+                    let requestData = try Firestore.Encoder().encode(updatedRequest)
                     let friendshipData = try Firestore.Encoder().encode(friendship)
-                    transaction.updateData(["status": FriendRequestStatus.accepted.rawValue], forDocument: requestRef)
+                    transaction.setData(requestData, forDocument: requestRef, merge: true)
                     transaction.setData(friendshipData, forDocument: friendshipRef, merge: true)
                     return true
                 } catch {
@@ -735,12 +738,16 @@ final class FirestoreService {
 
     func declineFriendRequest(_ request: FriendRequest, currentUserID: String) async throws {
         guard request.toID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
-        try await db.collection("friendRequests").document(request.id).updateData(["status": FriendRequestStatus.declined.rawValue])
+        var updated = request
+        updated.status = .declined
+        try db.collection("friendRequests").document(request.id).setData(from: updated, merge: true)
     }
 
     func cancelFriendRequest(_ request: FriendRequest, currentUserID: String) async throws {
         guard request.fromID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
-        try await db.collection("friendRequests").document(request.id).updateData(["status": FriendRequestStatus.canceled.rawValue])
+        var updated = request
+        updated.status = .canceled
+        try db.collection("friendRequests").document(request.id).setData(from: updated, merge: true)
     }
 
     func createExhibitionInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty) async throws -> ExhibitionInvite {
@@ -804,12 +811,13 @@ final class FirestoreService {
                           status == ExhibitionInviteStatus.pending.rawValue else {
                         return fail(FirestoreServiceError.invalidFriendAction)
                     }
+                    var updatedInvite = invite
+                    updatedInvite.status = .accepted
+                    updatedInvite.sessionID = sessionID
                     let encoded = try Firestore.Encoder().encode(session)
+                    let inviteData = try Firestore.Encoder().encode(updatedInvite)
                     transaction.setData(encoded, forDocument: sessionRef)
-                    transaction.updateData([
-                        "status": ExhibitionInviteStatus.accepted.rawValue,
-                        "sessionID": sessionID
-                    ], forDocument: inviteRef)
+                    transaction.setData(inviteData, forDocument: inviteRef, merge: true)
                     return true
                 } catch {
                     return fail(error)
@@ -823,11 +831,17 @@ final class FirestoreService {
 
     func declineExhibitionInvite(_ invite: ExhibitionInvite, currentUserID: String) async throws {
         guard invite.toID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
-        try await db.collection("exhibitionInvites").document(invite.id).updateData(["status": ExhibitionInviteStatus.declined.rawValue])
+        var updated = invite
+        updated.status = .declined
+        try db.collection("exhibitionInvites").document(invite.id).setData(from: updated, merge: true)
+    }
+
+    func completeExhibitionInvite(_ inviteID: String) async throws {
+        try await db.collection("exhibitionInvites").document(inviteID).setData(["status": ExhibitionInviteStatus.completed.rawValue], merge: true)
     }
 
     private func expireExhibitionInvite(_ inviteID: String) async throws {
-        try await db.collection("exhibitionInvites").document(inviteID).updateData(["status": ExhibitionInviteStatus.expired.rawValue])
+        try await db.collection("exhibitionInvites").document(inviteID).setData(["status": ExhibitionInviteStatus.expired.rawValue], merge: true)
     }
 
     func listenForFriends(userID: String, onChange: @escaping ([Friendship]) -> Void) -> ListenerRegistration {
@@ -885,7 +899,7 @@ final class FirestoreService {
                         return !invite.isExpired
                     }
                     if invite.status == ExhibitionInviteStatus.accepted {
-                        return invite.sessionID != nil
+                        return invite.sessionID != nil && !invite.isExpired
                     }
                     return false
                 }

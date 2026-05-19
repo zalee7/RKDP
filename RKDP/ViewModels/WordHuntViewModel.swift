@@ -26,12 +26,19 @@ final class WordHuntViewModel: ObservableObject {
         case alreadyFound
     }
 
-    init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil) {
+    init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil, puzzleData: WordHuntPuzzleData? = nil) {
         self.difficulty = difficulty
         self.userID = userID
         self.priorBest = priorBest
         let s = seed ?? Int.random(in: 0..<Int.max)
-        self.game = WordHuntGame.generate(seed: s)
+        if let puzzleData,
+           puzzleData.gridRows.count == WordHuntGame.gridSize,
+           puzzleData.gridRows.allSatisfy({ $0.count == WordHuntGame.gridSize }) {
+            let grid = puzzleData.gridRows.map { Array($0.uppercased()) }
+            self.game = WordHuntGame(grid: grid, seed: s)
+        } else {
+            self.game = WordHuntGame.generate(seed: s)
+        }
         self.totalSeconds = 75
         startTimer()
     }
