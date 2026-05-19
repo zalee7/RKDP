@@ -1,7 +1,7 @@
 import Foundation
 
 enum WordListService {
-    static let wordBankVersion = "2026-05-17-v1"
+    static let wordBankVersion = "2026-05-19-v2"
 
     static let wordleAnswers: [String] = loadList(named: "wordle_answers", expectedLength: 5, fallback: [
         "CROWN", "BLOCK", "GRIDS", "TRACE", "LINKS"

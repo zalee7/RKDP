@@ -70,7 +70,7 @@ struct TournamentView: View {
                 Spacer()
                 CoinBadgeView(amount: vm.user.coins)
             }
-            Text("Enter with coins, play one shared-seed attempt, and claim a virtual coin prize if you place after the event closes. No rank or W/L changes.")
+            Text("Tournaments are separated by rank tier for each mode. Enter with coins, play one shared-seed attempt, and claim a virtual coin prize if you place after the event closes. No rank or W/L changes.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -109,7 +109,7 @@ private struct TournamentCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(tournament.mode.displayName)
                         .font(.headline.bold())
-                    Text("\(tournament.rankTier.displayName) · \(tournament.mode.difficultyLabel(tournament.difficulty))")
+                    Text("\(tournament.rankTier.displayName)-only board · \(tournament.mode.difficultyLabel(tournament.difficulty))")
                         .font(.caption)
                         .foregroundStyle(AppTheme.textSecondary)
                 }
@@ -126,6 +126,10 @@ private struct TournamentCard: View {
                 statTile("Entries", "\(standings.count)")
                 statTile("Paid", "Top \(preview.paidPlaces)")
                 statTile("Prize", preview.prize > 0 ? "\(preview.prize)" : "--")
+            }
+
+            TimelineView(.periodic(from: Date(), by: 1)) { context in
+                closesRow(now: context.date)
             }
 
             if let place = preview.place {
@@ -171,7 +175,7 @@ private struct TournamentCard: View {
         if entry == nil { return canAfford ? "Enter Tournament" : "Need More Coins" }
         if !hasResult { return "Play Attempt" }
         if entry?.prizeClaimed == true { return "Prize Claimed" }
-        if !tournament.isClosed { return "Closes Later Today" }
+        if !tournament.isClosed { return "Prize Unlocks at Close" }
         return preview.prize > 0 ? "Claim \(preview.prize) Coins" : "No Prize This Time"
     }
 
@@ -200,6 +204,33 @@ private struct TournamentCard: View {
         .padding(.vertical, 9)
         .background(Color.white.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func closesRow(now: Date) -> some View {
+        let seconds = max(0, Int(tournament.closesAt.timeIntervalSince(now)))
+        let isClosed = seconds == 0
+        return HStack(spacing: 8) {
+            Image(systemName: isClosed ? "lock.open.fill" : "timer")
+                .foregroundStyle(isClosed ? AppTheme.success : AppTheme.crownGold)
+            Text(isClosed ? "Tournament closed" : "Closes in \(countdownText(seconds))")
+                .font(.caption.bold())
+                .foregroundStyle(isClosed ? AppTheme.success : AppTheme.textPrimary)
+            Spacer()
+            Text("\(tournament.rankTier.displayName) rank only")
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.crownGold)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func countdownText(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, secs)
     }
 }
 
