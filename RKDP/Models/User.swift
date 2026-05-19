@@ -12,6 +12,7 @@ struct AppUser: Codable, Identifiable {
     var soloCompletions: [GameMode: [Difficulty]] = [:]
     var appliedRankedOutcomes: [String: Bool] = [:]
     var rankedAccess: RankedAccess = .empty
+    var coinWallet: CoinWallet = .empty
 
     var totalRankPoints: Int { ranks.values.reduce(0) { $0 + $1.points } }
 
@@ -61,7 +62,7 @@ struct AppUser: Codable, Identifiable {
 
 extension AppUser {
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes, rankedAccess
+        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes, rankedAccess, coinWallet
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +89,7 @@ extension AppUser {
         }
         appliedRankedOutcomes = (try? c.decode([String: Bool].self, forKey: .appliedRankedOutcomes)) ?? [:]
         rankedAccess = (try? c.decode(RankedAccess.self, forKey: .rankedAccess)) ?? .empty
+        coinWallet = (try? c.decode(CoinWallet.self, forKey: .coinWallet)) ?? .empty
     }
 
     func encode(to encoder: Encoder) throws {
@@ -111,5 +113,6 @@ extension AppUser {
         try c.encode(rawSolo, forKey: .soloCompletions)
         try c.encode(appliedRankedOutcomes, forKey: .appliedRankedOutcomes)
         try c.encode(rankedAccess, forKey: .rankedAccess)
+        try c.encode(coinWallet, forKey: .coinWallet)
     }
 }

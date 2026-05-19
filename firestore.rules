@@ -44,5 +44,16 @@ service cloud.firestore {
       allow read, create, update: if signedIn();
       allow delete: if false;
     }
+
+
+    match /tournaments/{tournamentID} {
+      allow read, create, update: if signedIn();
+
+      match /entries/{uid} {
+        allow read: if signedIn();
+        allow create, update: if isSelf(uid);
+        allow delete: if false;
+      }
+    }
   }
 }

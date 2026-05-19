@@ -8,6 +8,8 @@ final class ShopViewModel: ObservableObject {
     @Published var isSaving = false
 
     private let store = FirestoreService.shared
+    private let coinStore = CoinPackStoreKitService.shared
+    private let rewardedAds = RewardedAdService.shared
 
     init(user: AppUser) {
         self.user = user
@@ -48,6 +50,61 @@ final class ShopViewModel: ObservableObject {
         if isEquipped(item) { return 0 }
         if isOwned(item) { return 1 }
         return 2
+    }
+
+
+
+    func coinPackPriceText(for pack: CoinPackProduct) -> String {
+        coinStore.priceText(for: pack.id)
+    }
+
+    @discardableResult
+    func purchaseCoinPack(_ pack: CoinPackProduct) async -> Bool {
+        guard !isSaving else { return false }
+        errorMessage = nil
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            await coinStore.loadProducts()
+            let receipt = try await coinStore.purchase(productID: pack.id)
+            user = try await store.applyCoinPackPurchase(userID: user.id, productID: receipt.productID, transactionID: receipt.transactionID)
+            ownedCosmetics = user.cosmetics
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func claimDailyCoins() async -> Bool {
+        guard !isSaving else { return false }
+        errorMessage = nil
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            user = try await store.claimDailyCoins(userID: user.id)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func watchCoinAd() async -> Bool {
+        guard !isSaving else { return false }
+        errorMessage = nil
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await rewardedAds.watchCoinRewardAd()
+            user = try await store.grantRewardedCoins(userID: user.id)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     var nextRotationDate: Date { DailyRotation.nextRotationDate }

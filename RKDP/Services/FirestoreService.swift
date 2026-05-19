@@ -11,11 +11,14 @@ enum FirestoreServiceError: LocalizedError {
     case invalidFriendAction
     case notFriends
     case exhibitionInviteExpired
+    case dailyCoinsAlreadyClaimed
+    case rewardedCoinLimitReached
+    case unknownCoinPack
 
     var errorDescription: String? {
         switch self {
         case .insufficientCoins:
-            return "You do not have enough coins for that item."
+            return "You do not have enough coins for that."
         case .missingUpdatedUser:
             return "Could not refresh your shop purchase. Please try again."
         case .rankedAccessUnavailable:
@@ -32,6 +35,12 @@ enum FirestoreServiceError: LocalizedError {
             return "You can only invite accepted friends."
         case .exhibitionInviteExpired:
             return "That exhibition invite expired."
+        case .dailyCoinsAlreadyClaimed:
+            return "Daily coins are already claimed today."
+        case .rewardedCoinLimitReached:
+            return "You have reached today's rewarded coin ad limit."
+        case .unknownCoinPack:
+            return "That coin pack is not available yet."
         }
     }
 }
@@ -86,6 +95,63 @@ final class FirestoreService {
                     }
                     user.cosmetics.equip(item)
 
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+
+    // MARK: - Coin Economy
+
+    func applyCoinPackPurchase(userID: String, productID: String, transactionID: String) async throws -> AppUser {
+        guard let pack = CoinPackProduct.pack(for: productID) else { throw FirestoreServiceError.unknownCoinPack }
+        return try await updateCoinWallet(userID: userID) { user in
+            if user.coinWallet.processedTransactions[transactionID] == true { return }
+            user.coinWallet.processedTransactions[transactionID] = true
+            user.coins += pack.coins
+        }
+    }
+
+    func claimDailyCoins(userID: String, dayKey: String = CoinWallet.todayKey()) async throws -> AppUser {
+        try await updateCoinWallet(userID: userID) { user in
+            guard user.coinWallet.recordDailyClaim(dayKey: dayKey) else { throw FirestoreServiceError.dailyCoinsAlreadyClaimed }
+            user.coins += CoinWallet.dailyClaimAmount
+        }
+    }
+
+    func grantRewardedCoins(userID: String, dayKey: String = CoinWallet.todayKey()) async throws -> AppUser {
+        try await updateCoinWallet(userID: userID) { user in
+            guard user.coinWallet.recordRewardedAd(dayKey: dayKey) else { throw FirestoreServiceError.rewardedCoinLimitReached }
+            user.coins += CoinWallet.rewardedAdAmount
+        }
+    }
+
+    private func updateCoinWallet(userID: String, mutate: @escaping (inout AppUser) throws -> Void) async throws -> AppUser {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    try mutate(&user)
                     let encodedUser = try Firestore.Encoder().encode(user)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)
                     return user
@@ -407,13 +473,12 @@ final class FirestoreService {
             "searchID":   searchID
         ])
 
-        // 2. Look for anyone else in the queue with the same tier AND same wager
+        // 2. Look for anyone else in the queue with the same rank tier
         let snapshot = try await queueRef.getDocuments()
         let myTier = tier.rawValue
         let others = snapshot.documents.filter {
             $0.documentID != user.id &&
-            ($0.data()["rankTier"] as? Int ?? -1) == myTier &&
-            ($0.data()["wager"]    as? Int ?? -1) == wager
+            ($0.data()["rankTier"] as? Int ?? -1) == myTier
         }
         guard let opponentDoc = others.first else { return }  // alone — wait for queue listener
 
@@ -444,8 +509,7 @@ final class FirestoreService {
             guard let self, let snapshot else { return }
             let others = snapshot.documents.filter {
                 $0.documentID != user.id &&
-                ($0.data()["rankTier"] as? Int ?? -1) == myTier &&
-                ($0.data()["wager"]    as? Int ?? -1) == wager
+                ($0.data()["rankTier"] as? Int ?? -1) == myTier
             }
             guard let opponentDoc = others.first else { return }
 
@@ -497,7 +561,6 @@ final class FirestoreService {
               (hostQueue["searchID"] as? String) == searchID,
               (hostQueue["wager"] as? Int) == wager,
               (hostQueue["rankTier"] as? Int) == tier.rawValue,
-              (opponentQueue["wager"] as? Int) == wager,
               (opponentQueue["rankTier"] as? Int) == tier.rawValue,
               opponentQueue["searchID"] is String else {
             return nil

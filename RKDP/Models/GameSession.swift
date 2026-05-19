@@ -67,9 +67,10 @@ struct PostMatchRewardSnapshot {
         let rank = user.rank(for: session.mode)
         let outcome = session.result(for: user.id) ?? .draw
         let wager = session.players.first(where: { $0.userID == user.id })?.wager ?? 0
+        let opponentWager = session.players.first(where: { $0.userID != user.id })?.wager ?? wager
         let coinDelta: Int
         switch outcome {
-        case .win: coinDelta = session.isRanked ? session.totalPot : 0
+        case .win: coinDelta = session.isRanked ? opponentWager : 0
         case .loss, .abandoned: coinDelta = session.isRanked ? -wager : 0
         case .draw: coinDelta = 0
         }

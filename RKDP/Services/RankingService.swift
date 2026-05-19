@@ -119,6 +119,10 @@ final class RankingService {
                     if user.appliedRankedOutcomes[session.id] == true {
                         return AppliedPlayerOutcome(user: user, didApplyRewards: false)
                     }
+                    let leaderboardRef = self.db.collection("leaderboards")
+                        .document(session.mode.rawValue)
+                        .collection("entries")
+                        .document(userID)
 
                     let delta = Self.rankDelta(
                         for: userID,
@@ -155,12 +159,26 @@ final class RankingService {
                     user.ranks[session.mode] = rankInfo
                     if let winnerID = session.winnerID,
                        let player = session.players.first(where: { $0.userID == userID }) {
-                        user.coins += winnerID == userID ? session.totalPot : -player.wager
+                        let opponentWager = session.players.first(where: { $0.userID != userID })?.wager ?? player.wager
+                        user.coins += winnerID == userID ? opponentWager : -player.wager
                     }
                     user.appliedRankedOutcomes[session.id] = true
 
                     let encodedUser = try Firestore.Encoder().encode(user)
+                    let leaderboardEntry = LeaderboardEntry(
+                        id: user.id,
+                        username: user.username,
+                        avatarURL: user.avatarURL,
+                        rankTier: rankInfo.displayTier,
+                        rankPoints: rankInfo.points,
+                        wins: rankInfo.wins,
+                        bestTime: rankInfo.bestTime,
+                        mode: session.mode,
+                        equippedTitle: CosmeticCatalog.allTitles.first { $0.id == user.cosmetics.equippedTitle }?.name
+                    )
+                    let encodedEntry = try Firestore.Encoder().encode(leaderboardEntry)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    transaction.setData(encodedEntry, forDocument: leaderboardRef, merge: true)
                     return AppliedPlayerOutcome(user: user, didApplyRewards: true)
                 } catch {
                     return fail(error)

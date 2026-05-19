@@ -59,7 +59,7 @@ final class MultiplayerViewModel: ObservableObject {
             return
         }
         guard user.coins >= wager.amount else {
-            state = .error("Not enough coins for this wager.")
+            state = .error("Not enough coins for this division wager.")
             return
         }
         guard user.rankedAccess.canStartRanked(mode: mode) else {

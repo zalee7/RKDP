@@ -34,8 +34,12 @@ struct MatchmakingView: View {
         self.onMatchFinished = onMatchFinished
     }
 
-    private var wagerOptions: [WagerTier] {
-        Wager.options(for: user.rank(for: mode).tier)
+    private var automaticWager: WagerTier {
+        Wager.fixed(for: user.rank(for: mode))
+    }
+
+    private var canAffordAutomaticWager: Bool {
+        user.coins >= automaticWager.amount
     }
 
     private var shouldShowQueueCriteria: Bool {
@@ -121,7 +125,10 @@ struct MatchmakingView: View {
     // MARK: - Wager picker
 
     private var wagerPicker: some View {
-        ScrollView {
+        let wager = automaticWager
+        let rank = user.rank(for: mode)
+
+        return ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
                     Image(systemName: mode.icon)
@@ -137,57 +144,89 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                 }
 
-                if shouldShowQueueCriteria {
-                    queueCriteriaCard(wager: selectedWager, includeHint: true)
-                        .padding(.horizontal)
-                }
-
-                Text("Choose Your Wager").font(.title3.bold())
+                queueCriteriaCard(wager: wager, includeHint: shouldShowQueueCriteria)
+                    .padding(.horizontal)
 
                 VStack(spacing: 12) {
-                    ForEach(wagerOptions) { option in
-                        WagerOptionRow(
-                            option: option,
-                            isSelected: selectedWager?.id == option.id,
-                            canAfford: user.coins >= option.amount
-                        ) {
-                            selectedWager = option
+                    HStack(spacing: 10) {
+                        Image(systemName: "crown.fill")
+                            .foregroundStyle(AppTheme.crownGold)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Division Wager")
+                                .font(.headline.bold())
+                                .foregroundStyle(AppTheme.textPrimary)
+                            Text("\(rank.fullDisplayName) sets this match at \(wager.amount) coins.")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
                         }
+                        Spacer()
+                        CoinBadgeView(amount: wager.amount)
+                    }
+                    .padding()
+                    .background(AppTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
+
+                    HStack(spacing: 10) {
+                        wagerOutcomeTile(title: "Win", value: "+ opponent wager", color: AppTheme.success)
+                        wagerOutcomeTile(title: "Loss", value: "-\(wager.amount)", color: AppTheme.danger)
                     }
                 }
                 .padding(.horizontal)
 
-                if let wager = selectedWager {
+                if !canAffordAutomaticWager {
                     VStack(spacing: 6) {
-                        Text("Winner takes: \(wager.amount * 2) coins").font(.subheadline.bold()).foregroundStyle(AppTheme.success)
-                        Text("Both players wager \(wager.amount) coins each").font(.caption).foregroundStyle(AppTheme.textSecondary)
+                        Text("Not enough coins for this division wager.")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(AppTheme.warning)
+                        Text("Earn free coins or grab a coin pack from the Shop.")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
                     }
                     .padding()
-                    .background(AppTheme.cardBackground)
+                    .frame(maxWidth: .infinity)
+                    .background(AppTheme.warning.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.warning.opacity(0.4), lineWidth: 1))
                     .padding(.horizontal)
                 }
 
                 Button {
-                    guard let wager = selectedWager else { return }
                     didNotifyFinished = false
                     rewardAnimationFinished = false
                     inMatchMusicEnabled = true
                     Task { await vm.startSearch(user: user, mode: mode, difficulty: difficulty, wager: wager) }
                 } label: {
-                    Text("Find Match")
+                    Text(canAffordAutomaticWager ? "Find Match" : "Need More Coins")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(selectedWager != nil ? mode.accentColor : Color.gray)
+                        .background(canAffordAutomaticWager ? mode.accentColor : Color.gray)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.horizontal)
-                .disabled(selectedWager == nil)
+                .disabled(!canAffordAutomaticWager)
             }
             .padding(.vertical)
         }
+    }
+
+    private func wagerOutcomeTile(title: String, value: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(value)
+                .font(.subheadline.bold())
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
     }
 
     private func queueCriteriaCard(wager: WagerTier?, includeHint: Bool) -> some View {
@@ -201,10 +240,10 @@ struct MatchmakingView: View {
             }
             queueCriterionRow(title: "Mode", value: mode.displayName)
             queueCriterionRow(title: queueSettingTitle, value: mode.difficultyLabel(difficulty))
-            queueCriterionRow(title: "Wager", value: wager.map { "\($0.amount) coins" } ?? "Choose a wager")
+            queueCriterionRow(title: "Division wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
             queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
             if includeHint {
-                Text("Word modes only pair players with the same setting, wager, and rank tier.")
+                Text("Word modes only pair players with the same setting and rank tier.")
                     .font(.caption2)
                     .foregroundStyle(AppTheme.textSecondary)
                     .padding(.top, 2)
@@ -245,14 +284,14 @@ struct MatchmakingView: View {
                 queueCriteriaCard(wager: vm.selectedWager, includeHint: false)
                     .padding(.horizontal)
                 if showCompatibilityHint {
-                    Text("Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), wager, and rank tier.")
+                    Text("Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), and rank tier.")
                         .font(.caption)
                         .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
             } else if let wager = vm.selectedWager {
-                Text("Wager: \(wager.amount) coins").foregroundStyle(.secondary)
+                Text("Division wager: \(wager.amount) coins").foregroundStyle(.secondary)
             }
             Button("Cancel") { Task { await vm.cancelSearch() } }
                 .foregroundStyle(.red)

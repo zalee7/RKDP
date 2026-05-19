@@ -244,7 +244,7 @@ struct CosmeticCatalog {
         CosmeticItem(id: "title_number_god",   name: "Number God",        category: .title, price: 600,  previewImageName: "", description: "Digits bow before them."),
         CosmeticItem(id: "title_logic_lord",   name: "Logic Lord",        category: .title, price: 500,  previewImageName: "", description: "Reason incarnate."),
         CosmeticItem(id: "title_phantom",      name: "The Phantom",       category: .title, price: 350,  previewImageName: "", description: "Solves before you blink."),
-        CosmeticItem(id: "title_grandmaster",  name: "Grand Master",      category: .title, price: 1200, previewImageName: "", description: "Earned at the summit."),
+        CosmeticItem(id: "title_grandmaster",  name: "Grand Master",      category: .title, price: 1_800, previewImageName: "", description: "Earned at the summit."),
         CosmeticItem(id: "title_oracle",       name: "The Oracle",        category: .title, price: 500,  previewImageName: "", description: "Sees the solution before it's placed."),
         CosmeticItem(id: "title_iron_mind",    name: "Iron Mind",         category: .title, price: 350,  previewImageName: "", description: "Unshakeable under pressure."),
         CosmeticItem(id: "title_cascade",      name: "Cascade",           category: .title, price: 400,  previewImageName: "", description: "Solutions flow like water."),
@@ -252,12 +252,12 @@ struct CosmeticCatalog {
         CosmeticItem(id: "title_apex",         name: "Apex",              category: .title, price: 600,  previewImageName: "", description: "There is no higher rank."),
         CosmeticItem(id: "title_ghost",        name: "Ghost",             category: .title, price: 350,  previewImageName: "", description: "Here, then gone."),
         CosmeticItem(id: "title_anomaly",      name: "Anomaly",           category: .title, price: 400,  previewImageName: "", description: "Defies all expected patterns."),
-        CosmeticItem(id: "title_overlord",     name: "Overlord",          category: .title, price: 700,  previewImageName: "", description: "Commands the board."),
+        CosmeticItem(id: "title_overlord",     name: "Overlord",          category: .title, price: 1_200, previewImageName: "", description: "Commands the board."),
         CosmeticItem(id: "title_cipher",       name: "Cipher",            category: .title, price: 300,  previewImageName: "", description: "Every grid is just another code."),
         CosmeticItem(id: "title_theorem",      name: "Living Theorem",    category: .title, price: 450,  previewImageName: "", description: "Proven. Irrefutable."),
         CosmeticItem(id: "title_nexus",        name: "Nexus",             category: .title, price: 450,  previewImageName: "", description: "Where all solutions converge."),
         CosmeticItem(id: "title_swift",        name: "Swift",             category: .title, price: 300,  previewImageName: "", description: "Speed is the only metric."),
-        CosmeticItem(id: "title_eternal",      name: "The Eternal",       category: .title, price: 800,  previewImageName: "", description: "Has been solving since before the grid existed."),
+        CosmeticItem(id: "title_eternal",      name: "The Eternal",       category: .title, price: 1_500, previewImageName: "", description: "Has been solving since before the grid existed."),
         CosmeticItem(id: "title_obsidian",     name: "Obsidian",          category: .title, price: 500,  previewImageName: "", description: "Hard and flawless."),
         CosmeticItem(id: "title_zero",         name: "Zero Error",        category: .title, price: 600,  previewImageName: "", description: "Not one mistake. Ever."),
     ]
@@ -268,12 +268,12 @@ struct CosmeticCatalog {
         CosmeticItem(id: "theme_ocean",      name: "Ocean",       category: .boardTheme, price: 350,  previewImageName: "theme_ocean",      description: "Cool blues for calm grid solving."),
         CosmeticItem(id: "theme_forest",     name: "Forest",      category: .boardTheme, price: 350,  previewImageName: "theme_forest",     description: "Earthy greens for quiet board play."),
         CosmeticItem(id: "theme_neon",       name: "Neon",        category: .boardTheme, price: 600,  previewImageName: "theme_neon",       description: "Arcade glow for fast ranked matches."),
-        CosmeticItem(id: "theme_gold",       name: "Gold Edition", category: .boardTheme, price: 1500, previewImageName: "theme_gold",       description: "Premium gold-leaf styling for top ranks."),
+        CosmeticItem(id: "theme_gold",       name: "Gold Edition", category: .boardTheme, price: 1_800, previewImageName: "theme_gold",       description: "Premium gold-leaf styling for top ranks."),
         CosmeticItem(id: "theme_color_link", name: "Color Link",  category: .boardTheme, price: 700,  previewImageName: "theme_color_link", description: "Teal, pink, and blue path energy."),
         CosmeticItem(id: "theme_grid_duel",  name: "Grid Duel",   category: .boardTheme, price: 700,  previewImageName: "theme_grid_duel",  description: "Gold and blue symmetry-board shine."),
         CosmeticItem(id: "theme_word_neon",  name: "Word Neon",   category: .boardTheme, price: 650,  previewImageName: "theme_word_neon",  description: "Hot word-game glow with electric accents."),
         CosmeticItem(id: "theme_mine_pulse", name: "Mine Pulse",  category: .boardTheme, price: 650,  previewImageName: "theme_mine_pulse", description: "Pink and gold hazard-board contrast."),
-        CosmeticItem(id: "theme_crown_gold", name: "Crown Gold",  category: .boardTheme, price: 1200, previewImageName: "theme_crown_gold", description: "Icon-inspired crown gold with jewel pink."),
+        CosmeticItem(id: "theme_crown_gold", name: "Crown Gold",  category: .boardTheme, price: 2_500, previewImageName: "theme_crown_gold", description: "Icon-inspired crown gold with jewel pink."),
     ]
 
     static let numberFonts: [CosmeticItem] = [

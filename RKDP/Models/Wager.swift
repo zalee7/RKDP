@@ -1,58 +1,79 @@
 import Foundation
 
 struct WagerTier: Identifiable {
-    var id: String { "\(rank.rawValue)-\(label)" }
+    var id: String { "\(rank.rawValue)-\(label)-\(amount)" }
     let rank: RankTier
     let label: String
     let amount: Int
 }
 
 enum Wager {
-    // Wager options available to a player for a given rank tier
-    static func options(for tier: RankTier) -> [WagerTier] {
+    static func fixed(for info: RankInfo) -> WagerTier {
+        WagerTier(
+            rank: info.displayTier,
+            label: "Division",
+            amount: amount(for: info.displayTier, division: info.division)
+        )
+    }
+
+    static func amount(for tier: RankTier, division: RankDivision) -> Int {
         switch tier {
         case .bronze:
-            return [
-                WagerTier(rank: tier, label: "Low",    amount: 10),
-                WagerTier(rank: tier, label: "Mid",    amount: 25),
-                WagerTier(rank: tier, label: "High",   amount: 50),
-            ]
+            switch division {
+            case .three: return 25
+            case .two:   return 35
+            case .one:   return 50
+            }
         case .silver:
-            return [
-                WagerTier(rank: tier, label: "Low",    amount: 50),
-                WagerTier(rank: tier, label: "Mid",    amount: 100),
-                WagerTier(rank: tier, label: "High",   amount: 200),
-            ]
+            switch division {
+            case .three: return 75
+            case .two:   return 100
+            case .one:   return 150
+            }
         case .gold:
-            return [
-                WagerTier(rank: tier, label: "Low",    amount: 200),
-                WagerTier(rank: tier, label: "Mid",    amount: 400),
-                WagerTier(rank: tier, label: "High",   amount: 750),
-            ]
+            switch division {
+            case .three: return 225
+            case .two:   return 300
+            case .one:   return 450
+            }
         case .platinum:
-            return [
-                WagerTier(rank: tier, label: "Low",    amount: 500),
-                WagerTier(rank: tier, label: "Mid",    amount: 1_000),
-                WagerTier(rank: tier, label: "High",   amount: 2_000),
-            ]
+            switch division {
+            case .three: return 650
+            case .two:   return 900
+            case .one:   return 1_200
+            }
         case .diamond:
-            return [
-                WagerTier(rank: tier, label: "Low",    amount: 1_500),
-                WagerTier(rank: tier, label: "Mid",    amount: 3_000),
-                WagerTier(rank: tier, label: "High",   amount: 5_000),
-            ]
+            switch division {
+            case .three: return 1_800
+            case .two:   return 2_500
+            case .one:   return 3_500
+            }
         case .master:
-            return [
-                WagerTier(rank: tier, label: "Low",    amount: 5_000),
-                WagerTier(rank: tier, label: "Mid",    amount: 10_000),
-                WagerTier(rank: tier, label: "High",   amount: 25_000),
-            ]
+            switch division {
+            case .three: return 5_000
+            case .two:   return 7_500
+            case .one:   return 10_000
+            }
         }
     }
 
-    // Maximum wager a player can place given their coins and rank
+    static func tournamentEntryFee(for tier: RankTier) -> Int {
+        switch tier {
+        case .bronze:   return 50
+        case .silver:   return 150
+        case .gold:     return 400
+        case .platinum: return 1_000
+        case .diamond:  return 2_500
+        case .master:   return 6_000
+        }
+    }
+
+    // Compatibility for older call sites. Ranked UI should use fixed(for:).
+    static func options(for tier: RankTier) -> [WagerTier] {
+        [WagerTier(rank: tier, label: "Division", amount: amount(for: tier, division: .three))]
+    }
+
     static func maxAllowed(coins: Int, tier: RankTier) -> Int {
-        let cap = options(for: tier).map(\.amount).max() ?? 0
-        return min(coins, cap)
+        min(coins, amount(for: tier, division: .one))
     }
 }

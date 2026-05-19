@@ -2,14 +2,18 @@ import SwiftUI
 
 
 private enum ShopSection: Hashable, CaseIterable {
+    case coinPacks
+    case rankedPass
     case category(CosmeticCategory)
 
     static var allCases: [ShopSection] {
-        CosmeticCategory.allCases.map { .category($0) }
+        [.coinPacks, .rankedPass] + CosmeticCategory.allCases.map { .category($0) }
     }
 
     var title: String {
         switch self {
+        case .coinPacks: return "Coin Packs"
+        case .rankedPass: return "Ranked Pass"
         case .category(let category): return category.rawValue
         }
     }
@@ -19,7 +23,7 @@ struct ShopView: View {
     let user: AppUser
     var onUserChanged: () -> Void = {}
     @StateObject private var vm: ShopViewModel
-    @State private var selectedSection: ShopSection = .category(.title)
+    @State private var selectedSection: ShopSection = .coinPacks
     @State private var showRankedPassStore = false
     @Environment(\.dismiss) var dismiss
 
@@ -44,13 +48,7 @@ struct ShopView: View {
                 .padding(.vertical, 10)
                 .background(AppTheme.cardBackground)
 
-                RankedPassShopBanner(user: vm.user) {
-                    showRankedPassStore = true
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-
-                // Category tabs
+                // Store tabs
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(ShopSection.allCases, id: \.self) { section in
@@ -78,6 +76,12 @@ struct ShopView: View {
                 // Items
                 ScrollView {
                     switch selectedSection {
+                    case .coinPacks:
+                        coinPackSection
+                            .padding()
+                    case .rankedPass:
+                        rankedPassSection
+                            .padding()
                     case .category(let category):
                         let items = vm.items(for: category)
                         if items.isEmpty {
@@ -115,6 +119,88 @@ struct ShopView: View {
                 Text(vm.errorMessage ?? "")
             }
         }
+    }
+
+
+    private var coinPackSection: some View {
+        VStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Free Coins")
+                    .font(.headline.bold())
+                HStack(spacing: 10) {
+                    freeCoinButton(
+                        title: "+\(CoinWallet.dailyClaimAmount)",
+                        subtitle: vm.user.coinWallet.canClaimDaily() ? "Daily claim" : "Claimed today",
+                        icon: "calendar.badge.plus",
+                        enabled: vm.user.coinWallet.canClaimDaily()
+                    ) {
+                        Task { if await vm.claimDailyCoins() { onUserChanged() } }
+                    }
+                    freeCoinButton(
+                        title: "+\(CoinWallet.rewardedAdAmount)",
+                        subtitle: "Ad \(vm.user.coinWallet.rewardedAdsRemaining())/\(CoinWallet.rewardedAdsPerDay)",
+                        icon: "play.rectangle.fill",
+                        enabled: vm.user.coinWallet.rewardedAdsRemaining() > 0
+                    ) {
+                        Task { if await vm.watchCoinAd() { onUserChanged() } }
+                    }
+                }
+            }
+            .padding()
+            .background(AppTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(CoinPackProduct.all) { pack in
+                    CoinPackCard(
+                        pack: pack,
+                        price: vm.coinPackPriceText(for: pack),
+                        isBusy: vm.isSaving
+                    ) {
+                        Task { if await vm.purchaseCoinPack(pack) { onUserChanged() } }
+                    }
+                }
+            }
+
+            Text("Coins are virtual currency for cosmetics, ranked wagers, and tournament entries only. They cannot be cashed out or redeemed for real prizes.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+    }
+
+    private var rankedPassSection: some View {
+        VStack(spacing: 14) {
+            RankedPassShopBanner(user: vm.user) {
+                showRankedPassStore = true
+            }
+            Text("Ranked passes unlock entry access only. They do not change wagers, rank points, puzzles, or match outcomes.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private func freeCoinButton(title: String, subtitle: String, icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.title3.bold())
+                Text(title)
+                    .font(.headline.bold())
+                Text(subtitle)
+                    .font(.caption2.bold())
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 96)
+            .background(enabled ? AppTheme.crownGold.opacity(0.22) : AppTheme.cardBackground)
+            .foregroundStyle(enabled ? AppTheme.crownGold : AppTheme.textSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(enabled ? AppTheme.crownGold.opacity(0.5) : AppTheme.cardBorder, lineWidth: 1))
+        }
+        .disabled(!enabled || vm.isSaving)
     }
 
     private func handleShopAction(_ item: CosmeticItem) async {
@@ -177,6 +263,55 @@ struct ShopView: View {
     }
 }
 
+
+
+private struct CoinPackCard: View {
+    let pack: CoinPackProduct
+    let price: String
+    let isBusy: Bool
+    let onBuy: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppTheme.brandGradient)
+                .frame(height: 82)
+                .overlay(
+                    VStack(spacing: 4) {
+                        CoinIconView(size: 26)
+                        Text("\(pack.coins.formatted())")
+                            .font(.headline.bold())
+                            .foregroundStyle(.white)
+                    }
+                )
+                .shadow(color: AppTheme.crownGold.opacity(0.24), radius: 10, x: 0, y: 5)
+
+            Text(pack.title)
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+            Text(pack.subtitle)
+                .font(.caption2)
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+
+            Button(action: onBuy) {
+                Text(price)
+                    .font(.subheadline.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(AppTheme.crownGold)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .disabled(isBusy)
+        }
+        .padding(12)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+}
 
 private struct RankedPassShopBanner: View {
     let user: AppUser

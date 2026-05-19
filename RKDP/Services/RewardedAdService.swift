@@ -7,6 +7,14 @@ final class RewardedAdService {
     private init() {}
 
     func watchRankedEntryAd() async throws {
+        try await simulateOrRequireAdNetwork()
+    }
+
+    func watchCoinRewardAd() async throws {
+        try await simulateOrRequireAdNetwork()
+    }
+
+    private func simulateOrRequireAdNetwork() async throws {
         #if DEBUG
         try await Task.sleep(nanoseconds: 900_000_000)
         #else

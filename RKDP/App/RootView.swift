@@ -25,6 +25,11 @@ struct MainTabView: View {
                     .tabItem { Label("Friends", systemImage: "person.2.fill") }
             }
 
+            if let user = auth.user {
+                TournamentView(user: user)
+                    .tabItem { Label("Events", systemImage: "trophy.fill") }
+            }
+
             LeaderboardView()
                 .tabItem { Label("Leaderboard", systemImage: "chart.bar.fill") }
 
