@@ -41,7 +41,7 @@ struct GridlockView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.backgroundGradient.ignoresSafeArea()
+            AppTheme.arenaBackground.ignoresSafeArea()
 
             VStack(spacing: 14) {
                 header

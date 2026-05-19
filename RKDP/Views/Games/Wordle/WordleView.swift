@@ -47,7 +47,7 @@ struct WordleView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.backgroundGradient.ignoresSafeArea()
+            AppTheme.arenaBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 topBar

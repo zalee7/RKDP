@@ -66,7 +66,7 @@ struct MatchmakingView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.backgroundGradient.ignoresSafeArea()
+            AppTheme.arenaBackground.ignoresSafeArea()
             VStack(spacing: 24) {
                 switch vm.state {
                 case .idle:
@@ -963,7 +963,7 @@ struct MatchBreakdownView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 16) {
                         headerCard

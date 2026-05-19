@@ -12,7 +12,7 @@ struct SignUpView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.backgroundGradient.ignoresSafeArea()
+            AppTheme.arenaBackground.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 24) {

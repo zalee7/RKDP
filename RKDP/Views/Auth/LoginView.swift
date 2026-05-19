@@ -9,7 +9,7 @@ struct LoginView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
 
                 VStack(spacing: 32) {
                     Spacer()

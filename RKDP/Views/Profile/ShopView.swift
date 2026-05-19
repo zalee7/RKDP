@@ -92,7 +92,7 @@ struct ShopView: View {
                     }
                 }
             }
-            .background(AppTheme.backgroundGradient.ignoresSafeArea())
+            .background(AppTheme.arenaBackground.ignoresSafeArea())
             .foregroundStyle(AppTheme.textPrimary)
             .navigationTitle("Shop")
             .navigationBarTitleDisplayMode(.inline)

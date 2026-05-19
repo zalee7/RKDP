@@ -9,7 +9,7 @@ struct FriendsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 18) {
                         header
@@ -268,7 +268,7 @@ private struct InviteFriendSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 18) {
                         VStack(spacing: 8) {

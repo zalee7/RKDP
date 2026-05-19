@@ -18,7 +18,7 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 20) {

@@ -6,7 +6,7 @@ struct LeaderboardView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     // Mode picker

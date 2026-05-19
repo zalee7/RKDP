@@ -10,7 +10,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 18) {
@@ -48,7 +48,7 @@ struct HomeView: View {
                                 subtitle: "Paths, boards, mines, and symmetry",
                                 modes: [.colorLink, .gridlock, .sudoku, .minesweeper],
                                 user: auth.user,
-                                accent: AppTheme.teal,
+                                accent: AppTheme.crownGold,
                                 icon: "square.grid.3x3.fill"
                             ) { mode in
                                 selectedMode = mode
@@ -59,7 +59,7 @@ struct HomeView: View {
                                 subtitle: "Guesses, searches, and fast vocabulary plays",
                                 modes: [.wordle, .wordHunt, .anagram],
                                 user: auth.user,
-                                accent: AppTheme.hotPink,
+                                accent: AppTheme.crownGold,
                                 icon: "book.closed.fill"
                             ) { mode in
                                 selectedMode = mode
@@ -230,7 +230,7 @@ struct GameModeDetailView: View {
     var body: some View {
         NavigationStack(path: $destination) {
             ZStack {
-                AppTheme.backgroundGradient.ignoresSafeArea()
+                AppTheme.arenaBackground.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 18) {

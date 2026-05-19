@@ -32,7 +32,7 @@ struct RankedAccessStoreView: View {
                 }
                 .padding()
             }
-            .background(AppTheme.backgroundGradient.ignoresSafeArea())
+            .background(AppTheme.arenaBackground.ignoresSafeArea())
             .navigationTitle("Ranked Pass")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }

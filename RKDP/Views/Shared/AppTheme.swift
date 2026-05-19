@@ -12,11 +12,13 @@ enum AppTheme {
     static let warning          = Color(hex: "FFD02E")
     static let danger           = Color(hex: "FF4A7D")
 
-    // Background: brighter app-icon blue/purple instead of the old deep navy.
+    // Background: dark grid-arena base that lets mode colors and rank icons pop.
     static let backgroundGradient = LinearGradient(
-        colors: [iconBlue, royalBlue, iconPurple],
+        colors: [Color(hex: "070B24"), Color(hex: "171044"), Color(hex: "260F3E")],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
+
+    static var arenaBackground: some View { ArenaBackgroundView() }
 
     // Brand: crown gold into jewel pink.
     static let brandGradient = LinearGradient(
@@ -24,10 +26,10 @@ enum AppTheme {
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
-    static let cardBackground   = Color.white.opacity(0.16)
-    static let cardBorder       = Color.white.opacity(0.38)
+    static let cardBackground   = Color.white.opacity(0.20)
+    static let cardBorder       = Color.white.opacity(0.50)
     static let textPrimary      = Color.white
-    static let textSecondary    = Color.white.opacity(0.82)
+    static let textSecondary    = Color.white.opacity(0.86)
     static let accent           = hotPink
     static let accentBright     = crownGold
 
@@ -80,6 +82,52 @@ enum AppTheme {
         case .anagram:     return hotPink
         case .wordHunt:    return royalBlue
         case .wordle:      return Color(hex: "538D4E")
+        }
+    }
+}
+
+private struct ArenaBackgroundView: View {
+    var body: some View {
+        ZStack {
+            AppTheme.backgroundGradient
+            RadialGradient(
+                colors: [AppTheme.crownGold.opacity(0.12), .clear],
+                center: .topLeading,
+                startRadius: 24,
+                endRadius: 420
+            )
+            RadialGradient(
+                colors: [AppTheme.hotPink.opacity(0.15), .clear],
+                center: .bottomTrailing,
+                startRadius: 60,
+                endRadius: 540
+            )
+            Canvas { context, size in
+                let spacing: CGFloat = 34
+                var grid = Path()
+                for x in stride(from: CGFloat(0), through: size.width, by: spacing) {
+                    grid.move(to: CGPoint(x: x, y: 0))
+                    grid.addLine(to: CGPoint(x: x, y: size.height))
+                }
+                for y in stride(from: CGFloat(0), through: size.height, by: spacing) {
+                    grid.move(to: CGPoint(x: 0, y: y))
+                    grid.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                context.stroke(grid, with: .color(Color.white.opacity(0.045)), lineWidth: 0.5)
+
+                let majorSpacing = spacing * 4
+                var majorGrid = Path()
+                for x in stride(from: CGFloat(0), through: size.width, by: majorSpacing) {
+                    majorGrid.move(to: CGPoint(x: x, y: 0))
+                    majorGrid.addLine(to: CGPoint(x: x, y: size.height))
+                }
+                for y in stride(from: CGFloat(0), through: size.height, by: majorSpacing) {
+                    majorGrid.move(to: CGPoint(x: 0, y: y))
+                    majorGrid.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                context.stroke(majorGrid, with: .color(AppTheme.crownGold.opacity(0.055)), lineWidth: 0.8)
+            }
+            .blendMode(.screen)
         }
     }
 }
