@@ -73,8 +73,10 @@ struct TournamentResult: Codable, Equatable {
     var longestWord: Int?
 
     static func fromSoloResult(_ result: SoloGameResult) -> TournamentResult {
-        let wordCount = result.stats.first(where: { $0.label == "Words" })?.value.flatMap(Int.init)
-        let longestWord = result.stats.first(where: { $0.label == "Longest" })?.value.flatMap(Int.init)
+        let wordCountText = result.stats.first(where: { $0.label == "Words" })?.value
+        let longestWordText = result.stats.first(where: { $0.label == "Longest" })?.value
+        let wordCount = wordCountText.flatMap { Int($0) }
+        let longestWord = longestWordText.flatMap { Int($0) }
         return TournamentResult(
             completed: result.completed,
             elapsedSeconds: result.elapsedSeconds,

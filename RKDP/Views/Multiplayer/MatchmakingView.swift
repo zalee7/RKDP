@@ -149,13 +149,12 @@ struct MatchmakingView: View {
 
                 VStack(spacing: 12) {
                     HStack(spacing: 10) {
-                        Image(systemName: "crown.fill")
-                            .foregroundStyle(AppTheme.crownGold)
+                        CoinIconView(size: 26)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Division Wager")
+                            Text("Tier Wager")
                                 .font(.headline.bold())
                                 .foregroundStyle(AppTheme.textPrimary)
-                            Text("\(rank.fullDisplayName) sets this match at \(wager.amount) coins.")
+                            Text("\(rank.displayTier.displayName) sets this match at \(wager.amount) coins.")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textSecondary)
                         }
@@ -168,7 +167,7 @@ struct MatchmakingView: View {
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
 
                     HStack(spacing: 10) {
-                        wagerOutcomeTile(title: "Win", value: "+ opponent wager", color: AppTheme.success)
+                        wagerOutcomeTile(title: "Win", value: "+\(wager.amount)", color: AppTheme.success)
                         wagerOutcomeTile(title: "Loss", value: "-\(wager.amount)", color: AppTheme.danger)
                     }
                 }
@@ -176,7 +175,7 @@ struct MatchmakingView: View {
 
                 if !canAffordAutomaticWager {
                     VStack(spacing: 6) {
-                        Text("Not enough coins for this division wager.")
+                        Text("Not enough coins for this tier wager.")
                             .font(.subheadline.bold())
                             .foregroundStyle(AppTheme.warning)
                         Text("Earn free coins or grab a coin pack from the Shop.")
@@ -240,7 +239,7 @@ struct MatchmakingView: View {
             }
             queueCriterionRow(title: "Mode", value: mode.displayName)
             queueCriterionRow(title: queueSettingTitle, value: mode.difficultyLabel(difficulty))
-            queueCriterionRow(title: "Division wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
+            queueCriterionRow(title: "Tier wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
             queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
             if includeHint {
                 Text("Word modes only pair players with the same setting and rank tier.")
@@ -291,7 +290,7 @@ struct MatchmakingView: View {
                         .padding(.horizontal)
                 }
             } else if let wager = vm.selectedWager {
-                Text("Division wager: \(wager.amount) coins").foregroundStyle(.secondary)
+                Text("Tier wager: \(wager.amount) coins").foregroundStyle(.secondary)
             }
             Button("Cancel") { Task { await vm.cancelSearch() } }
                 .foregroundStyle(.red)
@@ -736,16 +735,30 @@ struct MatchmakingView: View {
     }
 
     private func rankAdjustmentLabel(session: GameSession) -> String? {
-        guard session.winnerID != nil,
+        guard let winnerID = session.winnerID,
               let me = session.players.first(where: { $0.userID == user.id }),
               let opponent = session.players.first(where: { $0.userID != user.id }) else { return nil }
         let myScore = rankPosition(me)
         let oppScore = rankPosition(opponent)
         guard myScore != oppScore else { return nil }
-        if session.winnerID == user.id {
-            return oppScore > myScore ? "Higher division bonus" : "Lower division adjustment"
+
+        let isWinner = winnerID == user.id
+        let baselineBase = isWinner ? 30 : -15
+        let baselineDelta = Int(Double(baselineBase) * mode.pointMultiplier(for: session.difficulty))
+        let actualDelta = RankingService.rankDelta(
+            for: user.id,
+            mode: session.mode,
+            difficulty: session.difficulty,
+            winnerID: winnerID,
+            players: session.players
+        )
+        let adjustment = actualDelta - baselineDelta
+        let adjustmentText = adjustment == 0 ? "" : " \(deltaText(adjustment)) pts"
+
+        if isWinner {
+            return oppScore > myScore ? "Higher division bonus\(adjustmentText)" : "Lower division adjustment\(adjustmentText)"
         }
-        return oppScore > myScore ? "Reduced loss vs higher division" : "Lower division penalty"
+        return oppScore > myScore ? "Reduced loss vs higher division\(adjustmentText)" : "Lower division penalty\(adjustmentText)"
     }
 
     private func rankPosition(_ player: MatchPlayer) -> Int {
