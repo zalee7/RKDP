@@ -60,7 +60,7 @@ struct HomeView: View {
                                 modes: [.wordle, .wordHunt, .anagram],
                                 user: auth.user,
                                 accent: AppTheme.hotPink,
-                                icon: "textformat.abc"
+                                icon: "book.closed.fill"
                             ) { mode in
                                 selectedMode = mode
                             }
