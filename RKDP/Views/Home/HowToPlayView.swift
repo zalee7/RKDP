@@ -253,7 +253,7 @@ struct RankGuideView: View {
                     Text("Rank System")
                         .font(.title.bold())
                         .foregroundStyle(.white)
-                    Text("Each game mode has its own independent rank.\nWin matches to climb divisions, then promote tiers.")
+                    Text("Each game mode has its own independent rank.\nWin matches to climb divisions, then promote tiers. Ranked coin wagers are fixed by tier.")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.7))
                         .multilineTextAlignment(.center)
@@ -268,14 +268,16 @@ struct RankGuideView: View {
                 .padding(.horizontal)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("How Points Work")
+                    Text("How Ranked Works")
                         .font(.headline)
                         .foregroundStyle(.yellow)
 
                     infoRow(icon: "checkmark.circle.fill", color: .green,  text: "Win: +30 pts (×difficulty multiplier)")
                     infoRow(icon: "xmark.circle.fill",    color: .red,    text: "Loss: −15 pts (×difficulty multiplier)")
-                    infoRow(icon: "equal.circle.fill",    color: .blue,   text: "Draw: +5 pts")
-                    infoRow(icon: "arrow.left.circle.fill", color: .orange, text: "Abandon: −20 pts")
+                    infoRow(icon: "equal.circle.fill",    color: .blue,   text: "Draw: +5 pts and no coin change")
+                    infoRow(icon: "arrow.left.circle.fill", color: .orange, text: "Abandon: −20 pts and a ranked loss")
+                    coinInfoRow(text: "Tier wager: one fixed coin stake for your current rank tier. Win +wager, loss -wager.")
+                    infoRow(icon: "cpu.fill", color: .yellow, text: "Bronze queues may fill with a Training Bot after a short wait. Bot matches use limited ranked rewards.")
                     infoRow(icon: "rectangle.split.3x1.fill", color: .purple, text: "Each tier has III, II, and I divisions. Fill Division I to promote.")
                     infoRow(icon: "clock.fill",           color: .purple, text: "Difficulty and opponent division set rank points; time is a tie-breaker in some modes")
                 }
@@ -292,6 +294,13 @@ struct RankGuideView: View {
     private func infoRow(icon: String, color: Color, text: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon).foregroundStyle(color)
+            Text(text).font(.subheadline).foregroundStyle(.white.opacity(0.85))
+        }
+    }
+
+    private func coinInfoRow(text: String) -> some View {
+        HStack(spacing: 10) {
+            CoinIconView(size: 19)
             Text(text).font(.subheadline).foregroundStyle(.white.opacity(0.85))
         }
     }
@@ -337,11 +346,13 @@ struct RankTierRow: View {
 
             Spacer()
 
-            let options = Wager.options(for: tier)
-            if let lo = options.first?.amount, let hi = options.last?.amount {
-                Text("\(lo)–\(hi) 🪙")
-                    .font(.caption.bold())
-                    .foregroundStyle(.white.opacity(0.7))
+            if let amount = Wager.options(for: tier).first?.amount {
+                HStack(spacing: 5) {
+                    CoinIconView(size: 16)
+                    Text("\(amount)")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.82))
+                }
             }
         }
         .padding(.horizontal, 14)

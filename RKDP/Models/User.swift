@@ -1,5 +1,25 @@
 import Foundation
 
+struct BotMatchProgress: Codable, Equatable {
+    static let rewardedWinsPerDay = 3
+
+    var rewardedBotWins: RankedDailyCounter = .empty
+
+    static let empty = BotMatchProgress()
+
+    func rewardedWinsRemaining(dayKey: String = RankedAccess.todayKey()) -> Int {
+        let used = rewardedBotWins.dayKey == dayKey ? rewardedBotWins.count : 0
+        return max(0, Self.rewardedWinsPerDay - used)
+    }
+
+    mutating func recordRewardedWin(dayKey: String = RankedAccess.todayKey()) -> Bool {
+        guard rewardedWinsRemaining(dayKey: dayKey) > 0 else { return false }
+        let used = rewardedBotWins.dayKey == dayKey ? rewardedBotWins.count : 0
+        rewardedBotWins = RankedDailyCounter(dayKey: dayKey, count: used + 1)
+        return true
+    }
+}
+
 struct AppUser: Codable, Identifiable {
     var id: String
     var username: String
@@ -13,6 +33,7 @@ struct AppUser: Codable, Identifiable {
     var appliedRankedOutcomes: [String: Bool] = [:]
     var rankedAccess: RankedAccess = .empty
     var coinWallet: CoinWallet = .empty
+    var botMatchProgress: BotMatchProgress = .empty
 
     var totalRankPoints: Int { ranks.values.reduce(0) { $0 + $1.points } }
 
@@ -62,7 +83,7 @@ struct AppUser: Codable, Identifiable {
 
 extension AppUser {
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes, rankedAccess, coinWallet
+        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes, rankedAccess, coinWallet, botMatchProgress
     }
 
     init(from decoder: Decoder) throws {
@@ -90,6 +111,7 @@ extension AppUser {
         appliedRankedOutcomes = (try? c.decode([String: Bool].self, forKey: .appliedRankedOutcomes)) ?? [:]
         rankedAccess = (try? c.decode(RankedAccess.self, forKey: .rankedAccess)) ?? .empty
         coinWallet = (try? c.decode(CoinWallet.self, forKey: .coinWallet)) ?? .empty
+        botMatchProgress = (try? c.decode(BotMatchProgress.self, forKey: .botMatchProgress)) ?? .empty
     }
 
     func encode(to encoder: Encoder) throws {
@@ -114,5 +136,6 @@ extension AppUser {
         try c.encode(appliedRankedOutcomes, forKey: .appliedRankedOutcomes)
         try c.encode(rankedAccess, forKey: .rankedAccess)
         try c.encode(coinWallet, forKey: .coinWallet)
+        try c.encode(botMatchProgress, forKey: .botMatchProgress)
     }
 }

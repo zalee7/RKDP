@@ -27,6 +27,8 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var isStartingRematch = false
     @Published var dismissedRematchInviteSessionID: String?
     private var countdownTask: Task<Void, Never>?
+    private var botFallbackTask: Task<Void, Never>?
+    private var botResultTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
     private let rtdb = RealtimeDBService.shared
@@ -72,6 +74,7 @@ final class MultiplayerViewModel: ObservableObject {
         tearDownListeners()
         countdownTask?.cancel()
         countdownTask = nil
+        cancelBotTasks()
         gameTimer?.invalidate()
         playerResults = [:]
         opponentUser = nil
@@ -121,6 +124,7 @@ final class MultiplayerViewModel: ObservableObject {
 
             // 3. Write to queue and try to pair immediately
             try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString)
+            scheduleBotFallback(user: user, mode: mode, difficulty: difficulty, wager: wager, searchID: searchID)
 
             if !isCurrentSearch(searchID) {
                 try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
@@ -139,6 +143,7 @@ final class MultiplayerViewModel: ObservableObject {
         tearDownListeners()
         countdownTask?.cancel()
         countdownTask = nil
+        cancelBotTasks()
         gameTimer?.invalidate()
         removeRealtimeObservers()
         clearRematchState()
@@ -169,6 +174,7 @@ final class MultiplayerViewModel: ObservableObject {
         tearDownListeners()
         countdownTask?.cancel()
         countdownTask = nil
+        cancelBotTasks()
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
         try? await store.clearPendingSession(userID: user.id)
         opponentUser = nil
@@ -212,11 +218,13 @@ final class MultiplayerViewModel: ObservableObject {
         }
 
         tearDownListeners()
+        botFallbackTask?.cancel()
+        botFallbackTask = nil
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
         try? await store.clearPendingSession(userID: user.id)
 
-        let oppID = session.players.first { $0.userID != user.id }?.userID
-        if let oppID { opponentUser = try? await store.fetchUser(id: oppID) }
+        let opponent = session.players.first { $0.userID != user.id }
+        if let opponent, !opponent.isBot { opponentUser = try? await store.fetchUser(id: opponent.userID) }
         guard isCurrentSearch(searchID) else { return }
         activeSearchID = nil
         state = .matchFound(session: session)
@@ -233,6 +241,7 @@ final class MultiplayerViewModel: ObservableObject {
                 self?.startGameTimer()
                 self?.listenForResults(session: session)
                 self?.listenForSessionStatus(sessionID: session.id)
+                self?.scheduleBotResultIfNeeded(session: session)
             }
         }
         rtdbHandles.append((session.id, handle))
@@ -278,6 +287,14 @@ final class MultiplayerViewModel: ObservableObject {
         let handle = rtdb.listenForResults(sessionID: session.id) { [weak self] results in
             Task { @MainActor in
                 self?.playerResults = results
+                if let self,
+                   session.mode == .wordle,
+                   let bot = session.botPlayer,
+                   results[bot.userID] == nil,
+                   results.values.contains(where: { !$0.userID.hasPrefix(BotMatchService.botIDPrefix) && $0.solvedRounds >= 2 }) {
+                    await self.submitBotResultIfNeeded(session: session, bot: bot, minimumElapsed: self.elapsedSeconds)
+                    return
+                }
                 if MatchResolver.canResolve(session: session, results: results) {
                     await self?.resolveMatch(session: session, results: results)
                 }
@@ -401,6 +418,7 @@ final class MultiplayerViewModel: ObservableObject {
 
 
     func beginRematchListening(session: GameSession) {
+        guard !session.containsBot else { return }
         guard (session.isRanked || session.isExhibition), session.status == .finished else { return }
         if rematchListeningSessionID == session.id { return }
         rematchListeningSessionID = session.id
@@ -418,6 +436,12 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func requestRematch(session: GameSession) async {
+        guard !session.containsBot else {
+            dismissedRematchInviteSessionID = session.id
+            rematchErrorMessage = "Training bots do not rematch. Queue again for another match."
+            try? await rtdb.publishRematchError(sessionID: session.id, message: "Training bot declined rematch.")
+            return
+        }
         guard (session.isRanked || session.isExhibition), let user else { return }
         if session.isRanked {
             guard let player = session.players.first(where: { $0.userID == user.id }) else { return }
@@ -453,12 +477,23 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func declineRematch(session: GameSession) async {
+        if session.containsBot {
+            dismissedRematchInviteSessionID = session.id
+            rematchErrorMessage = "Training bot declined rematch."
+            try? await rtdb.publishRematchError(sessionID: session.id, message: "Training bot declined rematch.")
+            return
+        }
         dismissedRematchInviteSessionID = session.id
         rematchErrorMessage = nil
         try? await rtdb.publishRematchError(sessionID: session.id, message: "Rematch declined.")
     }
 
     private func handleRematchUpdate(_ update: RematchUpdate, session: GameSession) async {
+        guard !session.containsBot else {
+            rematchRequests = []
+            rematchErrorMessage = "Training bot declined rematch."
+            return
+        }
         rematchRequests = update.requests
         if let error = update.error {
             rematchErrorMessage = error
@@ -596,6 +631,67 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    private func scheduleBotFallback(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: WagerTier, searchID: UUID) {
+        guard BotMatchService.canOfferBot(to: user, mode: mode) else { return }
+        botFallbackTask?.cancel()
+        let delay = BotMatchService.fallbackDelaySeconds()
+        botFallbackTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            await self?.createBotMatchIfStillSearching(user: user, mode: mode, difficulty: difficulty, wager: wager, searchID: searchID)
+        }
+    }
+
+    private func createBotMatchIfStillSearching(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: WagerTier, searchID: UUID) async {
+        guard isCurrentSearch(searchID), case .searching = state else { return }
+        do {
+            if let sessionID = try await store.createBronzeBotSession(
+                user: user,
+                mode: mode,
+                difficulty: difficulty,
+                wager: wager.amount,
+                searchID: searchID.uuidString
+            ) {
+                await consumeMatch(sessionID: sessionID, pendingSearchID: searchID.uuidString, searchID: searchID)
+            }
+        } catch {
+            // Bot fallback should never interrupt normal matchmaking.
+        }
+    }
+
+    private func scheduleBotResultIfNeeded(session: GameSession) {
+        guard let bot = session.botPlayer else { return }
+        botResultTask?.cancel()
+        let delay = BotMatchService.resultDelaySeconds(for: session)
+        botResultTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            await self?.submitBotResultIfNeeded(session: session, bot: bot, minimumElapsed: delay)
+        }
+    }
+
+    private func submitBotResultIfNeeded(session: GameSession, bot: MatchPlayer, minimumElapsed: Int) async {
+        guard case .inMatch(let currentSession) = state,
+              currentSession.id == session.id,
+              playerResults[bot.userID] == nil else { return }
+        let result = BotMatchService.makeResult(
+            for: session,
+            bot: bot,
+            elapsedSeconds: max(elapsedSeconds, minimumElapsed)
+        )
+        do {
+            try await rtdb.submitResult(sessionID: session.id, result: result)
+            playerResults[bot.userID] = result
+        } catch {
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    private func cancelBotTasks() {
+        botFallbackTask?.cancel()
+        botFallbackTask = nil
+        botResultTask?.cancel()
+        botResultTask = nil
+    }
+
     private func tearDownListeners() {
         userDocListener?.remove()
         userDocListener = nil
@@ -635,6 +731,7 @@ final class MultiplayerViewModel: ObservableObject {
         tearDownListeners()
         countdownTask?.cancel()
         countdownTask = nil
+        cancelBotTasks()
         if let user {
             let mode = self.mode
             let difficulty = self.difficulty
@@ -691,6 +788,9 @@ final class MultiplayerViewModel: ObservableObject {
     func confirmReady(session: GameSession) async {
         do {
             try await rtdb.markReady(sessionID: session.id, userID: user?.id ?? "")
+            if let bot = session.botPlayer {
+                try await rtdb.markReady(sessionID: session.id, userID: bot.userID)
+            }
             listenForBothReady(session: session)
         } catch {
             state = .error(error.localizedDescription)

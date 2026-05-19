@@ -109,6 +109,43 @@ struct MatchPlayer: Codable {
     var finishTime: Int?    // seconds from puzzle start; nil = not finished
     var rankTier: RankTier
     var rankPoints: Int = 0
+    var isBot: Bool = false
+
+    init(userID: String, username: String, wager: Int, finishTime: Int? = nil, rankTier: RankTier, rankPoints: Int = 0, isBot: Bool = false) {
+        self.userID = userID
+        self.username = username
+        self.wager = wager
+        self.finishTime = finishTime
+        self.rankTier = rankTier
+        self.rankPoints = rankPoints
+        self.isBot = isBot
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case userID, username, wager, finishTime, rankTier, rankPoints, isBot
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        userID = try c.decode(String.self, forKey: .userID)
+        username = try c.decode(String.self, forKey: .username)
+        wager = try c.decode(Int.self, forKey: .wager)
+        finishTime = try c.decodeIfPresent(Int.self, forKey: .finishTime)
+        rankTier = try c.decode(RankTier.self, forKey: .rankTier)
+        rankPoints = try c.decodeIfPresent(Int.self, forKey: .rankPoints) ?? 0
+        isBot = try c.decodeIfPresent(Bool.self, forKey: .isBot) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(userID, forKey: .userID)
+        try c.encode(username, forKey: .username)
+        try c.encode(wager, forKey: .wager)
+        try c.encodeIfPresent(finishTime, forKey: .finishTime)
+        try c.encode(rankTier, forKey: .rankTier)
+        try c.encode(rankPoints, forKey: .rankPoints)
+        try c.encode(isBot, forKey: .isBot)
+    }
 }
 
 struct MatchPlayerResult: Codable, Equatable {
@@ -230,6 +267,8 @@ struct GameSession: Codable, Identifiable {
     var totalPot: Int { players.reduce(0) { $0 + $1.wager } }
     var isRanked: Bool { matchKind == .ranked }
     var isExhibition: Bool { matchKind == .exhibition }
+    var containsBot: Bool { players.contains(where: \.isBot) }
+    var botPlayer: MatchPlayer? { players.first(where: \.isBot) }
 
     func result(for userID: String) -> SessionResult? {
         guard status == .finished else { return nil }

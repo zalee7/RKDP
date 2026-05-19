@@ -313,11 +313,12 @@ struct MatchmakingView: View {
     private func matchFoundView(session: GameSession) -> some View {
         let opponent = session.players.first { $0.userID != user.id }
         let oppUser  = vm.opponentUser
+        let isBotOpponent = opponent?.isBot == true
 
         return VStack(spacing: 24) {
             Spacer()
 
-            Text(session.isExhibition ? "Exhibition Ready!" : "Match Found!")
+            Text(isBotOpponent ? "Training Bot Found!" : (session.isExhibition ? "Exhibition Ready!" : "Match Found!"))
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.textPrimary)
 
@@ -338,26 +339,35 @@ struct MatchmakingView: View {
                         .font(.title3.bold())
                         .foregroundStyle(AppTheme.textPrimary)
 
-                    if let title = oppUser?.cosmetics.equippedTitle,
-                       let item = CosmeticCatalog.allTitles.first(where: { $0.id == title }) {
-                        Text(item.name)
-                            .font(.caption.italic())
-                            .foregroundStyle(AppTheme.accentBright)
-                    }
+                    if isBotOpponent {
+                        Text("Bronze Training Bot")
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.crownGold)
+                        Text("Limited ranked rewards")
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    } else {
+                        if let title = oppUser?.cosmetics.equippedTitle,
+                           let item = CosmeticCatalog.allTitles.first(where: { $0.id == title }) {
+                            Text(item.name)
+                                .font(.caption.italic())
+                                .foregroundStyle(AppTheme.accentBright)
+                        }
 
-                    if let opp = opponent {
-                        let liveRank = oppUser?.rank(for: mode)
-                        let oppRank = liveRank ?? RankInfo(points: opp.rankPoints, tier: RankTier.tier(for: opp.rankPoints),
-                                                           wins: 0, losses: 0, bestTime: nil, bestScore: nil)
-                        Text(oppRank.fullDisplayName)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(oppRank.displayTier.color)
-                        RecordTextView(
-                            wins: liveRank?.wins,
-                            losses: liveRank?.losses,
-                            prefix: "W/L ",
-                            font: .caption.bold()
-                        )
+                        if let opp = opponent {
+                            let liveRank = oppUser?.rank(for: mode)
+                            let oppRank = liveRank ?? RankInfo(points: opp.rankPoints, tier: RankTier.tier(for: opp.rankPoints),
+                                                               wins: 0, losses: 0, bestTime: nil, bestScore: nil)
+                            Text(oppRank.fullDisplayName)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(oppRank.displayTier.color)
+                            RecordTextView(
+                                wins: liveRank?.wins,
+                                losses: liveRank?.losses,
+                                prefix: "W/L ",
+                                font: .caption.bold()
+                            )
+                        }
                     }
                 }
             }
@@ -384,7 +394,7 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textPrimary)
             }
 
-            Text(session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…")
+            Text(isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…"))
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
 
@@ -410,7 +420,7 @@ struct MatchmakingView: View {
         VStack(spacing: 0) {
             // Opponent status bar
             HStack(spacing: 10) {
-                Label("Opponent", systemImage: "person.fill")
+                Label(session.containsBot ? "Training Bot" : "Opponent", systemImage: session.containsBot ? "cpu.fill" : "person.fill")
                 Spacer()
                 if let oppResult = vm.playerResults.first(where: { $0.key != user.id })?.value {
                     Label(oppResult.status, systemImage: "checkmark.circle.fill")
@@ -507,11 +517,18 @@ struct MatchmakingView: View {
                 .font(.largeTitle.bold())
                 .foregroundStyle(isDraw || isWinner ? AppTheme.crownGold : AppTheme.textSecondary)
 
-            Text(userFacingResultReason(session: session, results: results))
-                .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+            VStack(spacing: 4) {
+                Text(userFacingResultReason(session: session, results: results))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                if session.containsBot {
+                    Text("Bronze Training Bot · limited ranked rewards")
+                        .font(.caption2.bold())
+                        .foregroundStyle(AppTheme.crownGold)
+                }
+            }
+            .padding(.horizontal)
 
             // Performance breakdown
             VStack(spacing: 0) {
@@ -580,7 +597,7 @@ struct MatchmakingView: View {
             .opacity(controlsReady ? 1 : 0.36)
             .disabled(!controlsReady)
 
-            if session.isRanked || session.isExhibition {
+            if (session.isRanked || session.isExhibition) && !session.containsBot {
                 rematchControl(session: session, controlsReady: controlsReady)
             }
 
@@ -601,7 +618,7 @@ struct MatchmakingView: View {
         }
         .onAppear {
             SoundManager.shared.stopAllLoops()
-            if session.isRanked || session.isExhibition { vm.beginRematchListening(session: session) }
+            if (session.isRanked || session.isExhibition) && !session.containsBot { vm.beginRematchListening(session: session) }
         }
         .sheet(isPresented: $showBreakdown) {
             MatchBreakdownView(session: session, currentUserID: user.id, results: results)
@@ -735,7 +752,8 @@ struct MatchmakingView: View {
     }
 
     private func rankAdjustmentLabel(session: GameSession) -> String? {
-        guard let winnerID = session.winnerID,
+        guard !session.containsBot,
+              let winnerID = session.winnerID,
               let me = session.players.first(where: { $0.userID == user.id }),
               let opponent = session.players.first(where: { $0.userID != user.id }) else { return nil }
         let myScore = rankPosition(me)
@@ -753,7 +771,8 @@ struct MatchmakingView: View {
             players: session.players
         )
         let adjustment = actualDelta - baselineDelta
-        let adjustmentText = adjustment == 0 ? "" : " \(deltaText(adjustment)) pts"
+        let signedAdjustment = "\(adjustment >= 0 ? "+" : "")\(adjustment)"
+        let adjustmentText = adjustment == 0 ? "" : " \(signedAdjustment) pts"
 
         if isWinner {
             return oppScore > myScore ? "Higher division bonus\(adjustmentText)" : "Lower division adjustment\(adjustmentText)"

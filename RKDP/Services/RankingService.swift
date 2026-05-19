@@ -46,6 +46,10 @@ final class RankingService {
         players: [MatchPlayer]
     ) -> Int {
         let isWinner = winnerID == playerID
+        if players.contains(where: \.isBot) {
+            guard winnerID != nil else { return 0 }
+            return isWinner ? 15 : -8
+        }
         let base: Int
         if winnerID == nil {
             base = 5
@@ -124,18 +128,20 @@ final class RankingService {
                         .collection("entries")
                         .document(userID)
 
-                    let delta = Self.rankDelta(
+                    let isRewardedBotWin = session.containsBot && session.winnerID == userID
+                    let canApplyBotWinReward = !isRewardedBotWin || user.botMatchProgress.rewardedWinsRemaining() > 0
+                    let delta = canApplyBotWinReward ? Self.rankDelta(
                         for: userID,
                         mode: session.mode,
                         difficulty: session.difficulty,
                         winnerID: session.winnerID,
                         players: session.players
-                    )
+                    ) : 0
 
                     var rankInfo = user.ranks[session.mode] ?? .empty
                     rankInfo.points = max(0, rankInfo.points + delta)
                     rankInfo.tier = RankTier.tier(for: rankInfo.points)
-                    if let winnerID = session.winnerID {
+                    if canApplyBotWinReward, let winnerID = session.winnerID {
                         if winnerID == userID {
                             rankInfo.wins += 1
                         } else {
@@ -157,10 +163,14 @@ final class RankingService {
                     }
 
                     user.ranks[session.mode] = rankInfo
-                    if let winnerID = session.winnerID,
+                    if canApplyBotWinReward,
+                       let winnerID = session.winnerID,
                        let player = session.players.first(where: { $0.userID == userID }) {
                         let opponentWager = session.players.first(where: { $0.userID != userID })?.wager ?? player.wager
                         user.coins += winnerID == userID ? opponentWager : -player.wager
+                    }
+                    if isRewardedBotWin, canApplyBotWinReward {
+                        _ = user.botMatchProgress.recordRewardedWin()
                     }
                     user.appliedRankedOutcomes[session.id] = true
 

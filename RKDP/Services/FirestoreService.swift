@@ -456,6 +456,72 @@ final class FirestoreService {
 
     // MARK: - Matchmaking
 
+
+    func createBronzeBotSession(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: Int, searchID: String) async throws -> String? {
+        guard BotMatchService.canOfferBot(to: user, mode: mode) else { return nil }
+        let tier = user.rank(for: mode).displayTier
+        guard tier == .bronze else { return nil }
+
+        let queueRef = queueCollection(mode: mode, difficulty: difficulty)
+        let queueDoc = try await queueRef.document(user.id).getDocument()
+        guard let queue = queueDoc.data(),
+              (queue["searchID"] as? String) == searchID,
+              (queue["wager"] as? Int) == wager,
+              (queue["rankTier"] as? Int) == tier.rawValue else {
+            return nil
+        }
+
+        let snapshot = try await queueRef.getDocuments()
+        let realOpponents = snapshot.documents.filter {
+            $0.documentID != user.id &&
+            !($0.documentID.hasPrefix(BotMatchService.botIDPrefix)) &&
+            ($0.data()["rankTier"] as? Int ?? -1) == tier.rawValue
+        }
+        guard realOpponents.isEmpty else { return nil }
+
+        let seed = Int.random(in: 0..<Int.max)
+        let bot = BotMatchService.makeBotPlayer(mode: mode, wager: wager, searchID: searchID, seed: seed)
+        let sessionID = makeSessionID(
+            userID: user.id,
+            opponentID: bot.userID,
+            mode: mode,
+            difficulty: difficulty,
+            creatorSearchID: searchID
+        )
+
+        let existing = try await db.collection("sessions").document(sessionID).getDocument()
+        if existing.exists {
+            let status = existing.data()?["status"] as? String ?? ""
+            if status == SessionStatus.inProgress.rawValue || status == SessionStatus.waiting.rawValue {
+                return sessionID
+            }
+            return nil
+        }
+
+        var session = GameSession(
+            id: sessionID,
+            mode: mode,
+            difficulty: difficulty,
+            status: .inProgress,
+            players: [
+                MatchPlayer(userID: user.id, username: user.username, wager: wager, rankTier: tier, rankPoints: user.rank(for: mode).points),
+                bot
+            ],
+            seed: seed,
+            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+            createdAt: Date()
+        )
+        session.playerIDs = [user.id, bot.userID]
+
+        try db.collection("sessions").document(sessionID).setData(from: session)
+        try? await db.collection("users").document(user.id).updateData([
+            "pendingSessionID": sessionID,
+            "pendingSearchID": searchID
+        ])
+        try? await queueRef.document(user.id).delete()
+        return sessionID
+    }
+
     /// Write this player into the queue, then attempt to pair with anyone already waiting.
     /// The player with the lexicographically larger userID always creates the session,
     /// guaranteeing exactly one session even if both arrive simultaneously.
