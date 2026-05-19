@@ -354,13 +354,15 @@ final class FirestoreService {
     func createRematchSession(from oldSession: GameSession) async throws -> GameSession {
         let refreshedPlayers = try await oldSession.players.asyncMap { player -> MatchPlayer in
             let latestUser = try await fetchUser(id: player.userID)
-            guard latestUser.coins >= player.wager else { throw FirestoreServiceError.insufficientCoins }
-            guard latestUser.rankedAccess.canStartRanked(mode: oldSession.mode) else { throw FirestoreServiceError.rankedAccessUnavailable }
+            if oldSession.isRanked {
+                guard latestUser.coins >= player.wager else { throw FirestoreServiceError.insufficientCoins }
+                guard latestUser.rankedAccess.canStartRanked(mode: oldSession.mode) else { throw FirestoreServiceError.rankedAccessUnavailable }
+            }
             let rank = latestUser.rank(for: oldSession.mode)
             return MatchPlayer(
                 userID: latestUser.id,
                 username: latestUser.username,
-                wager: player.wager,
+                wager: oldSession.isExhibition ? 0 : player.wager,
                 finishTime: nil,
                 rankTier: rank.displayTier,
                 rankPoints: rank.points
@@ -378,7 +380,8 @@ final class FirestoreService {
             players: refreshedPlayers,
             seed: seed,
             puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: oldSession.mode, difficulty: oldSession.difficulty, seed: seed),
-            createdAt: Date()
+            createdAt: Date(),
+            matchKind: oldSession.matchKind
         )
         session.playerIDs = refreshedPlayers.map(\.userID)
         try db.collection("sessions").document(sessionID).setData(from: session)

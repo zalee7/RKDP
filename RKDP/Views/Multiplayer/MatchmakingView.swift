@@ -542,12 +542,12 @@ struct MatchmakingView: View {
             .opacity(controlsReady ? 1 : 0.36)
             .disabled(!controlsReady)
 
-            if session.isRanked {
+            if session.isRanked || session.isExhibition {
                 rematchControl(session: session, controlsReady: controlsReady)
             }
 
             Button { dismiss() } label: {
-                Label(session.isExhibition ? "Back to Friends" : "Back to Home", systemImage: "house.fill")
+                Label(session.isExhibition ? "Leave to Friends" : "Back to Home", systemImage: session.isExhibition ? "person.2.fill" : "house.fill")
                     .font(.headline.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -563,7 +563,7 @@ struct MatchmakingView: View {
         }
         .onAppear {
             SoundManager.shared.stopAllLoops()
-            if session.isRanked { vm.beginRematchListening(session: session) }
+            if session.isRanked || session.isExhibition { vm.beginRematchListening(session: session) }
         }
         .sheet(isPresented: $showBreakdown) {
             MatchBreakdownView(session: session, currentUserID: user.id, results: results)

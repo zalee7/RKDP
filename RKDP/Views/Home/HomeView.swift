@@ -18,13 +18,19 @@ struct HomeView: View {
                         if let user = auth.user { userHeader(user: user) }
 
                         HStack(alignment: .center, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Choose Your Game")
-                                    .font(.headline.bold())
-                                    .foregroundStyle(AppTheme.textPrimary)
-                                Text("Pick a mode, practice, or queue ranked")
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.textSecondary)
+                            HStack(spacing: 10) {
+                                Capsule()
+                                    .fill(AppTheme.brandGradient)
+                                    .frame(width: 6, height: 38)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Choose Your Game")
+                                        .font(.subheadline.bold())
+                                        .textCase(.uppercase)
+                                        .foregroundStyle(AppTheme.crownGold)
+                                    Text("Pick a mode, practice, or queue ranked")
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                }
                             }
                             Spacer()
                             Button { showHowToPlay = true } label: {
@@ -41,7 +47,9 @@ struct HomeView: View {
                                 title: "Grid Games",
                                 subtitle: "Paths, boards, mines, and symmetry",
                                 modes: [.colorLink, .gridlock, .sudoku, .minesweeper],
-                                user: auth.user
+                                user: auth.user,
+                                accent: AppTheme.teal,
+                                icon: "square.grid.3x3.fill"
                             ) { mode in
                                 selectedMode = mode
                             }
@@ -50,7 +58,9 @@ struct HomeView: View {
                                 title: "Word Games",
                                 subtitle: "Guesses, searches, and fast vocabulary plays",
                                 modes: [.wordle, .wordHunt, .anagram],
-                                user: auth.user
+                                user: auth.user,
+                                accent: AppTheme.hotPink,
+                                icon: "textformat.abc"
                             ) { mode in
                                 selectedMode = mode
                             }
@@ -79,7 +89,7 @@ struct HomeView: View {
                 GameModeDetailView(mode: mode).environmentObject(auth)
             }
             .sheet(isPresented: $showProfile) {
-                if let user = auth.user { ProfileView(user: user).environmentObject(auth) }
+                if let user = auth.user { ProfileView(user: user, onDone: { showProfile = false }).environmentObject(auth) }
             }
             .sheet(isPresented: $showShop) {
                 if let user = auth.user {
@@ -134,14 +144,24 @@ private struct HomeGameCategorySection: View {
     let subtitle: String
     let modes: [GameMode]
     let user: AppUser?
+    let accent: Color
+    let icon: String
     let onSelect: (GameMode) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.headline.bold())
-                    .foregroundStyle(AppTheme.textPrimary)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(accent)
+                        .frame(width: 5, height: 24)
+                    Image(systemName: icon)
+                        .font(.caption.bold())
+                        .foregroundStyle(accent)
+                    Text(title)
+                        .font(.title3.bold())
+                        .foregroundStyle(accent)
+                }
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)

@@ -145,11 +145,16 @@ final class FriendsViewModel: ObservableObject {
     }
 
     private func openAcceptedInviteIfNeeded(_ invites: [ExhibitionInvite]) async {
-        guard let invite = invites.first(where: { $0.status == .accepted && $0.sessionID != nil }),
+        guard let invite = invites.first(where: { $0.status == .accepted && $0.sessionID != nil && !$0.isExpired }),
               let sessionID = invite.sessionID,
               !handledSessionIDs.contains(sessionID) else { return }
         do {
             let session = try await store.fetchSession(id: sessionID)
+            if session.status == .finished {
+                try? await store.completeExhibitionInvite(invite.id)
+                handledSessionIDs.insert(sessionID)
+                return
+            }
             handledSessionIDs.insert(sessionID)
             activeExhibitionInviteID = invite.id
             activeExhibitionSession = session

@@ -2,13 +2,16 @@ import SwiftUI
 
 struct ProfileView: View {
     let user: AppUser
+    let onDone: (() -> Void)?
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) var dismiss
     @StateObject private var shop: ShopViewModel
     @State private var isGrantingTesterAccess = false
+    @State private var selectedOwnedCategory: CosmeticCategory = .title
 
-    init(user: AppUser) {
+    init(user: AppUser, onDone: (() -> Void)? = nil) {
         self.user = user
+        self.onDone = onDone
         _shop = StateObject(wrappedValue: ShopViewModel(user: user))
     }
 
@@ -75,23 +78,62 @@ struct ProfileView: View {
                         // Owned cosmetics
                         sectionCard(title: "Owned Cosmetics") {
                             let ownedItems = shop.ownedItems
+                            let categoryItems = ownedItems.filter { $0.category == selectedOwnedCategory }
                             if ownedItems.isEmpty {
                                 Text("Bought cosmetics will appear here for quick equipping.")
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.textSecondary)
                             } else {
-                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                                    ForEach(ownedItems) { item in
-                                        ShopItemCard(
-                                            item: item,
-                                            isOwned: true,
-                                            isEquipped: shop.isEquipped(item),
-                                            canAfford: true,
-                                            isLimited: false
-                                        ) {
-                                            Task {
-                                                if await shop.equip(item) {
-                                                    await auth.refreshUser()
+                                VStack(alignment: .leading, spacing: 14) {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            ForEach(CosmeticCategory.allCases, id: \.self) { category in
+                                                let count = ownedItems.filter { $0.category == category }.count
+                                                Button { selectedOwnedCategory = category } label: {
+                                                    HStack(spacing: 5) {
+                                                        Text(category.rawValue)
+                                                        Text("\(count)")
+                                                            .font(.caption2.bold())
+                                                            .padding(.horizontal, 5)
+                                                            .padding(.vertical, 2)
+                                                            .background(Color.white.opacity(selectedOwnedCategory == category ? 0.22 : 0.10))
+                                                            .clipShape(Capsule())
+                                                    }
+                                                    .font(.caption.bold())
+                                                    .padding(.horizontal, 10)
+                                                    .padding(.vertical, 8)
+                                                    .background(selectedOwnedCategory == category ? AppTheme.crownGold : Color.white.opacity(0.08))
+                                                    .foregroundStyle(selectedOwnedCategory == category ? .white : AppTheme.textSecondary)
+                                                    .clipShape(Capsule())
+                                                    .overlay(Capsule().stroke(selectedOwnedCategory == category ? AppTheme.crownGold.opacity(0.75) : AppTheme.cardBorder, lineWidth: 1))
+                                                }
+                                                .disabled(count == 0)
+                                                .opacity(count == 0 ? 0.45 : 1)
+                                            }
+                                        }
+                                    }
+
+                                    if categoryItems.isEmpty {
+                                        Text("No owned \(selectedOwnedCategory.rawValue.lowercased()) yet.")
+                                            .font(.caption)
+                                            .foregroundStyle(AppTheme.textSecondary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.vertical, 8)
+                                    } else {
+                                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                            ForEach(categoryItems) { item in
+                                                ShopItemCard(
+                                                    item: item,
+                                                    isOwned: true,
+                                                    isEquipped: shop.isEquipped(item),
+                                                    canAfford: true,
+                                                    isLimited: false
+                                                ) {
+                                                    Task {
+                                                        if await shop.equip(item) {
+                                                            await auth.refreshUser()
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -131,8 +173,10 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }.foregroundStyle(AppTheme.accentBright)
+                if let onDone {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { onDone() }.foregroundStyle(AppTheme.accentBright)
+                    }
                 }
             }
         }

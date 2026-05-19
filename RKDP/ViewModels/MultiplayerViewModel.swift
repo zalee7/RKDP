@@ -401,7 +401,7 @@ final class MultiplayerViewModel: ObservableObject {
 
 
     func beginRematchListening(session: GameSession) {
-        guard session.isRanked, session.status == .finished else { return }
+        guard (session.isRanked || session.isExhibition), session.status == .finished else { return }
         if rematchListeningSessionID == session.id { return }
         rematchListeningSessionID = session.id
         rematchRequests = []
@@ -418,15 +418,17 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func requestRematch(session: GameSession) async {
-        guard session.isRanked, let user else { return }
-        guard let player = session.players.first(where: { $0.userID == user.id }) else { return }
-        guard user.coins >= player.wager else {
-            rematchErrorMessage = "Not enough coins for rematch."
-            return
-        }
-        guard user.rankedAccess.canStartRanked(mode: session.mode) else {
-            rematchErrorMessage = "No ranked entry is available for this mode today."
-            return
+        guard (session.isRanked || session.isExhibition), let user else { return }
+        if session.isRanked {
+            guard let player = session.players.first(where: { $0.userID == user.id }) else { return }
+            guard user.coins >= player.wager else {
+                rematchErrorMessage = "Not enough coins for rematch."
+                return
+            }
+            guard user.rankedAccess.canStartRanked(mode: session.mode) else {
+                rematchErrorMessage = "No ranked entry is available for this mode today."
+                return
+            }
         }
         beginRematchListening(session: session)
         dismissedRematchInviteSessionID = nil
