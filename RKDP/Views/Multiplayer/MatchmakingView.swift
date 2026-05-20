@@ -42,12 +42,19 @@ struct MatchmakingView: View {
         user.coins >= automaticWager.amount
     }
 
-    private var shouldShowQueueCriteria: Bool {
-        mode == .wordle || mode == .anagram
-    }
-
     private var queueSettingTitle: String {
         mode == .wordle ? "Guesses" : mode == .anagram ? "Word length" : "Difficulty"
+    }
+
+    private var queueCriteriaHint: String {
+        switch mode {
+        case .wordle:
+            return "Wordle pairs players with the same guess count and rank tier."
+        case .anagram:
+            return "Anagrams pairs players with the same word length and rank tier."
+        default:
+            return "Ranked pairs players with the same mode, difficulty, rank tier, and wager."
+        }
     }
 
     private var rankTierForQueue: RankTier {
@@ -144,7 +151,7 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                 }
 
-                queueCriteriaCard(wager: wager, includeHint: shouldShowQueueCriteria)
+                queueCriteriaCard(wager: wager, includeHint: true)
                     .padding(.horizontal)
 
                 VStack(spacing: 12) {
@@ -242,7 +249,7 @@ struct MatchmakingView: View {
             queueCriterionRow(title: "Tier wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
             queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
             if includeHint {
-                Text("Word modes only pair players with the same setting and rank tier.")
+                Text(queueCriteriaHint)
                     .font(.caption2)
                     .foregroundStyle(AppTheme.textSecondary)
                     .padding(.top, 2)
@@ -276,21 +283,17 @@ struct MatchmakingView: View {
                 .padding()
             Text("Finding a match…")
                 .font(.title3.bold())
-            if shouldShowQueueCriteria {
-                Text("Searching for same settings")
-                    .font(.subheadline.bold())
-                    .foregroundStyle(AppTheme.accentBright)
-                queueCriteriaCard(wager: vm.selectedWager, includeHint: false)
+            Text("Searching for same settings")
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.accentBright)
+            queueCriteriaCard(wager: vm.selectedWager, includeHint: false)
+                .padding(.horizontal)
+            if showCompatibilityHint {
+                Text("Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), rank tier, and wager.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                if showCompatibilityHint {
-                    Text("Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), and rank tier.")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-            } else if let wager = vm.selectedWager {
-                Text("Tier wager: \(wager.amount) coins").foregroundStyle(.secondary)
             }
             Button("Cancel") { Task { await vm.cancelSearch() } }
                 .foregroundStyle(.red)
