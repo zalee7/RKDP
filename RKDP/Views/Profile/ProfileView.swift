@@ -227,7 +227,7 @@ private struct AvatarEditorView: View {
                     VStack(spacing: 18) {
                         StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 150)
                             .padding(.top, 18)
-                        Text("Stick Dueler")
+                        Text("Puzzle Pal")
                             .font(.title2.bold())
                             .foregroundStyle(AppTheme.textPrimary)
                         Text("Avatar parts are cosmetic only and never affect ranked play.")
