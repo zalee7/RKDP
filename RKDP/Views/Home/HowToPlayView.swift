@@ -217,6 +217,25 @@ struct HowToPlayView: View {
                     "Ties use word count, then longest word.",
                 ]),
             ]
+        case .hangman:
+            return [
+                RuleSection(title: "Objective", bullets: [
+                    "Guess letters to reveal the hidden word and rescue the puzzle piece.",
+                    "Difficulty changes word length: 5 letters, 6 letters, 7 letters, or 8+ letters.",
+                    "You get 6 wrong guesses before the rescue fails.",
+                    "Repeated guesses do not count as misses.",
+                ]),
+                RuleSection(title: "Controls", bullets: [
+                    "Tap letters on the keyboard to guess.",
+                    "Correct letters fill every matching slot in the word.",
+                    "Wrong letters fill the miss meter and appear in the misses row.",
+                ]),
+                RuleSection(title: "Ranked Mode", bullets: [
+                    "Both players get the same hidden word.",
+                    "Ranked Hangman has a 1:30 timer; solo Hangman is untimed.",
+                    "Solved beats unsolved. Ties use fewer misses, then faster time.",
+                ]),
+            ]
         case .wordle:
             return [
                 RuleSection(title: "Objective", bullets: [

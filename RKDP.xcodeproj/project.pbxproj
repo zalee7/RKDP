@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA1000010000000000000001 /* HangmanGame.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2000010000000000000001 /* HangmanGame.swift */; };
+		AA1000020000000000000002 /* HangmanViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2000020000000000000002 /* HangmanViewModel.swift */; };
+		AA1000030000000000000003 /* HangmanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2000030000000000000003 /* HangmanView.swift */; };
+		AA1000040000000000000004 /* hangman_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = AA2000040000000000000004 /* hangman_words.txt */; };
 		017A0E71E1E9DC87FA51D919 /* AnagramViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBE00FB08E49523FB5F4210 /* AnagramViewModel.swift */; };
 		042250217E89A87DAF1191D8 /* WordHuntViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34B6574C56ADC7EE9FF1FE18 /* WordHuntViewModel.swift */; };
 		059FCBBDAF4852D45207CB3F /* MinesweeperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D5A6CCF2A72587EBD672CF0 /* MinesweeperView.swift */; };
@@ -48,12 +52,12 @@
 		6A2FE47DF4E01B9BD610AE9A /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE4D7DF30CAD762994D0261 /* LoginView.swift */; };
 		6E9DE5EF9D23F28272162641 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF23F44CB7356563EB3EFF81 /* AppTheme.swift */; };
 		770DEFA767DD2C780E74E66A /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C017E865FFC0818DD6D7536 /* ProfileView.swift */; };
+		7943090DADBB37F6033AB727 /* word_hunt_valid_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 17396E39409D426479DDB560 /* word_hunt_valid_words.txt */; };
 		7986FE0A6931BC16D8B9DEF6 /* TournamentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F76169BC37D33C92668E2E /* TournamentService.swift */; };
 		7B70E5C00B399DC18A88A4D3 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497B160B286CACCCA5DD4E32 /* RootView.swift */; };
 		7E7CE16B616E100615ACD237 /* CoinPackStoreKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F901206AD330A2F5CF8EDF /* CoinPackStoreKitService.swift */; };
 		832B5C708684440A56129896 /* FirebaseAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6DD89E2887439AE66A7FFD2 /* FirebaseAuthService.swift */; };
 		8402C4731BF57A41369DCB9B /* anagram_valid_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = DF7A09FBB849A7AF900E554E /* anagram_valid_words.txt */; };
-		8B7C1A2D9E4F4E72A6C38D10 /* word_hunt_valid_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 7A91C4D2E83F4B77A01D633B /* word_hunt_valid_words.txt */; };
 		8A982F1436FD6FA5789392CB /* RankViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB4C6A7EA4A67E4FDB9B84AD /* RankViewModel.swift */; };
 		923EB29336DA069D7A265278 /* Wager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 346EF980AFCF3A598CA807E3 /* Wager.swift */; };
 		978AC0840CC0038EDED5B993 /* StickDuelerAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CAA4D188461D9FC79ACC801 /* StickDuelerAvatarView.swift */; };
@@ -96,11 +100,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AA2000010000000000000001 /* HangmanGame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangmanGame.swift; sourceTree = "<group>"; };
+		AA2000020000000000000002 /* HangmanViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangmanViewModel.swift; sourceTree = "<group>"; };
+		AA2000030000000000000003 /* HangmanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangmanView.swift; sourceTree = "<group>"; };
+		AA2000040000000000000004 /* hangman_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = hangman_words.txt; sourceTree = "<group>"; };
 		076D08E7F68B913CA9B327E0 /* KakuroViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KakuroViewModel.swift; sourceTree = "<group>"; };
 		07D4C2AD211461A81B1CC8BF /* SudokuGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SudokuGenerator.swift; sourceTree = "<group>"; };
 		0C017E865FFC0818DD6D7536 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		0E50643760989209AF59DFE0 /* SudokuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SudokuView.swift; sourceTree = "<group>"; };
 		149758ABD6B2377F0655909F /* RewardedAdService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardedAdService.swift; sourceTree = "<group>"; };
+		17396E39409D426479DDB560 /* word_hunt_valid_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = word_hunt_valid_words.txt; sourceTree = "<group>"; };
 		17DF037FAEB596F68A9799B0 /* wordle_answers.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = wordle_answers.txt; sourceTree = "<group>"; };
 		17F76169BC37D33C92668E2E /* TournamentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TournamentService.swift; sourceTree = "<group>"; };
 		1900539CDCBF439DAC2319CE /* CoinEconomy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoinEconomy.swift; sourceTree = "<group>"; };
@@ -155,7 +164,7 @@
 		AF86C2872E10A33E33A7A156 /* KenKenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KenKenView.swift; sourceTree = "<group>"; };
 		B0A56E67CB8A5D1AA012E021 /* WordleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordleView.swift; sourceTree = "<group>"; };
 		B38C5D172715D3A3F7287287 /* KenKenGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KenKenGenerator.swift; sourceTree = "<group>"; };
-		B3E86C12D8148FDFB464C054 /* RKDP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RKDP.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B3E86C12D8148FDFB464C054 /* RKDP.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RKDP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4006D741CC99D3BB56DF135 /* WordListService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordListService.swift; sourceTree = "<group>"; };
 		B47FD9A67F917F251CA4CB51 /* anagram_base_9.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = anagram_base_9.txt; sourceTree = "<group>"; };
 		BCD2726D94CA91371650961D /* KakuroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KakuroView.swift; sourceTree = "<group>"; };
@@ -170,7 +179,6 @@
 		DBC94AE22360AB967E0D810D /* Rank.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rank.swift; sourceTree = "<group>"; };
 		DF4C44668BB53B0896D617FC /* FirestoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreService.swift; sourceTree = "<group>"; };
 		DF7A09FBB849A7AF900E554E /* anagram_valid_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = anagram_valid_words.txt; sourceTree = "<group>"; };
-		7A91C4D2E83F4B77A01D633B /* word_hunt_valid_words.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = word_hunt_valid_words.txt; sourceTree = "<group>"; };
 		EF3C2B23575DC182FCF348DD /* BotMatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotMatchService.swift; sourceTree = "<group>"; };
 		F024306637B7A9CBD6C546ED /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		F751305E1A778AD97F44E8B4 /* WordHuntView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordHuntView.swift; sourceTree = "<group>"; };
@@ -203,6 +211,7 @@
 				5CBE00FB08E49523FB5F4210 /* AnagramViewModel.swift */,
 				48824ABE2CB37C7E02CCD2CD /* AuthViewModel.swift */,
 				6ACE60AC1AB0E18561AC2A71 /* FriendsViewModel.swift */,
+				AA2000020000000000000002 /* HangmanViewModel.swift */,
 				076D08E7F68B913CA9B327E0 /* KakuroViewModel.swift */,
 				A4946CF94F7FDF77590FDB23 /* KenKenViewModel.swift */,
 				2A84220A2C567B77D35C6A81 /* MinesweeperViewModel.swift */,
@@ -375,6 +384,7 @@
 			children = (
 				A50BD8470D8F49D9498EE58D /* SeededRNG.swift */,
 				F042C482F5881D5E0F892D10 /* Anagram */,
+				AA3000010000000000000001 /* Hangman */,
 				A0FF48E05B32AF20AA1EF237 /* Kakuro */,
 				914439919A61BEBCF421CBCA /* KenKen */,
 				F70F995F53B08E476FC5A653 /* Minesweeper */,
@@ -453,7 +463,8 @@
 				F9E7BC898066254836ECE5CD /* anagram_base_8.txt */,
 				B47FD9A67F917F251CA4CB51 /* anagram_base_9.txt */,
 				DF7A09FBB849A7AF900E554E /* anagram_valid_words.txt */,
-				7A91C4D2E83F4B77A01D633B /* word_hunt_valid_words.txt */,
+				AA2000040000000000000004 /* hangman_words.txt */,
+				17396E39409D426479DDB560 /* word_hunt_valid_words.txt */,
 				17DF037FAEB596F68A9799B0 /* wordle_answers.txt */,
 				CEEC6EC2BF63BA764EC4D401 /* wordle_valid_guesses.txt */,
 			);
@@ -491,6 +502,7 @@
 			isa = PBXGroup;
 			children = (
 				8333F894F7E86746FC591D64 /* Anagram */,
+				AA3000020000000000000002 /* Hangman */,
 				82109B10C54E79016B1962AF /* Kakuro */,
 				3D5A88E237D736A5ACFAC329 /* KenKen */,
 				776D78C3504136901E52D9F8 /* Minesweeper */,
@@ -543,6 +555,22 @@
 			path = Minesweeper;
 			sourceTree = "<group>";
 		};
+		AA3000010000000000000001 /* Hangman */ = {
+			isa = PBXGroup;
+			children = (
+				AA2000010000000000000001 /* HangmanGame.swift */,
+			);
+			path = Hangman;
+			sourceTree = "<group>";
+		};
+		AA3000020000000000000002 /* Hangman */ = {
+			isa = PBXGroup;
+			children = (
+				AA2000030000000000000003 /* HangmanView.swift */,
+			);
+			path = Hangman;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -577,6 +605,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					6882C8E696645BAD9640876B = {
+						DevelopmentTeam = "";
+					};
+				};
 			};
 			buildConfigurationList = 0E03AC8E891AF3379D12208D /* Build configuration list for PBXProject "RKDP" */;
 			developmentRegion = en;
@@ -615,7 +648,8 @@
 				BF4911F9704585DDF952EAF5 /* anagram_base_8.txt in Resources */,
 				A7F5D5C07DEBAE43DC35007C /* anagram_base_9.txt in Resources */,
 				8402C4731BF57A41369DCB9B /* anagram_valid_words.txt in Resources */,
-				8B7C1A2D9E4F4E72A6C38D10 /* word_hunt_valid_words.txt in Resources */,
+				AA1000040000000000000004 /* hangman_words.txt in Resources */,
+				7943090DADBB37F6033AB727 /* word_hunt_valid_words.txt in Resources */,
 				BDC988467B3ABF31EC9D597A /* wordle_answers.txt in Resources */,
 				51A201DDCE6B23D02DE97F90 /* wordle_valid_guesses.txt in Resources */,
 			);
@@ -643,6 +677,9 @@
 				63C2B61F716103CA0CE12DB0 /* FriendsViewModel.swift in Sources */,
 				EC4F02D225E861724BF1C7A5 /* GameMode.swift in Sources */,
 				150B8704E5A6B31A21C107FE /* GameSession.swift in Sources */,
+				AA1000010000000000000001 /* HangmanGame.swift in Sources */,
+				AA1000030000000000000003 /* HangmanView.swift in Sources */,
+				AA1000020000000000000002 /* HangmanViewModel.swift in Sources */,
 				3C415A92C4C34C8DB4B1C994 /* HomeView.swift in Sources */,
 				4B759652367CF55836D090A3 /* HowToPlayView.swift in Sources */,
 				320C75D2E6A151D589877362 /* KakuroBoard.swift in Sources */,
@@ -711,7 +748,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = D2J77TZ5H3;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = RKDP/SupportingFiles/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -848,7 +885,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = D2J77TZ5H3;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = RKDP/SupportingFiles/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

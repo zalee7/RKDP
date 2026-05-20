@@ -8,11 +8,12 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
     case anagram
     case wordHunt
     case wordle
+    case hangman
 
     var accentColor: Color { AppTheme.modeAccent(self) }
 
     static var allCases: [GameMode] {
-        [.colorLink, .gridlock, .sudoku, .minesweeper, .wordle, .wordHunt, .anagram]
+        [.colorLink, .gridlock, .sudoku, .minesweeper, .wordle, .hangman, .wordHunt, .anagram]
     }
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "Anagrams"
         case .wordHunt:    return "Word Hunt"
         case .wordle:      return "Wordle"
+        case .hangman:     return "Hangman"
         }
     }
 
@@ -46,6 +48,8 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
             return "Find as many words as possible before time runs out. Difficulty changes board size only."
         case .wordle:
             return "Guess the hidden 5-letter word in up to 6 tries. Green = right spot, Yellow = wrong spot."
+        case .hangman:
+            return "Guess letters to rescue the puzzle piece before you run out of misses."
         }
     }
 
@@ -58,6 +62,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "textformat.abc"
         case .wordHunt:    return "magnifyingglass"
         case .wordle:      return "character.cursor.ibeam"
+        case .hangman:     return "questionmark.diamond.fill"
         }
     }
 
@@ -73,6 +78,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "Timer ends; score, word count, then longest word decide"
         case .wordHunt:    return "Timer ends; score, word count, then longest word decide"
         case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"
+        case .hangman:     return "Solve the shared word; misses then time break ties"
         }
     }
 
@@ -165,12 +171,20 @@ extension GameMode {
             case .expert: return "7×7 Board"
             }
         }
+        if self == .hangman {
+            switch d {
+            case .easy:   return "5 Letters"
+            case .medium: return "6 Letters"
+            case .hard:   return "7 Letters"
+            case .expert: return "8+ Letters"
+            }
+        }
         return d.displayName
     }
 
     var rankedDifficulties: [Difficulty] {
         switch self {
-        case .anagram, .wordHunt, .wordle:
+        case .anagram, .wordHunt, .wordle, .hangman:
             return Difficulty.allCases
         case .sudoku, .minesweeper:
             return [.medium]

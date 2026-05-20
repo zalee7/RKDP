@@ -134,6 +134,10 @@ enum TournamentScoring {
             if lhs.completed != rhs.completed { return lhs.completed }
             if (lhs.guesses ?? Int.max) != (rhs.guesses ?? Int.max) { return (lhs.guesses ?? Int.max) < (rhs.guesses ?? Int.max) }
             return lhs.elapsedSeconds < rhs.elapsedSeconds
+        case .hangman:
+            if lhs.completed != rhs.completed { return lhs.completed }
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.elapsedSeconds < rhs.elapsedSeconds
         case .gridlock:
             if lhs.completed != rhs.completed { return lhs.completed }
             if lhs.completed, (lhs.moves ?? Int.max) != (rhs.moves ?? Int.max) { return (lhs.moves ?? Int.max) < (rhs.moves ?? Int.max) }

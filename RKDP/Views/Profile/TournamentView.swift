@@ -330,6 +330,8 @@ private struct TournamentCard: View {
             return "\(result.score) pts · \(result.wordCount ?? 0)w · L\(result.longestWord ?? 0)"
         case .wordle:
             return "\(result.completed ? "Solved" : "Failed") · \(result.guesses ?? 0) guesses · \(formattedTime(result.elapsedSeconds))"
+        case .hangman:
+            return "\(result.completed ? "Solved" : "Failed") · \(result.score) letters · \(formattedTime(result.elapsedSeconds))"
         case .gridlock:
             let progress = Int((result.progress * 100).rounded())
             let moves = result.moves.map { " · \($0)m" } ?? ""

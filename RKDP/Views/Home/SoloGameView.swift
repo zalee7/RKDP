@@ -41,6 +41,8 @@ struct SoloGameView: View {
                 WordHuntView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             case .wordle:
                 WordleView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+            case .hangman:
+                HangmanView(difficulty: difficulty, user: user, sessionID: sessionID, seed: seed, puzzleData: puzzleData, onMatchResult: onMatchResult, onSoloResult: onSoloResult, onPlayAgain: replay, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
             }
         }
         .id(runID)

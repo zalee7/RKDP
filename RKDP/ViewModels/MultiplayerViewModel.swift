@@ -839,6 +839,8 @@ enum MatchResolver {
             return compareWordScore(a, b, label: "Anagrams")
         case .wordHunt:
             return compareWordScore(a, b, label: "Word Hunt")
+        case .hangman:
+            return compareHangman(a, b)
         case .sudoku:
             return compareCompletion(a, b)
         case .gridlock:
@@ -885,6 +887,29 @@ enum MatchResolver {
             return MatchResolution(winnerID: winner.userID, reason: "Found the longest word")
         }
         return MatchResolution(winnerID: nil, reason: "Same score and word count")
+    }
+
+    private static func compareHangman(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.completed != b.completed {
+            let winner = a.completed ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Solved the Hangman word")
+        }
+        if a.completed && b.completed {
+            if a.wrongGuessCount != b.wrongGuessCount {
+                let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
+                return MatchResolution(winnerID: winner.userID, reason: "Solved with fewer misses")
+            }
+            return compareElapsed(a, b, fallback: "Same Hangman result")
+        }
+        if a.revealedLetterCount != b.revealedLetterCount {
+            let winner = a.revealedLetterCount > b.revealedLetterCount ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Revealed more letters")
+        }
+        if a.wrongGuessCount != b.wrongGuessCount {
+            let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Had fewer misses")
+        }
+        return compareElapsed(a, b, fallback: "Same Hangman progress")
     }
 
     private static func compareCompletion(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {

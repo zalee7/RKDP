@@ -57,6 +57,9 @@ enum AppTheme {
         case .wordle:
             return LinearGradient(colors: [Color(hex: "50C878"), teal],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .hangman:
+            return LinearGradient(colors: [crownGold, hotPink, teal],
+                                  startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
@@ -69,6 +72,7 @@ enum AppTheme {
         case .anagram:     return hotPink.opacity(0.62)
         case .wordHunt:    return royalBlue.opacity(0.62)
         case .wordle:      return teal.opacity(0.62)
+        case .hangman:     return crownGold.opacity(0.62)
         }
     }
 
@@ -82,6 +86,7 @@ enum AppTheme {
         case .anagram:     return hotPink
         case .wordHunt:    return royalBlue
         case .wordle:      return Color(hex: "538D4E")
+        case .hangman:     return crownGold
         }
     }
 }

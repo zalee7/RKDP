@@ -176,6 +176,9 @@ struct MatchPlayerResult: Codable, Equatable {
     var hitMine: Bool { summary["hitMine"] == "true" }
     var moveCount: Int { Int(summary["moves"] ?? "0") ?? 0 }
     var solvedPairs: Int { Int(summary["solvedPairs"] ?? "0") ?? 0 }
+    var wrongGuessCount: Int { Int(summary["wrongGuessCount"] ?? "0") ?? 0 }
+    var revealedLetterCount: Int { Int(summary["revealedLetterCount"] ?? "\(score)") ?? score }
+    var maxWrongGuesses: Int { Int(summary["maxWrongGuesses"] ?? "6") ?? 6 }
 
     var realtimeValue: [String: Any] {
         [
@@ -375,6 +378,8 @@ extension Difficulty {
             return 75
         case .wordle:
             return 0
+        case .hangman:
+            return 90
         }
     }
 }

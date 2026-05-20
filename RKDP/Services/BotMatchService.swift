@@ -20,6 +20,8 @@ enum BotMatchService {
             return 61
         case .wordHunt:
             return 76
+        case .hangman:
+            return 91
         case .wordle:
             return 35
         case .sudoku:
@@ -57,6 +59,8 @@ enum BotMatchService {
             return wordScoreResult(mode: .anagram, session: session, bot: bot, strongBot: strongBot, elapsedSeconds: 60, rng: &rng)
         case .wordHunt:
             return wordScoreResult(mode: .wordHunt, session: session, bot: bot, strongBot: strongBot, elapsedSeconds: 75, rng: &rng)
+        case .hangman:
+            return hangmanResult(session: session, bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .sudoku:
             return completionResult(mode: .sudoku, bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .gridlock:
@@ -67,6 +71,53 @@ enum BotMatchService {
             return minesweeperResult(bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         }
     }
+
+    private static func hangmanResult(session: GameSession, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
+        let puzzle = MultiplayerPuzzleDataFactory.decodeHangman(session.puzzleData)
+        let target = HangmanGame.targetWord(difficulty: session.difficulty, seed: session.seed, puzzleData: puzzle)
+        let uniqueLetters = Set(target).map(String.init).sorted().compactMap { $0.first }
+        let solved = strongBot
+        let maxWrong = puzzle?.maxWrongGuesses ?? 6
+        let wrongCount = solved ? int(in: 0...2, rng: &rng) : int(in: 3...maxWrong, rng: &rng)
+        let revealedCount = solved ? uniqueLetters.count : min(uniqueLetters.count - 1, int(in: 1...max(1, min(4, uniqueLetters.count)), rng: &rng))
+        let correctLetters = solved ? uniqueLetters : Array(uniqueLetters.prefix(revealedCount))
+        let wrongLetters = botWrongLetters(excluding: Set(target), count: wrongCount, rng: &rng)
+        let pattern = target.map { correctLetters.contains($0) ? String($0) : "_" }.joined()
+        let elapsed = solved ? int(in: 42...min(88, max(42, elapsedSeconds)), rng: &rng) : elapsedSeconds
+
+        return MatchPlayerResult(
+            userID: bot.userID,
+            mode: .hangman,
+            completed: solved,
+            elapsedSeconds: elapsed,
+            score: revealedCount,
+            progress: Double(revealedCount) / Double(max(1, uniqueLetters.count)),
+            status: solved ? "Solved" : "Timed out",
+            summary: [
+                "targetWord": target,
+                "correctLetters": correctLetters.map(String.init).joined(),
+                "wrongLetters": wrongLetters.map(String.init).joined(),
+                "wrongGuessCount": "\(wrongCount)",
+                "revealedPattern": pattern,
+                "revealedLetterCount": "\(revealedCount)",
+                "maxWrongGuesses": "\(maxWrong)",
+                "solved": solved ? "true" : "false",
+                "botResult": "true"
+            ],
+            details: [
+                "Word: \(target)",
+                "Pattern: \(pattern.map { $0 == "_" ? "_" : String($0) }.joined(separator: " "))",
+                "Wrong guesses: \(wrongLetters.map(String.init).joined(separator: ", "))"
+            ]
+        )
+    }
+
+    private static func botWrongLetters(excluding targetLetters: Set<Character>, count: Int, rng: inout SeededRNG) -> [Character] {
+        var pool = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").filter { !targetLetters.contains($0) }
+        pool = shuffledWords(pool.map(String.init), rng: &rng).compactMap { $0.first }
+        return Array(pool.prefix(count))
+    }
+
 
     private static func wordleResult(session: GameSession, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
         let targets = MultiplayerPuzzleDataFactory.decodeWordle(session.puzzleData)?.targets ?? (0..<3).map { WordleGame.targetWord(seed: session.seed, round: $0) }
@@ -369,6 +420,7 @@ enum BotMatchService {
         case .gridlock, .colorLink: return 300
         case .minesweeper: return 240
         case .wordle, .anagram, .wordHunt: return 75
+        case .hangman: return 90
         }
     }
 }

@@ -29,6 +29,7 @@ enum RankedAccessProduct {
         case .sudoku:      return "com.gridduel.ranked.sudoku"
         case .minesweeper: return "com.gridduel.ranked.minesweeper"
         case .wordle:      return "com.gridduel.ranked.wordle"
+        case .hangman:     return "com.gridduel.ranked.hangman"
         case .wordHunt:    return "com.gridduel.ranked.wordhunt"
         case .anagram:     return "com.gridduel.ranked.anagrams"
         }
@@ -41,6 +42,7 @@ enum RankedAccessProduct {
         case .sudoku:      return "ranked_mode_sudoku"
         case .minesweeper: return "ranked_mode_minesweeper"
         case .wordle:      return "ranked_mode_wordle"
+        case .hangman:     return "ranked_mode_hangman"
         case .wordHunt:    return "ranked_mode_word_hunt"
         case .anagram:     return "ranked_mode_anagrams"
         }

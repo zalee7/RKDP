@@ -18,6 +18,22 @@ enum WordListService {
 
     static let wordHuntValidWords: Set<String> = Set(loadList(named: "word_hunt_valid_words", minimumLength: 3, fallback: Array(anagramValidWords)))
 
+    static let hangmanWords: [String] = loadList(named: "hangman_words", minimumLength: 5, fallback: [
+        "CROWN", "PUZZLE", "VICTORY", "ADVENTURE"
+    ])
+
+    static func hangmanWords(for difficulty: Difficulty) -> [String] {
+        let filtered = hangmanWords.filter { word in
+            switch difficulty {
+            case .easy: return word.count == 5
+            case .medium: return word.count == 6
+            case .hard: return word.count == 7
+            case .expert: return word.count >= 8
+            }
+        }
+        return filtered.isEmpty ? hangmanWords : filtered
+    }
+
     static func anagramBaseWords(for difficulty: Difficulty) -> [String] {
         let length: Int
         switch difficulty {
@@ -80,6 +96,13 @@ struct WordHuntPuzzleData: Codable {
     let gridRows: [String]
 }
 
+struct HangmanPuzzleData: Codable {
+    let wordBankVersion: String
+    let targetWord: String
+    let difficulty: String
+    let maxWrongGuesses: Int
+}
+
 enum MultiplayerPuzzleDataFactory {
     static func encoded(mode: GameMode, difficulty: Difficulty, seed: Int, rounds: Int? = nil) -> String {
         switch mode {
@@ -106,6 +129,14 @@ enum MultiplayerPuzzleDataFactory {
                 gridRows: game.grid.map { String($0) }
             )
             return encode(data)
+        case .hangman:
+            let data = HangmanPuzzleData(
+                wordBankVersion: WordListService.wordBankVersion,
+                targetWord: HangmanGame.targetWord(difficulty: difficulty, seed: seed),
+                difficulty: difficulty.rawValue,
+                maxWrongGuesses: 6
+            )
+            return encode(data)
         default:
             return ""
         }
@@ -121,6 +152,10 @@ enum MultiplayerPuzzleDataFactory {
 
     static func decodeWordHunt(_ raw: String?) -> WordHuntPuzzleData? {
         decode(WordHuntPuzzleData.self, from: raw)
+    }
+
+    static func decodeHangman(_ raw: String?) -> HangmanPuzzleData? {
+        decode(HangmanPuzzleData.self, from: raw)
     }
 
     private static func encode<T: Encodable>(_ value: T) -> String {

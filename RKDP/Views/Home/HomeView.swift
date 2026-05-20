@@ -57,7 +57,7 @@ struct HomeView: View {
                             HomeGameCategorySection(
                                 title: "Word Games",
                                 subtitle: "Guesses, searches, and fast vocabulary plays",
-                                modes: [.wordle, .wordHunt, .anagram],
+                                modes: [.wordle, .hangman, .wordHunt, .anagram],
                                 user: auth.user,
                                 accent: AppTheme.crownGold,
                                 icon: "book.closed.fill"
@@ -247,7 +247,7 @@ struct GameModeDetailView: View {
 
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
-                                Text(mode == .anagram ? "Word Length" : "Difficulty")
+                                Text((mode == .anagram || mode == .hangman) ? "Word Length" : "Difficulty")
                                     .font(.headline)
                                     .foregroundStyle(AppTheme.textPrimary)
                                 Spacer()
@@ -360,6 +360,8 @@ struct GameModeDetailView: View {
             if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
         case .wordle:
             if let guesses = rankInfo.bestGuesses { return "Best \(guesses) guesses" }
+            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
+        case .hangman:
             if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
         case .anagram, .wordHunt:
             if let score = rankInfo.bestScore { return "Best \(score) pts" }
@@ -486,6 +488,8 @@ private struct ModeMiniPreview: View {
             return colors[mirrorIndex % colors.count].opacity(index % 2 == 0 ? 1 : 0.72)
         case .wordle:
             return [Color(hex: "538D4E"), Color(hex: "C9B458"), Color(hex: "3A3A3C")][index % 3]
+        case .hangman:
+            return [AppTheme.crownGold, AppTheme.hotPink, AppTheme.teal, AppTheme.iconPurple][index % 4].opacity(index % 2 == 0 ? 0.9 : 0.45)
         default:
             return AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
         }
