@@ -53,9 +53,9 @@ enum BotMatchService {
         case .wordle:
             return wordleResult(session: session, bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .anagram:
-            return wordScoreResult(mode: .anagram, bot: bot, strongBot: strongBot, elapsedSeconds: 60, rng: &rng)
+            return wordScoreResult(mode: .anagram, session: session, bot: bot, strongBot: strongBot, elapsedSeconds: 60, rng: &rng)
         case .wordHunt:
-            return wordScoreResult(mode: .wordHunt, bot: bot, strongBot: strongBot, elapsedSeconds: 75, rng: &rng)
+            return wordScoreResult(mode: .wordHunt, session: session, bot: bot, strongBot: strongBot, elapsedSeconds: 75, rng: &rng)
         case .sudoku:
             return completionResult(mode: .sudoku, bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .gridlock:
@@ -109,7 +109,7 @@ enum BotMatchService {
         )
     }
 
-    private static func wordScoreResult(mode: GameMode, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
+    private static func wordScoreResult(mode: GameMode, session: GameSession, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
         let scoreRange: ClosedRange<Int>
         let wordCountRange: ClosedRange<Int>
         let longestRange: ClosedRange<Int>
@@ -127,9 +127,22 @@ enum BotMatchService {
             wordCountRange = strongBot ? 4...7 : 1...4
             longestRange = strongBot ? 4...6 : 3...5
         }
-        let score = int(in: scoreRange, rng: &rng)
-        let wordCount = int(in: wordCountRange, rng: &rng)
-        let longest = int(in: longestRange, rng: &rng)
+
+        let selectedWords = botWords(
+            mode: mode,
+            session: session,
+            wordCountRange: wordCountRange,
+            scoreRange: scoreRange,
+            longestRange: longestRange,
+            rng: &rng
+        )
+        let score = selectedWords.reduce(0) { $0 + wordScore(mode: mode, word: $1) }
+        let wordCount = selectedWords.count
+        let longest = selectedWords.map(\.count).max() ?? longestRange.lowerBound
+        let details = selectedWords.isEmpty
+            ? ["Training bot found 0 words."]
+            : selectedWords.prefix(12).map { "\($0.capitalized) (+\(wordScore(mode: mode, word: $0)))" }
+
         return MatchPlayerResult(
             userID: bot.userID,
             mode: mode,
@@ -143,8 +156,93 @@ enum BotMatchService {
                 "longestWordLength": "\(longest)",
                 "botResult": "true"
             ],
-            details: ["Training bot found \(wordCount) words.", "Longest word length: \(longest)."]
+            details: details
         )
+    }
+
+    private static func botWords(
+        mode: GameMode,
+        session: GameSession,
+        wordCountRange: ClosedRange<Int>,
+        scoreRange: ClosedRange<Int>,
+        longestRange: ClosedRange<Int>,
+        rng: inout SeededRNG
+    ) -> [String] {
+        let candidates = botWordCandidates(mode: mode, session: session)
+            .filter { longestRange.contains($0.count) || $0.count < longestRange.lowerBound }
+            .sorted { lhs, rhs in
+                if wordScore(mode: mode, word: lhs) == wordScore(mode: mode, word: rhs) { return lhs < rhs }
+                return wordScore(mode: mode, word: lhs) < wordScore(mode: mode, word: rhs)
+            }
+        guard !candidates.isEmpty else { return [] }
+
+        for _ in 0..<80 {
+            let desiredCount = int(in: wordCountRange, rng: &rng)
+            let shuffled = shuffledWords(candidates, rng: &rng)
+            var chosen: [String] = []
+            var total = 0
+
+            for word in shuffled {
+                guard chosen.count < desiredCount else { break }
+                let points = wordScore(mode: mode, word: word)
+                if total + points <= scoreRange.upperBound {
+                    chosen.append(word)
+                    total += points
+                }
+            }
+
+            let longest = chosen.map(\.count).max() ?? 0
+            if chosen.count == desiredCount,
+               scoreRange.contains(total),
+               longestRange.contains(longest) {
+                return chosen.sorted { wordScore(mode: mode, word: $0) > wordScore(mode: mode, word: $1) }
+            }
+        }
+
+        var fallback: [String] = []
+        var total = 0
+        for word in candidates where fallback.count < wordCountRange.upperBound {
+            let points = wordScore(mode: mode, word: word)
+            guard total + points <= scoreRange.upperBound else { continue }
+            fallback.append(word)
+            total += points
+            if fallback.count >= wordCountRange.lowerBound, total >= scoreRange.lowerBound { break }
+        }
+        return fallback.sorted { wordScore(mode: mode, word: $0) > wordScore(mode: mode, word: $1) }
+    }
+
+    private static func botWordCandidates(mode: GameMode, session: GameSession) -> [String] {
+        switch mode {
+        case .anagram:
+            let puzzle = MultiplayerPuzzleDataFactory.decodeAnagram(session.puzzleData)
+            return Array(AnagramGame.generate(difficulty: session.difficulty, seed: session.seed, puzzleData: puzzle).validWords)
+        case .wordHunt:
+            if let puzzle = MultiplayerPuzzleDataFactory.decodeWordHunt(session.puzzleData), !puzzle.gridRows.isEmpty {
+                let grid = puzzle.gridRows.map { Array($0.uppercased()) }
+                return Array(WordHuntGame(grid: grid, seed: session.seed).validWords)
+            }
+            return Array(WordHuntGame.generate(seed: session.seed).validWords)
+        default:
+            return []
+        }
+    }
+
+    private static func shuffledWords(_ words: [String], rng: inout SeededRNG) -> [String] {
+        var output = words
+        guard output.count > 1 else { return output }
+        for index in stride(from: output.count - 1, through: 1, by: -1) {
+            let swapIndex = int(in: 0...index, rng: &rng)
+            if index != swapIndex { output.swapAt(index, swapIndex) }
+        }
+        return output
+    }
+
+    private static func wordScore(mode: GameMode, word: String) -> Int {
+        switch mode {
+        case .anagram: return AnagramGame.score(for: word)
+        case .wordHunt: return WordHuntGame.score(for: word)
+        default: return 0
+        }
     }
 
     private static func completionResult(mode: GameMode, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {

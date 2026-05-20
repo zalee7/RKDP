@@ -114,7 +114,10 @@ struct MinesweeperView: View {
             summary: [
                 "hitMine": hitMine ? "true" : "false",
                 "safeCells": "\(vm.board.revealedCount)",
-                "totalSafeCells": "\(vm.board.safeCells)"
+                "totalSafeCells": "\(vm.board.safeCells)",
+                "boardRows": minesweeperBoardRows(vm.board),
+                "boardRowsCount": "\(vm.board.config.rows)",
+                "boardColsCount": "\(vm.board.config.cols)"
             ],
             details: [
                 "\(vm.board.revealedCount) of \(vm.board.safeCells) safe cells revealed",
@@ -147,6 +150,24 @@ struct MinesweeperView: View {
         soloResult = result
         onSoloResult(result)
     }
+    private func minesweeperBoardRows(_ board: MinesweeperBoard) -> String {
+        (0..<board.config.rows).map { row in
+            (0..<board.config.cols).map { col -> String in
+                let cell = board.cells[row * board.config.cols + col]
+                switch cell.state {
+                case .hidden:
+                    return "H"
+                case .flagged:
+                    return "F"
+                case .exploded:
+                    return "X"
+                case .revealed(let adjacent):
+                    return cell.hasMine ? "M" : "\(adjacent)"
+                }
+            }.joined()
+        }.joined(separator: "/")
+    }
+
 }
 
 struct MinesweeperGridView: View {

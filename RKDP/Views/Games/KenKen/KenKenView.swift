@@ -162,7 +162,8 @@ struct GridlockView: View {
                 "moves": "\(vm.moveCount)",
                 "symmetryPercent": "\(progressPercent)",
                 "boardSize": "\(vm.boardSize)",
-                "colorCount": "\(vm.colorCount)"
+                "colorCount": "\(vm.colorCount)",
+                "tileRows": gridDuelTileRows(vm.board)
             ],
             details: [
                 vm.isComplete ? "Solved in \(vm.moveCount) moves" : "Reached \(progressPercent)% symmetry",
@@ -172,6 +173,12 @@ struct GridlockView: View {
             ]
         ))
     }
+    private func gridDuelTileRows(_ board: GridlockBoard) -> String {
+        board.tiles.map { row in
+            row.map { String($0, radix: 16, uppercase: true) }.joined()
+        }.joined(separator: "/")
+    }
+
 }
 
 struct GridDuelBoardView: View {

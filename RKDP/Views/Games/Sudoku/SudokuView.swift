@@ -138,13 +138,24 @@ struct SudokuView: View {
             progress: vm.progress,
             status: status,
             summary: [
-                "progressPercent": "\(Int((vm.progress * 100).rounded()))"
+                "progressPercent": "\(Int((vm.progress * 100).rounded()))",
+                "boardRows": sudokuBoardRows(vm.board),
+                "boardSize": "9"
             ],
             details: [
                 vm.isComplete ? "Completed the Sudoku" : "Reached \(Int((vm.progress * 100).rounded()))% progress"
             ]
         ))
     }
+    private func sudokuBoardRows(_ board: SudokuBoard) -> String {
+        (0..<9).map { row in
+            (0..<9).map { col -> String in
+                let value = board[row, col].value
+                return value == 0 ? "." : "\(value)"
+            }.joined()
+        }.joined(separator: "/")
+    }
+
 }
 
 struct SudokuBoardView: View {

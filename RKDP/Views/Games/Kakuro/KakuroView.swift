@@ -152,7 +152,9 @@ struct ColorLinkView: View {
                 "filledCells": "\(vm.filledCellCount)",
                 "totalCells": "\(vm.board.totalCells)",
                 "solvedPairs": "\(vm.solvedPairCount)",
-                "totalPairs": "\(vm.board.pairs.count)"
+                "totalPairs": "\(vm.board.pairs.count)",
+                "boardSize": "\(vm.board.size)",
+                "boardRows": colorLinkBoardRows(board: vm.board, paths: vm.paths)
             ],
             details: [
                 "\(vm.filledCellCount) of \(vm.board.totalCells) cells filled",
@@ -160,6 +162,28 @@ struct ColorLinkView: View {
             ]
         ))
     }
+    private func colorLinkBoardRows(board: ColorLinkBoard, paths: [Int: [ColorLinkPosition]]) -> String {
+        var owners = Array(repeating: Array(repeating: ".", count: board.size), count: board.size)
+        for pair in board.pairs {
+            let mark = colorLinkMark(pair.id)
+            owners[pair.start.row][pair.start.col] = mark
+            owners[pair.end.row][pair.end.col] = mark
+        }
+        for (pairID, path) in paths {
+            let mark = colorLinkMark(pairID)
+            for position in path where board.contains(position) {
+                owners[position.row][position.col] = mark
+            }
+        }
+        return owners.map { $0.joined() }.joined(separator: "/")
+    }
+
+    private func colorLinkMark(_ pairID: Int) -> String {
+        let marks = Array("123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        guard marks.indices.contains(pairID) else { return "?" }
+        return String(marks[pairID])
+    }
+
 }
 
 struct ColorLinkBoardView: View {

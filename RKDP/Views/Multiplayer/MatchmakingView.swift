@@ -1118,6 +1118,7 @@ struct MatchBreakdownView: View {
                     wordleBreakdown(result)
                 } else {
                     statGrid(modeStats(for: result))
+                    boardSnapshot(for: result)
                     detailLines(result.details)
                 }
             } else {
@@ -1236,6 +1237,165 @@ struct MatchBreakdownView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    @ViewBuilder
+    private func boardSnapshot(for result: MatchPlayerResult) -> some View {
+        switch session.mode {
+        case .sudoku:
+            let rows = snapshotRows(result.summary["boardRows"])
+            if !rows.isEmpty {
+                snapshotCard(title: "Board") {
+                    sudokuSnapshot(rows)
+                }
+            }
+        case .minesweeper:
+            let rows = snapshotRows(result.summary["boardRows"])
+            if !rows.isEmpty {
+                snapshotCard(title: "Board") {
+                    minesweeperSnapshot(rows)
+                }
+            }
+        case .gridlock:
+            let rows = snapshotRows(result.summary["tileRows"])
+            if !rows.isEmpty {
+                snapshotCard(title: "Grid") {
+                    colorGridSnapshot(rows: rows, cellSize: 22, showText: false)
+                }
+            }
+        case .colorLink:
+            let rows = snapshotRows(result.summary["boardRows"])
+            if !rows.isEmpty {
+                snapshotCard(title: "Board") {
+                    colorGridSnapshot(rows: rows, cellSize: 24, showText: true)
+                }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func snapshotRows(_ raw: String?) -> [String] {
+        guard let raw, !raw.isEmpty else { return [] }
+        return raw.split(separator: "/").map(String.init)
+    }
+
+    private func snapshotCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                content()
+                    .padding(.trailing, 2)
+            }
+        }
+        .padding(10)
+        .background(Color.black.opacity(0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
+    }
+
+    private func sudokuSnapshot(_ rows: [String]) -> some View {
+        VStack(spacing: 1) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                HStack(spacing: 1) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { colIndex, char in
+                        Text(char == "." ? "" : String(char))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .frame(width: 18, height: 18)
+                            .background(Color.white.opacity(char == "." ? 0.06 : 0.16))
+                            .overlay(sudokuBorder(row: rowIndex, col: colIndex))
+                    }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private func sudokuBorder(row: Int, col: Int) -> some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .stroke((row % 3 == 0 || col % 3 == 0) ? Color.white.opacity(0.34) : Color.white.opacity(0.12), lineWidth: 0.8)
+    }
+
+    private func minesweeperSnapshot(_ rows: [String]) -> some View {
+        VStack(spacing: 1) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 1) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, char in
+                        Text(minesweeperLabel(char))
+                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .foregroundStyle(minesweeperTextColor(char))
+                            .frame(width: 10, height: 10)
+                            .background(minesweeperCellColor(char))
+                    }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+
+    private func colorGridSnapshot(rows: [String], cellSize: CGFloat, showText: Bool) -> some View {
+        VStack(spacing: 2) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 2) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, char in
+                        Text(showText && char != "." ? String(char) : "")
+                            .font(.system(size: 9, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(width: cellSize, height: cellSize)
+                            .background(char == "." ? Color.white.opacity(0.07) : snapshotPaletteColor(char))
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                }
+            }
+        }
+    }
+
+    private func minesweeperLabel(_ char: Character) -> String {
+        switch char {
+        case "H": return ""
+        case "F": return "⚑"
+        case "X", "M": return "✕"
+        case "0": return ""
+        default: return String(char)
+        }
+    }
+
+    private func minesweeperCellColor(_ char: Character) -> Color {
+        switch char {
+        case "H": return Color.white.opacity(0.12)
+        case "F": return AppTheme.crownGold.opacity(0.85)
+        case "X": return AppTheme.danger
+        case "M": return AppTheme.danger.opacity(0.7)
+        default: return Color.white.opacity(0.26)
+        }
+    }
+
+    private func minesweeperTextColor(_ char: Character) -> Color {
+        switch char {
+        case "1": return Color(hex: "63B3FF")
+        case "2": return AppTheme.success
+        case "3": return AppTheme.danger
+        case "4": return AppTheme.hotPink
+        default: return AppTheme.textPrimary
+        }
+    }
+
+    private func snapshotPaletteColor(_ char: Character) -> Color {
+        let palette = [
+            AppTheme.hotPink,
+            AppTheme.teal,
+            AppTheme.royalBlue,
+            AppTheme.crownGold,
+            Color(hex: "8B5CF6"),
+            Color(hex: "22C55E"),
+            Color(hex: "F97316"),
+            Color(hex: "06B6D4")
+        ]
+        let value = Int(String(char), radix: 36) ?? 0
+        return palette[value % palette.count]
     }
 
     private func modeStats(for result: MatchPlayerResult) -> [(String, String)] {
