@@ -18,9 +18,7 @@ struct AnagramGame {
             return AnagramGame(baseWord: base, letters: letters, validWords: words, difficulty: difficulty, seed: s)
         }
 
-        let pool = wordPool(for: difficulty)
-        let idx = abs(s) % max(1, pool.count)
-        let base = pool.indices.contains(idx) ? pool[idx] : "CASTLE"
+        let base = selectedBaseWord(for: difficulty, seed: s)
         let shuffled = shuffleLetters(Array(base), seed: s)
         let words = findValidWords(in: Array(base))
         return AnagramGame(baseWord: base, letters: shuffled, validWords: words, difficulty: difficulty, seed: s)
@@ -79,6 +77,38 @@ struct AnagramGame {
             if i != j { arr.swapAt(i, j) }
         }
         return arr
+    }
+
+
+    private static func selectedBaseWord(for difficulty: Difficulty, seed: Int) -> String {
+        let pool = wordPool(for: difficulty)
+        guard !pool.isEmpty else { return "CASTLE" }
+        let start = abs(seed) % pool.count
+        let minimumWords = minimumValidWordCount(for: difficulty)
+        var bestBase = pool[start]
+        var bestCount = -1
+
+        for offset in 0..<min(pool.count, 80) {
+            let candidate = pool[(start + offset) % pool.count]
+            let words = findValidWords(in: Array(candidate))
+            if words.count >= minimumWords {
+                return candidate
+            }
+            if words.count > bestCount {
+                bestCount = words.count
+                bestBase = candidate
+            }
+        }
+        return bestBase
+    }
+
+    private static func minimumValidWordCount(for difficulty: Difficulty) -> Int {
+        switch difficulty {
+        case .easy: return 10
+        case .medium: return 16
+        case .hard: return 22
+        case .expert: return 28
+        }
     }
 
     // MARK: - Word pools

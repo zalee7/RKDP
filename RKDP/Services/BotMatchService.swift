@@ -142,7 +142,8 @@ enum BotMatchService {
         let longest = selectedWords.map(\.count).max() ?? longestRange.lowerBound
         let details = selectedWords.isEmpty
             ? ["Training bot found 0 words."]
-            : selectedWords.prefix(12).map { "\($0.capitalized) (+\(wordScore(mode: mode, word: $0)))" }
+            : selectedWords.prefix(50).map { "\($0.capitalized) (+\(wordScore(mode: mode, word: $0)))" }
+        let averageLength = selectedWords.isEmpty ? "-" : String(format: "%.1f", Double(selectedWords.reduce(0) { $0 + $1.count }) / Double(selectedWords.count))
 
         return MatchPlayerResult(
             userID: bot.userID,
@@ -155,10 +156,22 @@ enum BotMatchService {
             summary: [
                 "wordCount": "\(wordCount)",
                 "longestWordLength": "\(longest)",
+                "averageWordLength": averageLength,
+                "topWord": selectedWords.first ?? "",
+                "wordsByLength": wordsByLength(selectedWords),
+                "foundWords": selectedWords.prefix(80).joined(separator: "|"),
                 "botResult": "true"
             ],
             details: details
         )
+    }
+
+
+    private static func wordsByLength(_ words: [String]) -> String {
+        Dictionary(grouping: words, by: { $0.count })
+            .map { "\($0.key):\($0.value.count)" }
+            .sorted()
+            .joined(separator: ",")
     }
 
     private static func botWords(

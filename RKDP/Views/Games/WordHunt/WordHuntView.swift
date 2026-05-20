@@ -54,7 +54,11 @@ struct WordHuntView: View {
                 topBar
                     .padding(.horizontal)
                     .padding(.top, 12)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 8)
+
+                wordStatsDashboard
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
 
                 letterGrid
                     .padding(.horizontal, 20)
@@ -124,6 +128,63 @@ struct WordHuntView: View {
                     .foregroundStyle(AppTheme.textSecondary)
             }
         }
+    }
+
+
+    private var wordStatsDashboard: some View {
+        HStack(spacing: 8) {
+            wordStatTile(value: "\(vm.score)", label: "Points", color: AppTheme.accentBright)
+            wordStatTile(value: "\(vm.foundWords.count)", label: "Words", color: AppTheme.modeAccent(.wordHunt))
+            wordStatTile(value: longestWordText, label: "Longest", color: AppTheme.crownGold)
+            wordStatTile(value: averageWordText, label: "Avg", color: AppTheme.textPrimary)
+        }
+    }
+
+    private func wordStatTile(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.headline.bold())
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var longestWordText: String {
+        let longest = vm.foundWords.map(\.count).max() ?? 0
+        return longest > 0 ? "\(longest)" : "-"
+    }
+
+    private var averageWordText: String {
+        guard !vm.foundWords.isEmpty else { return "-" }
+        let total = vm.foundWords.reduce(0) { $0 + $1.count }
+        return String(format: "%.1f", Double(total) / Double(vm.foundWords.count))
+    }
+
+    private var groupedFoundWords: [(Int, [String])] {
+        Dictionary(grouping: vm.sortedFoundWords, by: { $0.count })
+            .map { ($0.key, $0.value.sorted()) }
+            .sorted { $0.0 > $1.0 }
+    }
+
+    private var lengthDistributionText: String {
+        groupedFoundWords.map { "\($0.0):\($0.1.count)" }.joined(separator: ",")
+    }
+
+    private var encodedFoundWords: String {
+        vm.sortedFoundWords.prefix(80).joined(separator: "|")
+    }
+
+    private var topWordText: String {
+        vm.sortedFoundWords.first ?? ""
     }
 
     // MARK: - Word feedback banner
@@ -317,29 +378,45 @@ struct WordHuntView: View {
             }
             .padding(.horizontal, 20)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(vm.sortedFoundWords, id: \.self) { word in
-                        HStack(spacing: 4) {
-                            Text(word)
-                                .font(.caption.bold())
-                            Text("+\(WordHuntGame.score(for: word))")
-                                .font(.caption2)
-                                .foregroundStyle(AppTheme.accentBright)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(groupedFoundWords.prefix(5), id: \.0) { length, words in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("\(length) letters")
+                                .font(.caption2.bold())
+                                .foregroundStyle(AppTheme.textSecondary)
+                            FlowLayout(spacing: 6) {
+                                ForEach(words.prefix(16), id: \.self) { word in
+                                    wordChip(word)
+                                        .transition(.scale.combined(with: .opacity))
+                                }
+                            }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(AppTheme.modeAccent(.wordHunt).opacity(0.15))
-                        .foregroundStyle(AppTheme.textPrimary)
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(AppTheme.modeAccent(.wordHunt).opacity(0.3), lineWidth: 1))
-                        .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.spring(response: 0.3), value: vm.foundWords)
             }
+            .frame(maxHeight: 150)
         }
+    }
+
+
+    private func wordChip(_ word: String) -> some View {
+        HStack(spacing: 4) {
+            Text(word.capitalized)
+                .font(.caption.bold())
+            Text("+\(WordHuntGame.score(for: word))")
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.accentBright)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(AppTheme.modeAccent(.wordHunt).opacity(0.15))
+        .foregroundStyle(AppTheme.textPrimary)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppTheme.modeAccent(.wordHunt).opacity(0.3), lineWidth: 1))
     }
 
     // MARK: - Finished overlay
@@ -373,9 +450,10 @@ struct WordHuntView: View {
                 SoloResultStat(label: "Points", value: "\(vm.score)"),
                 SoloResultStat(label: "Words", value: "\(vm.foundWords.count)"),
                 SoloResultStat(label: "Longest", value: longest > 0 ? "\(longest)" : "-"),
+                SoloResultStat(label: "Avg Len", value: averageWordText),
                 SoloResultStat(label: "Missed", value: "\(vm.missedWords.count)")
             ],
-            details: vm.sortedFoundWords.prefix(8).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
+            details: vm.sortedFoundWords.prefix(30).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
         )
     }
 
@@ -400,9 +478,13 @@ struct WordHuntView: View {
             summary: [
                 "wordCount": "\(vm.foundWords.count)",
                 "longestWordLength": "\(longest)",
+                "averageWordLength": averageWordText,
+                "topWord": topWordText,
+                "wordsByLength": lengthDistributionText,
+                "foundWords": encodedFoundWords,
                 "missedWords": "\(vm.missedWords.count)"
             ],
-            details: vm.sortedFoundWords.prefix(12).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
+            details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
         ))
     }
 }

@@ -1109,6 +1109,8 @@ struct MatchBreakdownView: View {
             if let result {
                 if session.mode == .wordle {
                     wordleBreakdown(result)
+                } else if session.mode == .anagram || session.mode == .wordHunt {
+                    wordScoreBreakdown(result)
                 } else {
                     statGrid(modeStats(for: result))
                     boardSnapshot(for: result)
@@ -1148,6 +1150,68 @@ struct MatchBreakdownView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
             }
         }
+    }
+
+
+    @ViewBuilder
+    private func wordScoreBreakdown(_ result: MatchPlayerResult) -> some View {
+        statGrid(modeStats(for: result))
+        let words = parsedFoundWords(from: result)
+        if words.isEmpty {
+            detailLines(result.details.isEmpty ? ["No word list was stored for this match."] : result.details)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Words Found")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.textSecondary)
+                    Spacer()
+                    if let byLength = result.summary["wordsByLength"], !byLength.isEmpty {
+                        Text(byLength.replacingOccurrences(of: ",", with: " · "))
+                            .font(.caption2.bold())
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+                ForEach(groupedWords(words).prefix(6), id: \.0) { length, group in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(length) letters")
+                            .font(.caption2.bold())
+                            .foregroundStyle(AppTheme.textSecondary)
+                        FlexibleWordWrap(spacing: 6) {
+                            ForEach(group.prefix(24), id: \.self) { word in
+                                Text(word.capitalized)
+                                    .font(.caption.bold())
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 5)
+                                    .background(session.mode.accentColor.opacity(0.16))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(session.mode.accentColor.opacity(0.28), lineWidth: 1))
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color.black.opacity(0.24))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
+        }
+    }
+
+    private func parsedFoundWords(from result: MatchPlayerResult) -> [String] {
+        if let raw = result.summary["foundWords"], !raw.isEmpty {
+            return raw.split(separator: "|").map { String($0) }
+        }
+        return result.details.compactMap { detail in
+            detail.split(separator: " ").first.map { String($0).uppercased() }
+        }
+    }
+
+    private func groupedWords(_ words: [String]) -> [(Int, [String])] {
+        Dictionary(grouping: words, by: { $0.count })
+            .map { ($0.key, $0.value.sorted()) }
+            .sorted { $0.0 > $1.0 }
     }
 
     @ViewBuilder
@@ -1406,7 +1470,13 @@ struct MatchBreakdownView: View {
         case .wordle:
             stats.append(contentsOf: [("Rounds", "\(result.solvedRounds)"), ("Guesses", "\(result.totalGuesses)")])
         case .anagram, .wordHunt:
-            stats.append(contentsOf: [("Score", "\(result.score)"), ("Words", "\(result.wordCount)"), ("Longest", "\(result.longestWordLength) letters")])
+            stats.append(contentsOf: [
+                ("Score", "\(result.score)"),
+                ("Words", "\(result.wordCount)"),
+                ("Longest", "\(result.longestWordLength) letters"),
+                ("Average", result.summary["averageWordLength"] ?? "-"),
+                ("Top Word", (result.summary["topWord"] ?? "-").capitalized)
+            ])
         case .minesweeper:
             stats.append(contentsOf: [("Safe cells", result.summary["safeCells"] ?? "\(result.score)"), ("Mine hit", result.hitMine ? "Yes" : "No")])
         case .sudoku:
@@ -1592,5 +1662,45 @@ struct WagerOptionRow: View {
         .disabled(!canAfford)
         .opacity(canAfford ? 1 : 0.4)
         .buttonStyle(.plain)
+    }
+}
+
+
+private struct FlexibleWordWrap: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? UIScreen.main.bounds.width
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var x: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > width && x > 0 {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
+        return CGSize(width: width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        var x = bounds.minX
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX && x > bounds.minX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+        }
     }
 }

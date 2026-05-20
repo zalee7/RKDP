@@ -1,7 +1,7 @@
 import Foundation
 
 enum WordListService {
-    static let wordBankVersion = "2026-05-19-v2"
+    static let wordBankVersion = "2026-05-20-word-expansion-v1"
 
     static let wordleAnswers: [String] = loadList(named: "wordle_answers", expectedLength: 5, fallback: [
         "CROWN", "BLOCK", "GRIDS", "TRACE", "LINKS"
@@ -15,6 +15,8 @@ enum WordListService {
     static let anagramValidWords: Set<String> = Set(loadList(named: "anagram_valid_words", minimumLength: 3, fallback: [
         "CAT", "ACT", "CAR", "ARC", "ART", "TAR", "STAR", "RATS"
     ]))
+
+    static let wordHuntValidWords: Set<String> = Set(loadList(named: "word_hunt_valid_words", minimumLength: 3, fallback: Array(anagramValidWords)))
 
     static func anagramBaseWords(for difficulty: Difficulty) -> [String] {
         let length: Int

@@ -57,6 +57,10 @@ struct AnagramView: View {
                 resultBanner
                     .padding(.top, 6)
 
+                wordStatsDashboard
+                    .padding(.top, 8)
+                    .padding(.horizontal)
+
                 foundWordsScroll
                     .padding(.top, 10)
 
@@ -129,6 +133,63 @@ struct AnagramView: View {
         }
     }
 
+
+    private var wordStatsDashboard: some View {
+        HStack(spacing: 8) {
+            wordStatTile(value: "\(vm.score)", label: "Points", color: AppTheme.accentBright)
+            wordStatTile(value: "\(vm.foundWords.count)", label: "Words", color: AppTheme.modeAccent(.anagram))
+            wordStatTile(value: longestWordText, label: "Longest", color: AppTheme.crownGold)
+            wordStatTile(value: averageWordText, label: "Avg", color: AppTheme.textPrimary)
+        }
+    }
+
+    private func wordStatTile(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.headline.bold())
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var longestWordText: String {
+        let longest = vm.foundWords.map(\.count).max() ?? 0
+        return longest > 0 ? "\(longest)" : "-"
+    }
+
+    private var averageWordText: String {
+        guard !vm.foundWords.isEmpty else { return "-" }
+        let total = vm.foundWords.reduce(0) { $0 + $1.count }
+        return String(format: "%.1f", Double(total) / Double(vm.foundWords.count))
+    }
+
+    private var groupedFoundWords: [(Int, [String])] {
+        Dictionary(grouping: vm.sortedFoundWords, by: { $0.count })
+            .map { ($0.key, $0.value.sorted()) }
+            .sorted { $0.0 > $1.0 }
+    }
+
+    private var lengthDistributionText: String {
+        groupedFoundWords.map { "\($0.0):\($0.1.count)" }.joined(separator: ",")
+    }
+
+    private var encodedFoundWords: String {
+        vm.sortedFoundWords.prefix(80).joined(separator: "|")
+    }
+
+    private var topWordText: String {
+        vm.sortedFoundWords.first ?? ""
+    }
+
     // MARK: - Result banner
 
     @ViewBuilder
@@ -194,23 +255,27 @@ struct AnagramView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 10)
             } else {
-                LetterWrapLayout(spacing: 6) {
-                    ForEach(vm.sortedFoundWords.prefix(12), id: \.self) { word in
-                        foundWordChip(word)
-                            .transition(.scale.combined(with: .opacity))
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(groupedFoundWords.prefix(5), id: \.0) { length, words in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("\(length) letters")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                LetterWrapLayout(spacing: 6) {
+                                    ForEach(words.prefix(16), id: \.self) { word in
+                                        foundWordChip(word)
+                                            .transition(.scale.combined(with: .opacity))
+                                    }
+                                }
+                            }
+                        }
                     }
+                    .padding(.horizontal)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal)
-                .frame(maxWidth: .infinity)
+                .frame(maxHeight: 150)
                 .animation(.spring(response: 0.3), value: vm.foundWords)
-
-                if vm.sortedFoundWords.count > 12 {
-                    Text("+\(vm.sortedFoundWords.count - 12) more")
-                        .font(.caption2.bold())
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 2)
-                }
             }
         }
     }
@@ -404,9 +469,10 @@ struct AnagramView: View {
                 SoloResultStat(label: "Points", value: "\(vm.score)"),
                 SoloResultStat(label: "Words", value: "\(vm.foundWords.count)"),
                 SoloResultStat(label: "Longest", value: longest > 0 ? "\(longest)" : "-"),
+                SoloResultStat(label: "Avg Len", value: averageWordText),
                 SoloResultStat(label: "Missed", value: "\(vm.missedWords.count)")
             ],
-            details: vm.sortedFoundWords.prefix(8).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
+            details: vm.sortedFoundWords.prefix(30).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
         )
     }
 
@@ -431,9 +497,13 @@ struct AnagramView: View {
             summary: [
                 "wordCount": "\(vm.foundWords.count)",
                 "longestWordLength": "\(longest)",
+                "averageWordLength": averageWordText,
+                "topWord": topWordText,
+                "wordsByLength": lengthDistributionText,
+                "foundWords": encodedFoundWords,
                 "missedWords": "\(vm.missedWords.count)"
             ],
-            details: vm.sortedFoundWords.prefix(12).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
+            details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
         ))
     }
 
