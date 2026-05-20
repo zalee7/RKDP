@@ -15,29 +15,47 @@ struct DailyTournament: Identifiable, Codable, Equatable, Hashable {
     var isClosed: Bool { Date() >= closesAt }
 
     static func make(mode: GameMode, tier: RankTier, date: Date = Date()) -> DailyTournament {
-        let dayKey = CoinWallet.todayKey(date: date)
+        let hourKey = utcHourKey(for: date)
         let difficulty = mode.rankedDifficulties.first ?? mode.defaultDifficulty
-        let id = "daily_\(dayKey)_\(tier.rawValue)_\(mode.rawValue)"
+        let id = "hourly_\(hourKey)_\(tier.rawValue)_\(mode.rawValue)"
         let seed = stableSeed(from: id)
         return DailyTournament(
             id: id,
-            dayKey: dayKey,
+            dayKey: hourKey,
             mode: mode,
             difficulty: difficulty,
             rankTier: tier,
             entryFee: Wager.tournamentEntryFee(for: tier),
             seed: seed,
             puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
-            createdAt: date,
-            closesAt: endOfUTCDay(for: date)
+            createdAt: startOfUTCHour(for: date),
+            closesAt: nextUTCHour(after: date)
         )
     }
 
-    private static func endOfUTCDay(for date: Date) -> Date {
+    static func previous(mode: GameMode, tier: RankTier, date: Date = Date()) -> DailyTournament {
+        make(mode: mode, tier: tier, date: date.addingTimeInterval(-3_600))
+    }
+
+    static func utcHourKey(for date: Date = Date()) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
-        let start = calendar.startOfDay(for: date)
-        return calendar.date(byAdding: .day, value: 1, to: start) ?? date.addingTimeInterval(86_400)
+        let comps = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+        return String(format: "%04d-%02d-%02d-%02d", comps.year ?? 0, comps.month ?? 0, comps.day ?? 0, comps.hour ?? 0)
+    }
+
+    private static func startOfUTCHour(for date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let comps = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+        return calendar.date(from: comps) ?? date
+    }
+
+    private static func nextUTCHour(after date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let start = startOfUTCHour(for: date)
+        return calendar.date(byAdding: .hour, value: 1, to: start) ?? date.addingTimeInterval(3_600)
     }
 
     private static func stableSeed(from string: String) -> Int {

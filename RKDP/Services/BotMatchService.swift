@@ -48,7 +48,7 @@ enum BotMatchService {
 
     static func makeResult(for session: GameSession, bot: MatchPlayer, elapsedSeconds: Int) -> MatchPlayerResult {
         var rng = SeededRNG(seed: session.seed ^ bot.userID.hashValue ^ 0xB07)
-        let strongBot = int(in: 0...99, rng: &rng) >= 70
+        let strongBot = int(in: 0...99, rng: &rng) >= 82
         switch session.mode {
         case .wordle:
             return wordleResult(session: session, bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
@@ -110,9 +110,26 @@ enum BotMatchService {
     }
 
     private static func wordScoreResult(mode: GameMode, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
-        let score = strongBot ? int(in: 15...28, rng: &rng) : int(in: 4...13, rng: &rng)
-        let wordCount = max(1, strongBot ? int(in: 7...13, rng: &rng) : int(in: 2...7, rng: &rng))
-        let longest = strongBot ? int(in: 6...9, rng: &rng) : int(in: 4...7, rng: &rng)
+        let scoreRange: ClosedRange<Int>
+        let wordCountRange: ClosedRange<Int>
+        let longestRange: ClosedRange<Int>
+        switch mode {
+        case .anagram:
+            scoreRange = strongBot ? 7...13 : 1...5
+            wordCountRange = strongBot ? 4...7 : 1...4
+            longestRange = strongBot ? 4...6 : 3...5
+        case .wordHunt:
+            scoreRange = strongBot ? 8...15 : 2...6
+            wordCountRange = strongBot ? 5...9 : 2...5
+            longestRange = strongBot ? 4...7 : 3...5
+        default:
+            scoreRange = strongBot ? 7...13 : 1...5
+            wordCountRange = strongBot ? 4...7 : 1...4
+            longestRange = strongBot ? 4...6 : 3...5
+        }
+        let score = int(in: scoreRange, rng: &rng)
+        let wordCount = int(in: wordCountRange, rng: &rng)
+        let longest = int(in: longestRange, rng: &rng)
         return MatchPlayerResult(
             userID: bot.userID,
             mode: mode,

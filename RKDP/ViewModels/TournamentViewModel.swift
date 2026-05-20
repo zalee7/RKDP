@@ -11,32 +11,52 @@ final class TournamentViewModel: ObservableObject {
     @Published var isLoading = false
 
     private let service = TournamentService.shared
+    private var currentHourKey = DailyTournament.utcHourKey()
 
     init(user: AppUser) {
         self.user = user
-        self.tournaments = GameMode.allCases.map { DailyTournament.make(mode: $0, tier: user.rank(for: $0).displayTier) }
+        self.tournaments = Self.currentTournaments(for: user)
     }
 
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
-        tournaments = GameMode.allCases.map { DailyTournament.make(mode: $0, tier: user.rank(for: $0).displayTier) }
+        currentHourKey = DailyTournament.utcHourKey()
         do {
+            var displayTournaments = Self.currentTournaments(for: user)
             var entriesMap: [String: [TournamentEntry]] = [:]
             var mine: [String: TournamentEntry] = [:]
-            for tournament in tournaments {
+
+            for tournament in displayTournaments {
                 let entries = try await service.fetchEntries(tournamentID: tournament.id)
                 entriesMap[tournament.id] = entries
                 if let entry = entries.first(where: { $0.userID == user.id }) {
                     mine[tournament.id] = entry
                 }
             }
+
+            for previous in Self.previousTournaments(for: user) {
+                let entries = try await service.fetchEntries(tournamentID: previous.id)
+                guard let entry = entries.first(where: { $0.userID == user.id }), entry.prizeClaimed == false else { continue }
+                entriesMap[previous.id] = entries
+                mine[previous.id] = entry
+                if !displayTournaments.contains(where: { $0.id == previous.id }) {
+                    displayTournaments.append(previous)
+                }
+            }
+
+            tournaments = displayTournaments
             entriesByTournamentID = entriesMap
             myEntries = mine
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func refreshIfHourChanged() async {
+        guard DailyTournament.utcHourKey() != currentHourKey else { return }
+        await refresh()
     }
 
     func enter(_ tournament: DailyTournament) async {
@@ -90,5 +110,13 @@ final class TournamentViewModel: ObservableObject {
             prize: TournamentScoring.prize(for: place, entryCount: standings.count, entryFee: tournament.entryFee),
             paidPlaces: TournamentScoring.paidPlaces(entryCount: standings.count)
         )
+    }
+
+    private static func currentTournaments(for user: AppUser) -> [DailyTournament] {
+        GameMode.allCases.map { DailyTournament.make(mode: $0, tier: user.rank(for: $0).displayTier) }
+    }
+
+    private static func previousTournaments(for user: AppUser) -> [DailyTournament] {
+        GameMode.allCases.map { DailyTournament.previous(mode: $0, tier: user.rank(for: $0).displayTier) }
     }
 }

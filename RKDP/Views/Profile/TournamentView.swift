@@ -41,7 +41,13 @@ struct TournamentView: View {
             .foregroundStyle(AppTheme.textPrimary)
             .navigationTitle("Tournaments")
             .navigationBarTitleDisplayMode(.inline)
-            .task { await vm.refresh() }
+            .task {
+                await vm.refresh()
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 15_000_000_000)
+                    await vm.refreshIfHourChanged()
+                }
+            }
             .refreshable { await vm.refresh() }
             .fullScreenCover(item: $vm.selectedTournament) { tournament in
                 TournamentGameView(tournament: tournament, user: vm.user) { result in
@@ -65,12 +71,12 @@ struct TournamentView: View {
             HStack {
                 Image(systemName: "trophy.fill")
                     .foregroundStyle(AppTheme.crownGold)
-                Text("Daily Coin Tournaments")
+                Text("Hourly Coin Tournaments")
                     .font(.title2.bold())
                 Spacer()
                 CoinBadgeView(amount: vm.user.coins)
             }
-            Text("Tournaments are separated by rank tier for each mode. Enter with coins, play one shared-seed attempt, and claim a virtual coin prize if you place after the event closes. No rank or W/L changes.")
+            Text("Each tournament is only against players in your current rank tier for that mode. Enter with coins, play one shared-seed attempt, and claim a virtual coin prize if you place after it closes. No rank or W/L changes.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -109,7 +115,7 @@ private struct TournamentCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(tournament.mode.displayName)
                         .font(.headline.bold())
-                    Text("\(tournament.rankTier.displayName)-only board · \(tournament.mode.difficultyLabel(tournament.difficulty))")
+                    Text("\(tournament.rankTier.displayName) rank only · \(tournament.mode.difficultyLabel(tournament.difficulty))")
                         .font(.caption)
                         .foregroundStyle(AppTheme.textSecondary)
                 }
@@ -132,12 +138,14 @@ private struct TournamentCard: View {
                 closesRow(now: context.date)
             }
 
+            leaderboardSection
+
             if let place = preview.place {
                 Text("Your place: #\(place)")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.crownGold)
             } else {
-                Text("One attempt. Shared puzzle. Best result wins the daily board.")
+                Text("One attempt. Shared puzzle. Best result wins the hourly board.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
             }
@@ -226,12 +234,124 @@ private struct TournamentCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func countdownText(_ seconds: Int) -> String {
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let secs = seconds % 60
-        return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+    @ViewBuilder
+    private var leaderboardSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Leaderboard", systemImage: "list.number")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Spacer()
+                Text("Top 5")
+                    .font(.caption2.bold())
+                    .foregroundStyle(AppTheme.crownGold)
+            }
+
+            if standings.isEmpty {
+                Text("No scores yet.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(topFiveEntries) { item in
+                    leaderboardRow(place: item.place, item: item.entry, isCurrentUser: item.entry.userID == currentUserID)
+                }
+
+                if let outside = currentUserOutsideTopFive {
+                    Divider().overlay(AppTheme.cardBorder)
+                    leaderboardRow(place: outside.place, item: outside.entry, isCurrentUser: true, label: "Your Score")
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder.opacity(0.7), lineWidth: 1))
     }
+
+    private var currentUserID: String? { entry?.userID }
+
+    private var currentPlacement: Int? {
+        guard let currentUserID else { return nil }
+        return standings.firstIndex { $0.userID == currentUserID }.map { $0 + 1 }
+    }
+
+    private var topFiveEntries: [StandingDisplayEntry] {
+        standings.prefix(5).enumerated().map { item in
+            StandingDisplayEntry(place: item.offset + 1, entry: item.element)
+        }
+    }
+
+    private var currentUserOutsideTopFive: (place: Int, entry: TournamentEntry)? {
+        guard
+            let place = currentPlacement,
+            place > 5,
+            let currentUserID,
+            let entry = standings.first(where: { $0.userID == currentUserID })
+        else { return nil }
+        return (place, entry)
+    }
+
+    private func leaderboardRow(place: Int, item: TournamentEntry, isCurrentUser: Bool, label: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            Text("#\(place)")
+                .font(.caption.bold())
+                .foregroundStyle(isCurrentUser ? AppTheme.crownGold : AppTheme.textSecondary)
+                .frame(width: 34, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label ?? item.username)
+                    .font(.caption.bold())
+                    .foregroundStyle(isCurrentUser ? AppTheme.crownGold : AppTheme.textPrimary)
+                    .lineLimit(1)
+                if label != nil {
+                    Text(item.username)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Text(resultSummary(for: item.result))
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.vertical, 5)
+    }
+
+    private func resultSummary(for result: TournamentResult?) -> String {
+        guard let result else { return "No attempt" }
+        switch tournament.mode {
+        case .anagram, .wordHunt:
+            return "\(result.score) pts · \(result.wordCount ?? 0)w · L\(result.longestWord ?? 0)"
+        case .wordle:
+            return "\(result.completed ? "Solved" : "Failed") · \(result.guesses ?? 0) guesses · \(formattedTime(result.elapsedSeconds))"
+        case .gridlock:
+            let progress = Int((result.progress * 100).rounded())
+            let moves = result.moves.map { " · \($0)m" } ?? ""
+            return "\(result.completed ? "Done" : "\(progress)%")\(moves) · \(formattedTime(result.elapsedSeconds))"
+        default:
+            let progress = Int((result.progress * 100).rounded())
+            return "\(result.completed ? "Done" : "\(progress)%") · \(formattedTime(result.elapsedSeconds))"
+        }
+    }
+
+    private func countdownText(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+}
+
+private struct StandingDisplayEntry: Identifiable {
+    let place: Int
+    let entry: TournamentEntry
+
+    var id: String { entry.id }
 }
 
 private struct TournamentGameView: View {
