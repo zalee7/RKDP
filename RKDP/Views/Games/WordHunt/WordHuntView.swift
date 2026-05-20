@@ -300,44 +300,20 @@ struct WordHuntView: View {
         return (row, col)
     }
 
-    /// Snap-to-nearest unused adjacent cell. Paths are forward-only so dragging
-    /// back over a traced cell no longer trims/undoes the word by accident.
+    /// Extend by at most one forward cell per drag update. Diagonals are based on
+    /// the cell under the finger, which avoids recursive "catch up" jumps.
     private func snapExtend(to point: CGPoint, cellSize: CGFloat) {
         guard let last = vm.currentPath.last else { return }
-        let gridSize = vm.game.size
+        let target = floorCell(point, cellSize: cellSize)
+        let rowDelta = target.0 - last.row
+        let colDelta = target.1 - last.col
+        guard rowDelta != 0 || colDelta != 0 else { return }
 
-        var bestDist = CGFloat.infinity
-        var bestCell: (Int, Int)? = nil
+        let nextRow = last.row + rowDelta.signum()
+        let nextCol = last.col + colDelta.signum()
+        guard !vm.isInPath(row: nextRow, col: nextCol) else { return }
 
-        for dr in -1...1 {
-            for dc in -1...1 {
-                guard dr != 0 || dc != 0 else { continue }
-                let r = last.row + dr
-                let c = last.col + dc
-                guard r >= 0, r < gridSize, c >= 0, c < gridSize else { continue }
-                guard !vm.isInPath(row: r, col: c) else { continue }
-                let cx = (CGFloat(c) + 0.5) * cellSize
-                let cy = (CGFloat(r) + 0.5) * cellSize
-                let dist = hypot(point.x - cx, point.y - cy)
-                if dist < bestDist { bestDist = dist; bestCell = (r, c) }
-            }
-        }
-
-        guard let (nr, nc) = bestCell else { return }
-        // Only move if the finger has crossed more than half a cell from the current center
-        let lastCX = (CGFloat(last.col) + 0.5) * cellSize
-        let lastCY = (CGFloat(last.row) + 0.5) * cellSize
-        guard hypot(point.x - lastCX, point.y - lastCY) > cellSize * 0.45 else { return }
-
-        vm.extendPath(row: nr, col: nc)
-
-        // Recurse: if the drag jumped far, keep snapping until we catch up
-        if let newLast = vm.currentPath.last, (newLast.row != nr || newLast.col != nc) { return }
-        let newCX = (CGFloat(nc) + 0.5) * cellSize
-        let newCY = (CGFloat(nr) + 0.5) * cellSize
-        if hypot(point.x - newCX, point.y - newCY) > cellSize * 0.9 {
-            snapExtend(to: point, cellSize: cellSize)
-        }
+        vm.extendPath(row: nextRow, col: nextCol)
     }
 
     // MARK: - Current word display
