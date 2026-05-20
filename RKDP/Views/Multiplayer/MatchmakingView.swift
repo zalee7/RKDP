@@ -1250,9 +1250,15 @@ struct MatchBreakdownView: View {
                 }
             }
         case .gridlock:
+            let targetRows = snapshotRows(result.summary["targetRows"])
             let rows = snapshotRows(result.summary["tileRows"])
+            if !targetRows.isEmpty {
+                snapshotCard(title: "Target") {
+                    colorGridSnapshot(rows: targetRows, cellSize: 18, showText: false)
+                }
+            }
             if !rows.isEmpty {
-                snapshotCard(title: "Grid") {
+                snapshotCard(title: "Final Grid") {
                     colorGridSnapshot(rows: rows, cellSize: 22, showText: false)
                 }
             }
@@ -1406,7 +1412,7 @@ struct MatchBreakdownView: View {
         case .sudoku:
             stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Progress", percent(result.progress))])
         case .gridlock:
-            stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Moves", "\(result.moveCount)"), ("Symmetry", percent(result.progress))])
+            stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Moves", "\(result.moveCount)"), ("Pattern", percent(result.progress))])
         case .colorLink:
             stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Board fill", percent(result.progress)), ("Pairs", "\(result.solvedPairs)")])
         }

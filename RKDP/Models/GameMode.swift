@@ -39,7 +39,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .colorLink:
             return "Connect matching colors with paths that cover the board."
         case .gridlock:
-            return "Slide rows and columns to form a mirrored color grid before your opponent."
+            return "Slide rows and columns to recreate the target color pattern before your opponent."
         case .anagram:
             return "Make the most valid words from the letters. Longer words score more."
         case .wordHunt:
@@ -69,7 +69,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "Complete the puzzle; progress then time break timeout ties"
         case .minesweeper: return "Avoid mines; clears, safe cells, then time decide"
         case .colorLink:   return "Complete the board; fill, pairs, then time break ties"
-        case .gridlock:    return "Make the grid symmetrical; moves then time break finish ties"
+        case .gridlock:    return "Match the target pattern; moves then time break finish ties"
         case .anagram:     return "Timer ends; score, word count, then longest word decide"
         case .wordHunt:    return "Timer ends; score, word count, then longest word decide"
         case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"

@@ -45,7 +45,7 @@ struct HomeView: View {
                         VStack(spacing: 14) {
                             HomeGameCategorySection(
                                 title: "Grid Games",
-                                subtitle: "Paths, boards, mines, and symmetry",
+                                subtitle: "Paths, patterns, boards, and mines",
                                 modes: [.colorLink, .gridlock, .sudoku, .minesweeper],
                                 user: auth.user,
                                 accent: AppTheme.crownGold,
@@ -356,7 +356,7 @@ struct GameModeDetailView: View {
         switch mode {
         case .gridlock:
             if let moves = rankInfo.bestMoves { return "Best \(moves) moves" }
-            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))% symmetry" }
+            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))% match" }
             if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
         case .wordle:
             if let guesses = rankInfo.bestGuesses { return "Best \(guesses) guesses" }

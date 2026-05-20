@@ -46,6 +46,8 @@ struct GridlockView: View {
             VStack(spacing: 14) {
                 header
 
+                targetPanel
+
                 GridDuelBoardView(board: vm.board) { axis, index, steps in
                     vm.shift(axis: axis, index: index, steps: steps)
                 }
@@ -67,7 +69,7 @@ struct GridlockView: View {
         .onChange(of: vm.isComplete) { _, complete in
             if complete {
                 if sessionID == nil { showSoloResult() }
-                reportMatchResult(status: "Symmetry complete")
+                reportMatchResult(status: "Pattern matched")
             }
         }
         .onChange(of: vm.elapsedSeconds) { _, seconds in
@@ -82,6 +84,20 @@ struct GridlockView: View {
         HStack {
             TimerView(seconds: vm.elapsedSeconds)
             Spacer()
+            Button {
+                vm.undoLastMove()
+            } label: {
+                Label("Undo", systemImage: "arrow.uturn.backward")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(vm.canUndo ? AppTheme.crownGold.opacity(0.22) : Color.white.opacity(0.08))
+                    .foregroundStyle(vm.canUndo ? AppTheme.crownGold : AppTheme.textSecondary)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(vm.canUndo ? AppTheme.crownGold.opacity(0.45) : AppTheme.cardBorder, lineWidth: 1))
+            }
+            .disabled(!vm.canUndo)
+            Spacer()
             Label("\(vm.moveCount)", systemImage: "arrow.left.arrow.right")
                 .font(.headline)
                 .foregroundStyle(AppTheme.textPrimary)
@@ -93,10 +109,33 @@ struct GridlockView: View {
         .padding(.horizontal)
     }
 
+
+    private var targetPanel: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Target")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.crownGold)
+                Text("Recreate this pattern by sliding rows and columns.")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            GridDuelMiniBoardView(tiles: vm.board.targetTiles, colorCount: vm.colorCount)
+                .frame(width: 104, height: 104)
+        }
+        .padding(12)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .padding(.horizontal)
+    }
+
     private var progressPanel: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Mirror symmetry")
+                Text("Pattern Match")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textSecondary)
                 Spacer()
@@ -106,7 +145,7 @@ struct GridlockView: View {
             }
             ProgressView(value: vm.progress)
                 .tint(AppTheme.accentBright)
-            Text("Drag rows sideways or columns up and down until the grid mirrors itself.")
+            Text("Match the target by sliding full rows sideways or full columns up and down.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -125,7 +164,7 @@ struct GridlockView: View {
             difficulty: difficulty,
             completed: true,
             title: "Grid Duel Solved",
-            message: "The grid reached mirror symmetry.",
+            message: "Your grid matched the target pattern.",
             elapsedSeconds: vm.elapsedSeconds,
             score: max(0, 600 - vm.moveCount),
             progress: vm.progress,
@@ -133,12 +172,12 @@ struct GridlockView: View {
             stats: [
                 SoloResultStat(label: "Moves", value: "\(vm.moveCount)"),
                 SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
-                SoloResultStat(label: "Symmetry", value: "\(Int((vm.progress * 100).rounded()))%"),
+                SoloResultStat(label: "Pattern", value: "\(Int((vm.progress * 100).rounded()))%"),
                 SoloResultStat(label: "Grid", value: "\(vm.boardSize)x\(vm.boardSize)")
             ],
             details: [
                 "\(vm.colorCount) colors",
-                "\(vm.board.solvedPairCount)/\(vm.board.totalPairCount) mirror pairs aligned"
+                "\(vm.board.matchingCellCount)/\(vm.board.totalPairCount) cells match the target"
             ]
         )
         soloResult = result
@@ -160,21 +199,22 @@ struct GridlockView: View {
             status: status,
             summary: [
                 "moves": "\(vm.moveCount)",
-                "symmetryPercent": "\(progressPercent)",
+                "patternPercent": "\(progressPercent)",
                 "boardSize": "\(vm.boardSize)",
                 "colorCount": "\(vm.colorCount)",
-                "tileRows": gridDuelTileRows(vm.board)
+                "tileRows": gridDuelTileRows(vm.board.tiles),
+                "targetRows": gridDuelTileRows(vm.board.targetTiles)
             ],
             details: [
-                vm.isComplete ? "Solved in \(vm.moveCount) moves" : "Reached \(progressPercent)% symmetry",
+                vm.isComplete ? "Matched the target in \(vm.moveCount) moves" : "Reached \(progressPercent)% pattern match",
                 "\(vm.boardSize)x\(vm.boardSize) grid",
                 "\(vm.colorCount) colors",
-                "\(vm.board.solvedPairCount)/\(vm.board.totalPairCount) mirror pairs aligned"
+                "\(vm.board.matchingCellCount)/\(vm.board.totalPairCount) cells match the target"
             ]
         ))
     }
-    private func gridDuelTileRows(_ board: GridlockBoard) -> String {
-        board.tiles.map { row in
+    private func gridDuelTileRows(_ tiles: [[Int]]) -> String {
+        tiles.map { row in
             row.map { String($0, radix: 16, uppercase: true) }.joined()
         }.joined(separator: "/")
     }
@@ -238,9 +278,36 @@ struct GridDuelBoardView: View {
     }
 }
 
+private struct GridDuelMiniBoardView: View {
+    let tiles: [[Int]]
+    let colorCount: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = max(1, tiles.count)
+            let cellSize = geo.size.width / CGFloat(size)
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.20))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.24), lineWidth: 1))
+                if !tiles.isEmpty {
+                    ForEach(0..<tiles.count, id: \.self) { row in
+                        ForEach(0..<min(size, tiles[row].count), id: \.self) { col in
+                            GridDuelTile(colorIndex: tiles[row][col], colorCount: colorCount, compact: true)
+                                .frame(width: cellSize, height: cellSize)
+                                .offset(x: CGFloat(col) * cellSize, y: CGFloat(row) * cellSize)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct GridDuelTile: View {
     let colorIndex: Int
     let colorCount: Int
+    var compact = false
 
     private var tileColor: Color {
         let palette: [Color] = [
@@ -255,10 +322,10 @@ private struct GridDuelTile: View {
     }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 10)
+        RoundedRectangle(cornerRadius: compact ? 4 : 10)
             .fill(tileColor.gradient)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.82), lineWidth: 2))
-            .shadow(color: tileColor.opacity(0.22), radius: 5)
-            .padding(3)
+            .overlay(RoundedRectangle(cornerRadius: compact ? 4 : 10).stroke(Color.white.opacity(compact ? 0.55 : 0.82), lineWidth: compact ? 1 : 2))
+            .shadow(color: tileColor.opacity(compact ? 0.10 : 0.22), radius: compact ? 2 : 5)
+            .padding(compact ? 1 : 3)
     }
 }

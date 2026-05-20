@@ -162,9 +162,9 @@ struct HowToPlayView: View {
         case .gridlock:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Arrange the colored grid so it mirrors itself left-to-right and top-to-bottom.",
-                    "Every cell is filled; the challenge is shifting colors into symmetry.",
-                    "The puzzle ends automatically when every mirror pair matches.",
+                    "Recreate the target color pattern on your playable grid.",
+                    "Every cell is filled; the challenge is rotating rows and columns into the target layout.",
+                    "The puzzle ends automatically when your grid exactly matches the target.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
                     "Drag a row sideways to rotate that row.",
@@ -172,9 +172,9 @@ struct HowToPlayView: View {
                     "Each whole-cell shift counts as one move.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same seeded symmetry puzzle.",
+                    "Both players receive the same target and scrambled board.",
                     "Completion wins; if both finish, fewer moves wins, then time.",
-                    "If neither player finishes, higher symmetry percent wins, then fewer moves and time.",
+                    "If neither player finishes, higher pattern-match percent wins, then fewer moves and time.",
                 ]),
             ]
         case .anagram:

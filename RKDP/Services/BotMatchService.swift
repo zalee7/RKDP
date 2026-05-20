@@ -273,9 +273,9 @@ enum BotMatchService {
             elapsedSeconds: elapsedSeconds,
             score: Int((progress * 100).rounded()),
             progress: progress,
-            status: completed ? "Symmetry solved" : "\(Int(progress * 100))% symmetry",
+            status: completed ? "Pattern matched" : "\(Int(progress * 100))% pattern match",
             summary: ["moves": "\(moves)", "botResult": "true"],
-            details: ["Moves: \(moves)", "Symmetry: \(Int(progress * 100))%"]
+            details: ["Moves: \(moves)", "Pattern: \(Int(progress * 100))%"]
         )
     }
 

@@ -5,7 +5,8 @@ struct GridlockGenerator {
         var rng = SeededRNG(seed: seed ?? Int.random(in: 0..<Int.max))
         let size = boardSize(for: difficulty)
         let colorCount = colorCount(for: difficulty)
-        var board = solvedBoard(size: size, colorCount: colorCount, rng: &rng)
+        let targetTiles = targetBoard(size: size, colorCount: colorCount, rng: &rng)
+        var board = GridlockBoard(size: size, colorCount: colorCount, tiles: targetTiles, targetTiles: targetTiles)
         scramble(&board, difficulty: difficulty, rng: &rng)
         return board
     }
@@ -28,41 +29,23 @@ struct GridlockGenerator {
         }
     }
 
-    private static func solvedBoard(size: Int, colorCount: Int, rng: inout SeededRNG) -> GridlockBoard {
-        var tiles = Array(repeating: Array(repeating: -1, count: size), count: size)
+    private static func targetBoard(size: Int, colorCount: Int, rng: inout SeededRNG) -> [[Int]] {
         let colorOffset = Int(rng.next()) % colorCount
-        var orbitIndex = 0
-
-        for row in 0..<size {
-            for col in 0..<size where tiles[row][col] == -1 {
-                let orbit = symmetryOrbit(row: row, col: col, size: size)
-                let color = (orbitIndex + colorOffset) % colorCount
-                for position in orbit {
-                    tiles[position.row][position.col] = color
-                }
-                orbitIndex += 1
+        return (0..<size).map { row in
+            (0..<size).map { col in
+                let jitter = Int(rng.next()) % colorCount
+                return (row * 2 + col * 3 + jitter + colorOffset) % colorCount
             }
         }
-
-        return GridlockBoard(size: size, colorCount: colorCount, tiles: tiles)
-    }
-
-    private static func symmetryOrbit(row: Int, col: Int, size: Int) -> Set<GridDuelPosition> {
-        [
-            GridDuelPosition(row: row, col: col),
-            GridDuelPosition(row: row, col: size - 1 - col),
-            GridDuelPosition(row: size - 1 - row, col: col),
-            GridDuelPosition(row: size - 1 - row, col: size - 1 - col)
-        ]
     }
 
     private static func scramble(_ board: inout GridlockBoard, difficulty: Difficulty, rng: inout SeededRNG) {
         let moveCount: Int
         switch difficulty {
-        case .easy: moveCount = 8
-        case .medium: moveCount = 14
-        case .hard: moveCount = 22
-        case .expert: moveCount = 32
+        case .easy: moveCount = 4
+        case .medium: moveCount = 7
+        case .hard: moveCount = 12
+        case .expert: moveCount = 18
         }
 
         for moveIndex in 0..<moveCount {
@@ -80,9 +63,4 @@ struct GridlockGenerator {
             }
         }
     }
-}
-
-private struct GridDuelPosition: Hashable {
-    var row: Int
-    var col: Int
 }

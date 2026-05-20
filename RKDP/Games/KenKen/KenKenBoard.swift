@@ -15,23 +15,61 @@ struct GridlockBoard: Codable, Equatable {
     var size: Int
     var colorCount: Int
     var tiles: [[Int]]
+    var targetTiles: [[Int]]
 
-    var isSolved: Bool {
-        symmetryProgress >= 1
+    init(size: Int, colorCount: Int, tiles: [[Int]], targetTiles: [[Int]]? = nil) {
+        self.size = size
+        self.colorCount = colorCount
+        self.tiles = tiles
+        self.targetTiles = targetTiles ?? tiles
     }
 
-    var symmetryProgress: Double {
-        let horizontal = symmetryScore(axis: .row)
-        let vertical = symmetryScore(axis: .column)
-        return (horizontal + vertical) / 2
+    private enum CodingKeys: String, CodingKey {
+        case size
+        case colorCount
+        case tiles
+        case targetTiles
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        size = try container.decode(Int.self, forKey: .size)
+        colorCount = try container.decode(Int.self, forKey: .colorCount)
+        tiles = try container.decode([[Int]].self, forKey: .tiles)
+        targetTiles = (try? container.decode([[Int]].self, forKey: .targetTiles)) ?? tiles
+    }
+
+    var isSolved: Bool {
+        tiles == targetTiles
+    }
+
+
+    var patternProgress: Double {
+        let total = max(1, size * size)
+        return Double(matchingCellCount) / Double(total)
     }
 
     var solvedPairCount: Int {
-        solvedPairs(axis: .row) + solvedPairs(axis: .column)
+        matchingCellCount
     }
 
     var totalPairCount: Int {
-        pairCount(axis: .row) + pairCount(axis: .column)
+        size * size
+    }
+
+    var matchingCellCount: Int {
+        guard targetTiles.count == size else { return 0 }
+        var count = 0
+        for row in 0..<size {
+            guard row < tiles.count, row < targetTiles.count else { continue }
+            for col in 0..<size {
+                guard col < tiles[row].count, col < targetTiles[row].count else { continue }
+                if tiles[row][col] == targetTiles[row][col] {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 
     mutating func shift(_ move: GridDuelMove) {
@@ -59,49 +97,5 @@ struct GridlockBoard: Codable, Equatable {
         guard !values.isEmpty else { return values }
         let pivot = values.count - steps
         return Array(values[pivot..<values.count] + values[0..<pivot])
-    }
-
-    private func symmetryScore(axis: GridDuelAxis) -> Double {
-        let total = pairCount(axis: axis)
-        guard total > 0 else { return 1 }
-        return Double(solvedPairs(axis: axis)) / Double(total)
-    }
-
-    private func solvedPairs(axis: GridDuelAxis) -> Int {
-        var count = 0
-        for row in 0..<size {
-            for col in 0..<size {
-                guard shouldCountPair(row: row, col: col, axis: axis) else { continue }
-                let mirror = mirrored(row: row, col: col, axis: axis)
-                if tiles[row][col] == tiles[mirror.row][mirror.col] {
-                    count += 1
-                }
-            }
-        }
-        return count
-    }
-
-    private func pairCount(axis: GridDuelAxis) -> Int {
-        var count = 0
-        for row in 0..<size {
-            for col in 0..<size where shouldCountPair(row: row, col: col, axis: axis) {
-                count += 1
-            }
-        }
-        return count
-    }
-
-    private func shouldCountPair(row: Int, col: Int, axis: GridDuelAxis) -> Bool {
-        let mirror = mirrored(row: row, col: col, axis: axis)
-        return row < mirror.row || (row == mirror.row && col < mirror.col)
-    }
-
-    private func mirrored(row: Int, col: Int, axis: GridDuelAxis) -> (row: Int, col: Int) {
-        switch axis {
-        case .row:
-            return (row, size - 1 - col)
-        case .column:
-            return (size - 1 - row, col)
-        }
     }
 }
