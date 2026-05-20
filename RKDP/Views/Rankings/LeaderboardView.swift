@@ -88,11 +88,7 @@ struct LeaderboardRowView: View {
                 .foregroundStyle(AppTheme.textPrimary)
                 .frame(width: 36)
 
-            Circle()
-                .fill(AppTheme.brandGradient)
-                .frame(width: 40, height: 40)
-                .overlay(Text(String(entry.username.prefix(1))).font(.headline).foregroundStyle(.white))
-                .shadow(color: AppTheme.accent.opacity(0.4), radius: 4)
+            StickDuelerAvatarView(style: entry.avatarStyle, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.username).font(.headline).foregroundStyle(AppTheme.textPrimary)

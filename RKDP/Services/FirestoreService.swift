@@ -319,10 +319,13 @@ final class FirestoreService {
     }
 
     func updateRankEntry(userID: String, mode: GameMode, info: RankInfo, username: String) async throws {
+        let user = try? await fetchUser(id: userID)
         let entry = LeaderboardEntry(
-            id: userID, username: username, avatarURL: nil,
+            id: userID, username: username, avatarURL: user?.avatarURL,
             rankTier: info.displayTier, rankPoints: info.points,
-            wins: info.wins, bestTime: info.bestTime, mode: mode
+            wins: info.wins, bestTime: info.bestTime, mode: mode,
+            equippedTitle: user.flatMap { loadedUser in CosmeticCatalog.allTitles.first { $0.id == loadedUser.cosmetics.equippedTitle }?.name },
+            avatarStyle: user?.cosmetics.avatarStyle ?? .default
         )
         try db.collection("leaderboards")
             .document(mode.rawValue)
@@ -431,7 +434,8 @@ final class FirestoreService {
                 wager: oldSession.isExhibition ? 0 : player.wager,
                 finishTime: nil,
                 rankTier: rank.displayTier,
-                rankPoints: rank.points
+                rankPoints: rank.points,
+                avatarStyle: latestUser.cosmetics.avatarStyle
             )
         }
 
@@ -504,7 +508,7 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .inProgress,
             players: [
-                MatchPlayer(userID: user.id, username: user.username, wager: wager, rankTier: tier, rankPoints: user.rank(for: mode).points),
+                MatchPlayer(userID: user.id, username: user.username, wager: wager, rankTier: tier, rankPoints: user.rank(for: mode).points, avatarStyle: user.cosmetics.avatarStyle),
                 bot
             ],
             seed: seed,
@@ -536,6 +540,13 @@ final class FirestoreService {
             "wager":      wager,
             "rankTier":   tier.rawValue,
             "rankPoints": user.rank(for: mode).points,
+            "avatarStyle": [
+                "head": user.cosmetics.equippedAvatarHead,
+                "face": user.cosmetics.equippedAvatarFace,
+                "outfit": user.cosmetics.equippedAvatarOutfit,
+                "aura": user.cosmetics.equippedAvatarAura,
+                "pose": user.cosmetics.equippedAvatarPose
+            ],
             "searchID":   searchID
         ])
 
@@ -610,6 +621,18 @@ final class FirestoreService {
         }
     }
 
+
+    private func avatarStyle(from value: Any?) -> AvatarStyle {
+        guard let dict = value as? [String: Any] else { return .default }
+        return AvatarStyle(
+            head: dict["head"] as? String ?? AvatarStyle.default.head,
+            face: dict["face"] as? String ?? AvatarStyle.default.face,
+            outfit: dict["outfit"] as? String ?? AvatarStyle.default.outfit,
+            aura: dict["aura"] as? String ?? AvatarStyle.default.aura,
+            pose: dict["pose"] as? String ?? AvatarStyle.default.pose
+        )
+    }
+
     private func createAndNotify(
         hostUser: AppUser, wager: Int, tier: RankTier, searchID: String,
         opponentDoc: QueryDocumentSnapshot,
@@ -648,6 +671,7 @@ final class FirestoreService {
         )
 
         let opponentRankPoints = opponentQueue["rankPoints"] as? Int ?? 0
+        let opponentAvatarStyle = avatarStyle(from: opponentQueue["avatarStyle"])
 
         let existing = try await db.collection("sessions").document(sessionID).getDocument()
         if existing.exists {
@@ -665,8 +689,8 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .inProgress,
             players: [
-                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier, rankPoints: hostUser.rank(for: mode).points),
-                MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints)
+                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier, rankPoints: hostUser.rank(for: mode).points, avatarStyle: hostUser.cosmetics.avatarStyle),
+                MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints, avatarStyle: opponentAvatarStyle)
             ],
             seed: seed,
             puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
@@ -919,8 +943,8 @@ final class FirestoreService {
             difficulty: invite.difficulty,
             status: .waiting,
             players: [
-                MatchPlayer(userID: invite.fromID, username: fromUser.username, wager: 0, rankTier: fromUser.rank(for: invite.mode).displayTier, rankPoints: fromUser.rank(for: invite.mode).points),
-                MatchPlayer(userID: currentUser.id, username: currentUser.username, wager: 0, rankTier: currentUser.rank(for: invite.mode).displayTier, rankPoints: currentUser.rank(for: invite.mode).points)
+                MatchPlayer(userID: invite.fromID, username: fromUser.username, wager: 0, rankTier: fromUser.rank(for: invite.mode).displayTier, rankPoints: fromUser.rank(for: invite.mode).points, avatarStyle: fromUser.cosmetics.avatarStyle),
+                MatchPlayer(userID: currentUser.id, username: currentUser.username, wager: 0, rankTier: currentUser.rank(for: invite.mode).displayTier, rankPoints: currentUser.rank(for: invite.mode).points, avatarStyle: currentUser.cosmetics.avatarStyle)
             ],
             seed: seed,
             puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: invite.mode, difficulty: invite.difficulty, seed: seed),

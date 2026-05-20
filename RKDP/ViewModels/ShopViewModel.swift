@@ -120,10 +120,15 @@ final class ShopViewModel: ObservableObject {
 
     func isEquipped(_ item: CosmeticItem) -> Bool {
         switch item.category {
-        case .title:       return ownedCosmetics.equippedTitle == item.id
-        case .boardTheme:  return ownedCosmetics.equippedBoardTheme == item.id
-        case .numberFont:  return ownedCosmetics.equippedNumberFont == item.id
-        case .cellBorder:  return ownedCosmetics.equippedCellBorder == item.id
+        case .title:        return ownedCosmetics.equippedTitle == item.id
+        case .boardTheme:   return ownedCosmetics.equippedBoardTheme == item.id
+        case .numberFont:   return ownedCosmetics.equippedNumberFont == item.id
+        case .cellBorder:   return ownedCosmetics.equippedCellBorder == item.id
+        case .avatarHead:   return ownedCosmetics.equippedAvatarHead == item.id
+        case .avatarFace:   return ownedCosmetics.equippedAvatarFace == item.id
+        case .avatarOutfit: return ownedCosmetics.equippedAvatarOutfit == item.id
+        case .avatarAura:   return ownedCosmetics.equippedAvatarAura == item.id
+        case .avatarPose:   return ownedCosmetics.equippedAvatarPose == item.id
         }
     }
 

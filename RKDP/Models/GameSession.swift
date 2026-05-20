@@ -110,8 +110,9 @@ struct MatchPlayer: Codable {
     var rankTier: RankTier
     var rankPoints: Int = 0
     var isBot: Bool = false
+    var avatarStyle: AvatarStyle = .default
 
-    init(userID: String, username: String, wager: Int, finishTime: Int? = nil, rankTier: RankTier, rankPoints: Int = 0, isBot: Bool = false) {
+    init(userID: String, username: String, wager: Int, finishTime: Int? = nil, rankTier: RankTier, rankPoints: Int = 0, isBot: Bool = false, avatarStyle: AvatarStyle = .default) {
         self.userID = userID
         self.username = username
         self.wager = wager
@@ -119,10 +120,11 @@ struct MatchPlayer: Codable {
         self.rankTier = rankTier
         self.rankPoints = rankPoints
         self.isBot = isBot
+        self.avatarStyle = avatarStyle
     }
 
     enum CodingKeys: String, CodingKey {
-        case userID, username, wager, finishTime, rankTier, rankPoints, isBot
+        case userID, username, wager, finishTime, rankTier, rankPoints, isBot, avatarStyle
     }
 
     init(from decoder: Decoder) throws {
@@ -134,6 +136,7 @@ struct MatchPlayer: Codable {
         rankTier = try c.decode(RankTier.self, forKey: .rankTier)
         rankPoints = try c.decodeIfPresent(Int.self, forKey: .rankPoints) ?? 0
         isBot = try c.decodeIfPresent(Bool.self, forKey: .isBot) ?? false
+        avatarStyle = try c.decodeIfPresent(AvatarStyle.self, forKey: .avatarStyle) ?? .default
     }
 
     func encode(to encoder: Encoder) throws {
@@ -145,6 +148,7 @@ struct MatchPlayer: Codable {
         try c.encode(rankTier, forKey: .rankTier)
         try c.encode(rankPoints, forKey: .rankPoints)
         try c.encode(isBot, forKey: .isBot)
+        try c.encode(avatarStyle, forKey: .avatarStyle)
     }
 }
 

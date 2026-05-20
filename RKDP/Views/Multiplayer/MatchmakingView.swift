@@ -324,15 +324,11 @@ struct MatchmakingView: View {
 
             // Opponent card
             VStack(spacing: 12) {
-                Circle()
-                    .fill(AppTheme.brandGradient)
-                    .frame(width: 64, height: 64)
-                    .overlay(
-                        Text(String((opponent?.username ?? "?").prefix(1)))
-                            .font(.title2.bold())
-                            .foregroundStyle(.white)
-                    )
-                    .shadow(color: AppTheme.accent.opacity(0.5), radius: 10)
+                StickDuelerAvatarView(
+                    style: oppUser?.cosmetics.avatarStyle ?? opponent?.avatarStyle ?? .default,
+                    size: 76,
+                    initials: opponent.map { String($0.username.prefix(1)) }
+                )
 
                 VStack(spacing: 4) {
                     Text(opponent?.username ?? "Opponent")
@@ -1094,10 +1090,7 @@ struct MatchBreakdownView: View {
 
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(isWinner ? AppTheme.brandGradient : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 42, height: 42)
-                    .overlay(Text(String(player.username.prefix(1))).font(.headline.bold()).foregroundStyle(.white))
+                StickDuelerAvatarView(style: player.avatarStyle, size: 46, initials: String(player.username.prefix(1)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isCurrent ? "You" : player.username)
                         .font(.headline.bold())

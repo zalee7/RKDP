@@ -8,6 +8,7 @@ struct ProfileView: View {
     @StateObject private var shop: ShopViewModel
     @State private var isGrantingTesterAccess = false
     @State private var selectedOwnedCategory: CosmeticCategory = .title
+    @State private var showAvatarEditor = false
 
     init(user: AppUser, onDone: (() -> Void)? = nil) {
         self.user = user
@@ -24,11 +25,18 @@ struct ProfileView: View {
                     VStack(spacing: 20) {
                         // Avatar header card
                         VStack(spacing: 12) {
-                            Circle()
-                                .fill(AppTheme.brandGradient)
-                                .frame(width: 72, height: 72)
-                                .overlay(Text(String(user.username.prefix(1))).font(.largeTitle.bold()).foregroundStyle(.white))
-                                .shadow(color: AppTheme.accent.opacity(0.6), radius: 12)
+                            StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 96)
+
+                            Button { showAvatarEditor = true } label: {
+                                Label("Customize Avatar", systemImage: "sparkles")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(AppTheme.hotPink.opacity(0.18))
+                                    .foregroundStyle(AppTheme.hotPink)
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(AppTheme.hotPink.opacity(0.45), lineWidth: 1))
+                            }
 
                             Text(user.username).font(.title2.bold()).foregroundStyle(AppTheme.textPrimary)
                             Text(shop.equippedTitleName)
@@ -179,6 +187,11 @@ struct ProfileView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showAvatarEditor) {
+                AvatarEditorView(shop: shop) {
+                    await auth.refreshUser()
+                }
+            }
         }
     }
 
@@ -194,6 +207,85 @@ struct ProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
         .padding(.horizontal)
+    }
+}
+
+
+private struct AvatarEditorView: View {
+    @ObservedObject var shop: ShopViewModel
+    var onChanged: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedCategory: CosmeticCategory = .avatarHead
+
+    private let categories: [CosmeticCategory] = [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura, .avatarPose]
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 18) {
+                        StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 150)
+                            .padding(.top, 18)
+                        Text("Stick Dueler")
+                            .font(.title2.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+                        Text("Avatar parts are cosmetic only and never affect ranked play.")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categories, id: \.self) { category in
+                                    Button { selectedCategory = category } label: {
+                                        Text(category.rawValue.replacingOccurrences(of: "Avatar ", with: ""))
+                                            .font(.caption.bold())
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(selectedCategory == category ? AppTheme.crownGold : Color.white.opacity(0.08))
+                                            .foregroundStyle(selectedCategory == category ? .white : AppTheme.textSecondary)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                            ForEach(CosmeticCatalog.all.filter { $0.category == selectedCategory }) { item in
+                                ShopItemCard(
+                                    item: item,
+                                    isOwned: shop.isOwned(item),
+                                    isEquipped: shop.isEquipped(item),
+                                    canAfford: shop.canAfford(item),
+                                    isLimited: false
+                                ) {
+                                    Task {
+                                        let changed = shop.isOwned(item) ? await shop.equip(item) : await shop.purchase(item)
+                                        if changed { await onChanged() }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
+                    }
+                }
+            }
+            .navigationTitle("Customize Avatar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .alert(
+                "Avatar update failed",
+                isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
+            ) {
+                Button("OK") { shop.errorMessage = nil }
+            } message: {
+                Text(shop.errorMessage ?? "")
+            }
+        }
     }
 }
 

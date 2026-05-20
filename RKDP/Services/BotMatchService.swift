@@ -42,7 +42,8 @@ enum BotMatchService {
             wager: wager,
             rankTier: .bronze,
             rankPoints: int(in: 40...420, rng: &rng),
-            isBot: true
+            isBot: true,
+            avatarStyle: AvatarStyle(head: "avatar_head_headphones", face: "avatar_face_focused", outfit: "avatar_outfit_hoodie", aura: "avatar_aura_teal", pose: "avatar_pose_ready")
         )
     }
 

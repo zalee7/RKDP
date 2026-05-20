@@ -184,7 +184,8 @@ final class RankingService {
                         wins: rankInfo.wins,
                         bestTime: rankInfo.bestTime,
                         mode: session.mode,
-                        equippedTitle: CosmeticCatalog.allTitles.first { $0.id == user.cosmetics.equippedTitle }?.name
+                        equippedTitle: CosmeticCatalog.allTitles.first { $0.id == user.cosmetics.equippedTitle }?.name,
+                        avatarStyle: user.cosmetics.avatarStyle
                     )
                     let encodedEntry = try Firestore.Encoder().encode(leaderboardEntry)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)

@@ -239,10 +239,7 @@ struct FriendsView: View {
     }
 
     private func avatar(username: String) -> some View {
-        Circle()
-            .fill(AppTheme.brandGradient)
-            .frame(width: 42, height: 42)
-            .overlay(Text(String(username.prefix(1))).font(.headline.bold()).foregroundStyle(.white))
+        StickDuelerAvatarView(style: .default, size: 44, initials: String(username.prefix(1)))
     }
 
     private func emptyText(_ text: String) -> some View {

@@ -418,6 +418,9 @@ struct ShopItemCard: View {
                 } else if item.category == .boardTheme {
                     ShopThemePreview(themeID: item.id)
                         .frame(height: 72)
+                } else if item.category.isAvatarCategory {
+                    AvatarPartPreview(item: item)
+                        .frame(height: 72)
                 } else {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(AppTheme.cardBackground)
@@ -482,11 +485,40 @@ struct ShopItemCard: View {
 
     private func iconForCategory(_ cat: CosmeticCategory) -> String {
         switch cat {
-        case .title:       return "text.badge.star"
-        case .boardTheme:  return "paintpalette.fill"
-        case .numberFont:  return "textformat"
-        case .cellBorder:  return "rectangle.inset.filled"
+        case .title:        return "text.badge.star"
+        case .boardTheme:   return "paintpalette.fill"
+        case .numberFont:   return "textformat"
+        case .cellBorder:   return "rectangle.inset.filled"
+        case .avatarHead:   return "crown.fill"
+        case .avatarFace:   return "face.smiling.fill"
+        case .avatarOutfit: return "tshirt.fill"
+        case .avatarAura:   return "sparkles"
+        case .avatarPose:   return "figure.wave"
         }
+    }
+}
+
+
+private struct AvatarPartPreview: View {
+    let item: CosmeticItem
+
+    private var style: AvatarStyle {
+        var style = AvatarStyle.default
+        switch item.category {
+        case .avatarHead: style.head = item.id
+        case .avatarFace: style.face = item.id
+        case .avatarOutfit: style.outfit = item.id
+        case .avatarAura: style.aura = item.id
+        case .avatarPose: style.pose = item.id
+        default: break
+        }
+        return style
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(AppTheme.cardBackground)
+            .overlay(StickDuelerAvatarView(style: style, size: 62))
     }
 }
 

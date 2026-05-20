@@ -105,11 +105,7 @@ struct HomeView: View {
     @ViewBuilder
     private func userHeader(user: AppUser) -> some View {
         HStack(spacing: 14) {
-            Circle()
-                .fill(AppTheme.brandGradient)
-                .frame(width: 48, height: 48)
-                .overlay(Text(String(user.username.prefix(1))).font(.title3.bold()).foregroundStyle(.white))
-                .shadow(color: AppTheme.accent.opacity(0.6), radius: 8)
+            StickDuelerAvatarView(style: user.cosmetics.avatarStyle, size: 54)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.username).font(.headline).foregroundStyle(AppTheme.textPrimary)

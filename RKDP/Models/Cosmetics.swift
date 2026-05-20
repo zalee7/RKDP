@@ -160,10 +160,22 @@ extension EnvironmentValues {
 // MARK: - Shop item types
 
 enum CosmeticCategory: String, Codable, CaseIterable {
-    case title       = "Titles"
-    case boardTheme  = "Game Theme"
-    case numberFont  = "Number Style"
-    case cellBorder  = "Cell Border"
+    case title        = "Titles"
+    case boardTheme   = "Game Theme"
+    case numberFont   = "Number Style"
+    case cellBorder   = "Cell Border"
+    case avatarHead   = "Avatar Head"
+    case avatarFace   = "Avatar Face"
+    case avatarOutfit = "Avatar Outfit"
+    case avatarAura   = "Avatar Aura"
+    case avatarPose   = "Avatar Pose"
+
+    var isAvatarCategory: Bool {
+        switch self {
+        case .avatarHead, .avatarFace, .avatarOutfit, .avatarAura, .avatarPose: return true
+        default: return false
+        }
+    }
 }
 
 struct CosmeticItem: Identifiable, Codable {
@@ -175,30 +187,136 @@ struct CosmeticItem: Identifiable, Codable {
     var description: String
 }
 
+struct AvatarStyle: Codable, Equatable {
+    var head: String
+    var face: String
+    var outfit: String
+    var aura: String
+    var pose: String
+
+    static let `default` = AvatarStyle(
+        head: "avatar_head_none",
+        face: "avatar_face_smile",
+        outfit: "avatar_outfit_basic",
+        aura: "avatar_aura_none",
+        pose: "avatar_pose_neutral"
+    )
+}
+
 struct OwnedCosmetics: Codable {
     var purchasedIDs: Set<String>
     var equippedTitle: String
     var equippedBoardTheme: String
     var equippedNumberFont: String
     var equippedCellBorder: String
+    var equippedAvatarHead: String
+    var equippedAvatarFace: String
+    var equippedAvatarOutfit: String
+    var equippedAvatarAura: String
+    var equippedAvatarPose: String
+
+    static let defaultPurchasedIDs: Set<String> = [
+        "title_puzzler", "theme_classic", "font_default", "border_default",
+        "avatar_head_none", "avatar_face_smile", "avatar_outfit_basic", "avatar_aura_none", "avatar_pose_neutral"
+    ]
 
     static let `default` = OwnedCosmetics(
-        purchasedIDs: ["title_puzzler", "theme_classic", "font_default", "border_default"],
+        purchasedIDs: defaultPurchasedIDs,
         equippedTitle: "title_puzzler",
         equippedBoardTheme: "theme_classic",
         equippedNumberFont: "font_default",
-        equippedCellBorder: "border_default"
+        equippedCellBorder: "border_default",
+        equippedAvatarHead: AvatarStyle.default.head,
+        equippedAvatarFace: AvatarStyle.default.face,
+        equippedAvatarOutfit: AvatarStyle.default.outfit,
+        equippedAvatarAura: AvatarStyle.default.aura,
+        equippedAvatarPose: AvatarStyle.default.pose
     )
 
+    var avatarStyle: AvatarStyle {
+        AvatarStyle(
+            head: equippedAvatarHead,
+            face: equippedAvatarFace,
+            outfit: equippedAvatarOutfit,
+            aura: equippedAvatarAura,
+            pose: equippedAvatarPose
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case purchasedIDs, equippedTitle, equippedBoardTheme, equippedNumberFont, equippedCellBorder
+        case equippedAvatarHead, equippedAvatarFace, equippedAvatarOutfit, equippedAvatarAura, equippedAvatarPose
+    }
+
+    init(
+        purchasedIDs: Set<String>,
+        equippedTitle: String,
+        equippedBoardTheme: String,
+        equippedNumberFont: String,
+        equippedCellBorder: String,
+        equippedAvatarHead: String,
+        equippedAvatarFace: String,
+        equippedAvatarOutfit: String,
+        equippedAvatarAura: String,
+        equippedAvatarPose: String
+    ) {
+        self.purchasedIDs = purchasedIDs.union(Self.defaultPurchasedIDs)
+        self.equippedTitle = equippedTitle
+        self.equippedBoardTheme = equippedBoardTheme
+        self.equippedNumberFont = equippedNumberFont
+        self.equippedCellBorder = equippedCellBorder
+        self.equippedAvatarHead = equippedAvatarHead
+        self.equippedAvatarFace = equippedAvatarFace
+        self.equippedAvatarOutfit = equippedAvatarOutfit
+        self.equippedAvatarAura = equippedAvatarAura
+        self.equippedAvatarPose = equippedAvatarPose
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Self.default
+        purchasedIDs = (try c.decodeIfPresent(Set<String>.self, forKey: .purchasedIDs) ?? defaults.purchasedIDs).union(Self.defaultPurchasedIDs)
+        equippedTitle = try c.decodeIfPresent(String.self, forKey: .equippedTitle) ?? defaults.equippedTitle
+        equippedBoardTheme = try c.decodeIfPresent(String.self, forKey: .equippedBoardTheme) ?? defaults.equippedBoardTheme
+        equippedNumberFont = try c.decodeIfPresent(String.self, forKey: .equippedNumberFont) ?? defaults.equippedNumberFont
+        equippedCellBorder = try c.decodeIfPresent(String.self, forKey: .equippedCellBorder) ?? defaults.equippedCellBorder
+        equippedAvatarHead = try c.decodeIfPresent(String.self, forKey: .equippedAvatarHead) ?? defaults.equippedAvatarHead
+        equippedAvatarFace = try c.decodeIfPresent(String.self, forKey: .equippedAvatarFace) ?? defaults.equippedAvatarFace
+        equippedAvatarOutfit = try c.decodeIfPresent(String.self, forKey: .equippedAvatarOutfit) ?? defaults.equippedAvatarOutfit
+        equippedAvatarAura = try c.decodeIfPresent(String.self, forKey: .equippedAvatarAura) ?? defaults.equippedAvatarAura
+        equippedAvatarPose = try c.decodeIfPresent(String.self, forKey: .equippedAvatarPose) ?? defaults.equippedAvatarPose
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(purchasedIDs, forKey: .purchasedIDs)
+        try c.encode(equippedTitle, forKey: .equippedTitle)
+        try c.encode(equippedBoardTheme, forKey: .equippedBoardTheme)
+        try c.encode(equippedNumberFont, forKey: .equippedNumberFont)
+        try c.encode(equippedCellBorder, forKey: .equippedCellBorder)
+        try c.encode(equippedAvatarHead, forKey: .equippedAvatarHead)
+        try c.encode(equippedAvatarFace, forKey: .equippedAvatarFace)
+        try c.encode(equippedAvatarOutfit, forKey: .equippedAvatarOutfit)
+        try c.encode(equippedAvatarAura, forKey: .equippedAvatarAura)
+        try c.encode(equippedAvatarPose, forKey: .equippedAvatarPose)
+    }
+
     mutating func equip(_ item: CosmeticItem) {
+        purchasedIDs.insert(item.id)
         switch item.category {
-        case .title:       equippedTitle = item.id
-        case .boardTheme:  equippedBoardTheme = item.id
-        case .numberFont:  equippedNumberFont = item.id
-        case .cellBorder:  equippedCellBorder = item.id
+        case .title:        equippedTitle = item.id
+        case .boardTheme:   equippedBoardTheme = item.id
+        case .numberFont:   equippedNumberFont = item.id
+        case .cellBorder:   equippedCellBorder = item.id
+        case .avatarHead:   equippedAvatarHead = item.id
+        case .avatarFace:   equippedAvatarFace = item.id
+        case .avatarOutfit: equippedAvatarOutfit = item.id
+        case .avatarAura:   equippedAvatarAura = item.id
+        case .avatarPose:   equippedAvatarPose = item.id
         }
     }
 }
+
 
 // MARK: - Daily rotation
 
@@ -232,7 +350,7 @@ struct DailyRotation {
 // MARK: - Catalog
 
 struct CosmeticCatalog {
-    static let all: [CosmeticItem] = allTitles + boardThemes + numberFonts + cellBorders
+    static let all: [CosmeticItem] = allTitles + boardThemes + numberFonts + cellBorders + avatarHeads + avatarFaces + avatarOutfits + avatarAuras + avatarPoses
 
     // Full title pool — only `dailySlots` of the paid ones appear in the shop each day
     static let allTitles: [CosmeticItem] = [
@@ -289,4 +407,47 @@ struct CosmeticCatalog {
         CosmeticItem(id: "border_glow",     name: "Glow",         category: .cellBorder, price: 400, previewImageName: "border_glow",     description: "Selected cells emit a soft glow."),
         CosmeticItem(id: "border_dash",     name: "Dashed",       category: .cellBorder, price: 200, previewImageName: "border_dash",     description: "Dashed borders for a sketch feel."),
     ]
+
+    static let avatarHeads: [CosmeticItem] = [
+        CosmeticItem(id: "avatar_head_none",       name: "Clean",          category: .avatarHead, price: 0,     previewImageName: "", description: "Classic stick dueler head."),
+        CosmeticItem(id: "avatar_head_crown",      name: "Crown",          category: .avatarHead, price: 1_200, previewImageName: "", description: "A tiny champion crown."),
+        CosmeticItem(id: "avatar_head_headphones", name: "Headphones",     category: .avatarHead, price: 700,   previewImageName: "", description: "Locked-in puzzle focus."),
+        CosmeticItem(id: "avatar_head_wizard",     name: "Wizard Hat",     category: .avatarHead, price: 1_500, previewImageName: "", description: "For strange grid magic."),
+        CosmeticItem(id: "avatar_head_lightning",  name: "Lightning Hair", category: .avatarHead, price: 2_500, previewImageName: "", description: "Fast solve energy."),
+        CosmeticItem(id: "avatar_head_halo",       name: "Halo",           category: .avatarHead, price: 4_000, previewImageName: "", description: "Legendary clean-play glow.")
+    ]
+
+    static let avatarFaces: [CosmeticItem] = [
+        CosmeticItem(id: "avatar_face_smile",   name: "Smile",    category: .avatarFace, price: 0,     previewImageName: "", description: "Friendly default expression."),
+        CosmeticItem(id: "avatar_face_focused", name: "Focused",  category: .avatarFace, price: 500,   previewImageName: "", description: "Locked on the puzzle."),
+        CosmeticItem(id: "avatar_face_wink",    name: "Wink",     category: .avatarFace, price: 700,   previewImageName: "", description: "A little postgame confidence."),
+        CosmeticItem(id: "avatar_face_shades",  name: "Shades",   category: .avatarFace, price: 1_200, previewImageName: "", description: "Cool under ranked pressure."),
+        CosmeticItem(id: "avatar_face_gem",     name: "Gem Eyes", category: .avatarFace, price: 2_000, previewImageName: "", description: "Icon-pink jewel intensity.")
+    ]
+
+    static let avatarOutfits: [CosmeticItem] = [
+        CosmeticItem(id: "avatar_outfit_basic", name: "Basic",      category: .avatarOutfit, price: 0,     previewImageName: "", description: "Simple white-outline dueler."),
+        CosmeticItem(id: "avatar_outfit_hoodie", name: "Hoodie",    category: .avatarOutfit, price: 900,   previewImageName: "", description: "Casual ranked comfort."),
+        CosmeticItem(id: "avatar_outfit_cape",   name: "Cape",      category: .avatarOutfit, price: 1_400, previewImageName: "", description: "Victory-ready silhouette."),
+        CosmeticItem(id: "avatar_outfit_armor",  name: "Armor",     category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Built for tough grids."),
+        CosmeticItem(id: "avatar_outfit_neon",   name: "Neon Suit", category: .avatarOutfit, price: 3_200, previewImageName: "", description: "Arcade-bright ranked drip."),
+        CosmeticItem(id: "avatar_outfit_royal",  name: "Royal Robe", category: .avatarOutfit, price: 4_500, previewImageName: "", description: "A legendary crown-era look.")
+    ]
+
+    static let avatarAuras: [CosmeticItem] = [
+        CosmeticItem(id: "avatar_aura_none",  name: "None",        category: .avatarAura, price: 0,     previewImageName: "", description: "No aura equipped."),
+        CosmeticItem(id: "avatar_aura_teal",  name: "Teal Glow",   category: .avatarAura, price: 900,   previewImageName: "", description: "Soft Color Link energy."),
+        CosmeticItem(id: "avatar_aura_pink",  name: "Pink Spark",  category: .avatarAura, price: 1_200, previewImageName: "", description: "Hot-pink victory sparks."),
+        CosmeticItem(id: "avatar_aura_crown", name: "Crown Shine", category: .avatarAura, price: 2_500, previewImageName: "", description: "Gold rank radiance."),
+        CosmeticItem(id: "avatar_aura_storm", name: "Storm Ring",  category: .avatarAura, price: 4_000, previewImageName: "", description: "Legendary arena energy.")
+    ]
+
+    static let avatarPoses: [CosmeticItem] = [
+        CosmeticItem(id: "avatar_pose_neutral",  name: "Neutral",  category: .avatarPose, price: 0,     previewImageName: "", description: "Ready for the next puzzle."),
+        CosmeticItem(id: "avatar_pose_victory",  name: "Victory",  category: .avatarPose, price: 700,   previewImageName: "", description: "One arm up after a win."),
+        CosmeticItem(id: "avatar_pose_thinking", name: "Thinking", category: .avatarPose, price: 700,   previewImageName: "", description: "A puzzler's pause."),
+        CosmeticItem(id: "avatar_pose_ready",    name: "Ready",    category: .avatarPose, price: 1_100, previewImageName: "", description: "Squared up for ranked."),
+        CosmeticItem(id: "avatar_pose_flex",     name: "Flex",     category: .avatarPose, price: 1_500, previewImageName: "", description: "For confident board clears.")
+    ]
+
 }
