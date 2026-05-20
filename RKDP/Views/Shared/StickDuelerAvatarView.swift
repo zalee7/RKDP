@@ -51,22 +51,23 @@ struct StickDuelerAvatarView: View {
     }
 
     private var puzzleBody: some View {
-        PuzzlePieceShape()
-            .fill(bodyFill)
-            .frame(width: 56 * scale, height: 56 * scale)
-            .overlay(
-                PuzzlePieceShape()
-                    .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round))
-                    .frame(width: 56 * scale, height: 56 * scale)
-            )
-            .overlay(
-                PuzzlePieceShape()
-                    .stroke(Color.white.opacity(0.34), lineWidth: max(1, lineWidth * 0.32))
-                    .frame(width: 46 * scale, height: 46 * scale)
-                    .offset(x: -2 * scale, y: -2 * scale)
-            )
-            .shadow(color: bodyColor.opacity(0.28), radius: size * 0.08, x: 0, y: size * 0.04)
-            .offset(y: 4 * scale)
+        let bodySize = 56 * scale
+        let innerSize = 46 * scale
+        let innerLineWidth = max(1, lineWidth * 0.32)
+        return ZStack {
+            PuzzlePieceShape()
+                .fill(bodyFill)
+                .frame(width: bodySize, height: bodySize)
+            PuzzlePieceShape()
+                .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round))
+                .frame(width: bodySize, height: bodySize)
+            PuzzlePieceShape()
+                .stroke(Color.white.opacity(0.34), lineWidth: innerLineWidth)
+                .frame(width: innerSize, height: innerSize)
+                .offset(x: -2 * scale, y: -2 * scale)
+        }
+        .shadow(color: bodyColor.opacity(0.28), radius: size * 0.08, x: 0, y: size * 0.04)
+        .offset(y: 4 * scale)
     }
 
     private var bodyFill: LinearGradient {
