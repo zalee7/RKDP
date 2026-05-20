@@ -45,10 +45,13 @@ final class ColorLinkViewModel: ObservableObject {
     func continueDraw(row: Int, col: Int) {
         guard !isComplete else { return }
         let position = ColorLinkPosition(row: row, col: col)
-        guard board.contains(position), let activePairID else { return }
+        guard board.contains(position), let activePairID, !isPairConnected(activePairID) else { return }
 
         if let endpointPairID = board.pairID(at: position), endpointPairID != activePairID { return }
         extendActivePath(to: position, pairID: activePairID)
+        if isPairConnected(activePairID) {
+            self.activePairID = nil
+        }
 
         checkCompletion()
     }
@@ -59,6 +62,7 @@ final class ColorLinkViewModel: ObservableObject {
     }
 
     private func extendActivePath(to position: ColorLinkPosition, pairID: Int) {
+        guard !isPairConnected(pairID) else { return }
         guard owner(of: position) == nil || owner(of: position) == pairID else { return }
         guard var path = paths[pairID], let last = path.last else { return }
 

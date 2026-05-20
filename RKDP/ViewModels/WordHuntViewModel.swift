@@ -32,18 +32,25 @@ final class WordHuntViewModel: ObservableObject {
         self.priorBest = priorBest
         let s = seed ?? Int.random(in: 0..<Int.max)
         if let puzzleData,
-           puzzleData.gridRows.count == WordHuntGame.gridSize,
-           puzzleData.gridRows.allSatisfy({ $0.count == WordHuntGame.gridSize }) {
-            let grid = puzzleData.gridRows.map { Array($0.uppercased()) }
+           let grid = Self.grid(from: puzzleData) {
             self.game = WordHuntGame(grid: grid, seed: s)
         } else {
-            self.game = WordHuntGame.generate(seed: s)
+            self.game = WordHuntGame.generate(difficulty: difficulty, seed: s)
         }
         self.totalSeconds = 75
         startTimer()
     }
 
     var timeRemaining: Int { max(0, totalSeconds - elapsedSeconds) }
+
+    private static func grid(from puzzleData: WordHuntPuzzleData) -> [[Character]]? {
+        let rows = puzzleData.gridRows.map { Array($0.uppercased()) }
+        guard let size = rows.first?.count,
+              (4...7).contains(size),
+              rows.count == size,
+              rows.allSatisfy({ $0.count == size }) else { return nil }
+        return rows
+    }
 
     // MARK: - Path tracing
 
@@ -56,12 +63,7 @@ final class WordHuntViewModel: ObservableObject {
     func extendPath(row: Int, col: Int) {
         guard !currentPath.isEmpty else { return }
 
-        // Backtrack: dragging back to an earlier cell trims the path to that point
-        if let existingIdx = currentPath.firstIndex(where: { $0.row == row && $0.col == col }) {
-            currentPath = Array(currentPath[...existingIdx])
-            currentWord = String(currentPath.map { game.grid[$0.row][$0.col] })
-            return
-        }
+        guard !currentPath.contains(where: { $0.row == row && $0.col == col }) else { return }
 
         let last = currentPath.last!
         guard abs(last.row - row) <= 1, abs(last.col - col) <= 1 else { return }

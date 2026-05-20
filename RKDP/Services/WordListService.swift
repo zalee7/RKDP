@@ -100,7 +100,7 @@ enum MultiplayerPuzzleDataFactory {
             )
             return encode(data)
         case .wordHunt:
-            let game = WordHuntGame.generate(seed: seed)
+            let game = WordHuntGame.generate(difficulty: difficulty, seed: seed)
             let data = WordHuntPuzzleData(
                 wordBankVersion: WordListService.wordBankVersion,
                 gridRows: game.grid.map { String($0) }

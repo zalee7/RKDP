@@ -43,7 +43,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:
             return "Make the most valid words from the letters. Longer words score more."
         case .wordHunt:
-            return "Find as many words as possible in the letter grid before time runs out."
+            return "Find as many words as possible before time runs out. Difficulty changes board size only."
         case .wordle:
             return "Guess the hidden 5-letter word in up to 6 tries. Green = right spot, Yellow = wrong spot."
         }
@@ -155,6 +155,14 @@ extension GameMode {
             case .medium: return "6 Guesses"
             case .hard:   return "5 Guesses"
             case .expert: return "4 Guesses"
+            }
+        }
+        if self == .wordHunt {
+            switch d {
+            case .easy:   return "4×4 Board"
+            case .medium: return "5×5 Board"
+            case .hard:   return "6×6 Board"
+            case .expert: return "7×7 Board"
             }
         }
         return d.displayName

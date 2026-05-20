@@ -104,7 +104,7 @@ struct WordHuntView: View {
             Spacer()
 
             VStack(spacing: 2) {
-                Text(vm.difficulty.displayName.uppercased())
+                Text(GameMode.wordHunt.difficultyLabel(vm.difficulty).uppercased())
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.modeAccent(.wordHunt))
                 HStack(spacing: 6) {
@@ -228,13 +228,13 @@ struct WordHuntView: View {
 
     private var letterGrid: some View {
         GeometryReader { geo in
-            let cellSize = geo.size.width / CGFloat(WordHuntGame.gridSize)
+            let cellSize = geo.size.width / CGFloat(vm.game.size)
             ZStack(alignment: .topLeading) {
                 // Grid cells — each occupies exactly cellSize × cellSize
                 VStack(spacing: 0) {
-                    ForEach(0..<WordHuntGame.gridSize, id: \.self) { row in
+                    ForEach(0..<vm.game.size, id: \.self) { row in
                         HStack(spacing: 0) {
-                            ForEach(0..<WordHuntGame.gridSize, id: \.self) { col in
+                            ForEach(0..<vm.game.size, id: \.self) { col in
                                 GridCell(
                                     letter: vm.game.grid[row][col],
                                     isActive: vm.isInPath(row: row, col: col),
@@ -295,19 +295,16 @@ struct WordHuntView: View {
 
     /// Floor-division mapping: point → (row, col).
     private func floorCell(_ p: CGPoint, cellSize: CGFloat) -> (Int, Int) {
-        let col = max(0, min(WordHuntGame.gridSize - 1, Int(p.x / cellSize)))
-        let row = max(0, min(WordHuntGame.gridSize - 1, Int(p.y / cellSize)))
+        let col = max(0, min(vm.game.size - 1, Int(p.x / cellSize)))
+        let row = max(0, min(vm.game.size - 1, Int(p.y / cellSize)))
         return (row, col)
     }
 
-    /// Snap-to-nearest-adjacent-cell: among all 8 neighbours of the last path cell,
-    /// pick the one whose center is closest to the finger. Then recurse if the finger
-    /// has moved far enough to cross another cell boundary, so fast drags still catch
-    /// every cell. This naturally handles diagonals — the diagonal neighbour wins
-    /// whenever the finger is in its quadrant.
+    /// Snap-to-nearest unused adjacent cell. Paths are forward-only so dragging
+    /// back over a traced cell no longer trims/undoes the word by accident.
     private func snapExtend(to point: CGPoint, cellSize: CGFloat) {
         guard let last = vm.currentPath.last else { return }
-        let gridSize = WordHuntGame.gridSize
+        let gridSize = vm.game.size
 
         var bestDist = CGFloat.infinity
         var bestCell: (Int, Int)? = nil
@@ -318,6 +315,7 @@ struct WordHuntView: View {
                 let r = last.row + dr
                 let c = last.col + dc
                 guard r >= 0, r < gridSize, c >= 0, c < gridSize else { continue }
+                guard !vm.isInPath(row: r, col: c) else { continue }
                 let cx = (CGFloat(c) + 0.5) * cellSize
                 let cy = (CGFloat(r) + 0.5) * cellSize
                 let dist = hypot(point.x - cx, point.y - cy)

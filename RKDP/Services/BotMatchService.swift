@@ -235,7 +235,7 @@ enum BotMatchService {
                 let grid = puzzle.gridRows.map { Array($0.uppercased()) }
                 return Array(WordHuntGame(grid: grid, seed: session.seed).validWords)
             }
-            return Array(WordHuntGame.generate(seed: session.seed).validWords)
+            return Array(WordHuntGame.generate(difficulty: session.difficulty, seed: session.seed).validWords)
         default:
             return []
         }

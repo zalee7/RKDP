@@ -199,19 +199,20 @@ struct HowToPlayView: View {
         case .wordHunt:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Find as many hidden words as you can in the 4×4 letter grid.",
+                    "Find as many hidden words as you can in the letter grid.",
+                    "Difficulty changes only the board size: 4×4, 5×5, 6×6, or 7×7.",
                     "Words must be 3 or more letters and traced through adjacent tiles.",
-                    "Tiles can only be used once per word; diagonal connections count.",
+                    "Tiles can only be used once per word; diagonal connections count, but traced paths cannot be undone by dragging backward.",
                     "Longer words score more points — a 7-letter word earns 5 pts.",
                     "The round ends when the 1:15 timer expires.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
                     "Drag your finger across adjacent tiles to trace a word.",
                     "Release to submit — valid words are added to your list.",
-                    "The current path glows as you trace it.",
+                    "The current path glows as you trace it; lift your finger to reset if you want a different route.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players get the same 4×4 grid.",
+                    "Both players get the same seeded grid for the selected board size.",
                     "Highest score when the 1:15 timer ends wins.",
                     "Ties use word count, then longest word.",
                 ]),
