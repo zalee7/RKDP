@@ -179,6 +179,7 @@ struct MatchPlayerResult: Codable, Equatable {
     var wrongGuessCount: Int { Int(summary["wrongGuessCount"] ?? "0") ?? 0 }
     var revealedLetterCount: Int { Int(summary["revealedLetterCount"] ?? "\(score)") ?? score }
     var maxWrongGuesses: Int { Int(summary["maxWrongGuesses"] ?? "6") ?? 6 }
+    var hangmanGuessCount: Int { (summary["correctLetters"]?.count ?? 0) + (summary["wrongLetters"]?.count ?? 0) }
 
     var realtimeValue: [String: Any] {
         [

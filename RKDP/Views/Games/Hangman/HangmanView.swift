@@ -11,7 +11,7 @@ struct HangmanView: View {
     private let onChangeDifficulty: () -> Void
     private let onTryRanked: () -> Void
     private let onHome: () -> Void
-    @State private var didReportMatchResult = false
+    @State private var didReportFinalMatchResult = false
     @State private var didReportSoloResult = false
 
     init(
@@ -48,7 +48,7 @@ struct HangmanView: View {
     var body: some View {
         ZStack {
             AppTheme.arenaBackground.ignoresSafeArea()
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 topBar
                     .padding(.horizontal)
                     .padding(.top, 12)
@@ -56,7 +56,10 @@ struct HangmanView: View {
                 messageBanner
                     .frame(height: 30)
 
-                rescueCard
+                categoryCard
+                    .padding(.horizontal)
+
+                lavaCard
                     .padding(.horizontal)
 
                 wordSlots
@@ -81,7 +84,7 @@ struct HangmanView: View {
         .onChange(of: vm.isFinished) { _, finished in
             guard finished else { return }
             if sessionID == nil { reportSoloResult() }
-            reportMatchResult()
+            reportMatchResult(final: true)
         }
     }
 
@@ -98,7 +101,7 @@ struct HangmanView: View {
             }
             Spacer()
             VStack(spacing: 2) {
-                Text("Hangman")
+                Text("Lava Rescue")
                     .font(.headline.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                 Text(GameMode.hangman.difficultyLabel(vm.difficulty))
@@ -135,48 +138,64 @@ struct HangmanView: View {
         }
     }
 
-    private var rescueCard: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppTheme.modeGradient(.hangman))
-                    .frame(height: 178)
-                    .shadow(color: AppTheme.modeShadow(.hangman), radius: 18)
-
-                VStack(spacing: 12) {
-                    PuzzleRescueMascot(misses: vm.game.wrongGuessCount, maxMisses: vm.game.maxWrongGuesses)
-                        .frame(width: 112, height: 112)
-                    Text(rescueText)
-                        .font(.headline.bold())
-                        .foregroundStyle(.white)
-                }
+    private var categoryCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "tag.fill")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.crownGold)
+                .frame(width: 28, height: 28)
+                .background(AppTheme.crownGold.opacity(0.18))
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Category")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(vm.game.category)
+                    .font(.headline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
             }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("Starter")
+                    .font(.caption2.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(String(vm.game.starterLetter))
+                    .font(.title3.bold())
+                    .foregroundStyle(AppTheme.crownGold)
+            }
+        }
+        .padding(14)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var lavaCard: some View {
+        VStack(spacing: 12) {
+            LavaRescueScene(misses: vm.game.wrongGuessCount, maxMisses: vm.game.maxWrongGuesses, isSolved: vm.game.isSolved)
+                .frame(height: 178)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1.2))
+                .shadow(color: AppTheme.danger.opacity(0.22), radius: 18)
 
             VStack(spacing: 8) {
                 HStack {
-                    Text("Rescue Meter")
+                    Text("Lava Meter")
                         .font(.caption.bold())
                         .foregroundStyle(AppTheme.textSecondary)
                     Spacer()
-                    Text("\(vm.game.wrongGuessCount)/\(vm.game.maxWrongGuesses) misses")
+                    Text("\(vm.game.wrongGuessCount)/\(vm.game.maxWrongGuesses) wrong")
                         .font(.caption.bold())
                         .foregroundStyle(vm.game.wrongGuessCount >= vm.game.maxWrongGuesses ? AppTheme.danger : AppTheme.textPrimary)
                 }
-                ProgressView(value: Double(vm.game.maxWrongGuesses - vm.game.wrongGuessCount), total: Double(vm.game.maxWrongGuesses))
-                    .tint(AppTheme.crownGold)
+                ProgressView(value: Double(vm.game.wrongGuessCount), total: Double(vm.game.maxWrongGuesses))
+                    .tint(AppTheme.danger)
             }
         }
         .padding(14)
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
-    }
-
-    private var rescueText: String {
-        if vm.game.isSolved { return "Puzzle rescued" }
-        if vm.game.isLost { return "Rescue failed" }
-        if vm.isFinished { return "Time expired" }
-        return "Guess letters to rescue it"
     }
 
     private var wordSlots: some View {
@@ -188,10 +207,10 @@ struct HangmanView: View {
                     .frame(width: 36, height: 46)
                     .background(Color.black.opacity(0.24))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(AppTheme.modeAccent(.hangman).opacity(0.45), lineWidth: 1.4))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(slotBorderColor(letter), lineWidth: 1.4))
                     .overlay(alignment: .bottom) {
                         Rectangle()
-                            .fill(AppTheme.crownGold)
+                            .fill(vm.game.correctLetters.contains(letter) ? AppTheme.crownGold : Color.white.opacity(0.22))
                             .frame(height: 3)
                             .padding(.horizontal, 7)
                             .padding(.bottom, 5)
@@ -205,9 +224,13 @@ struct HangmanView: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
     }
 
+    private func slotBorderColor(_ letter: Character) -> Color {
+        vm.game.correctLetters.contains(letter) ? AppTheme.crownGold.opacity(0.58) : AppTheme.modeAccent(.hangman).opacity(0.35)
+    }
+
     private var wrongLetters: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Misses")
+            Text("Wrong Letters")
                 .font(.caption.bold())
                 .foregroundStyle(AppTheme.textSecondary)
             Text(sortedLetters(vm.game.wrongLetters).joined(separator: " ").ifEmpty("None"))
@@ -226,7 +249,10 @@ struct HangmanView: View {
             ForEach(vm.alphabetRows.indices, id: \.self) { row in
                 HStack(spacing: 6) {
                     ForEach(vm.alphabetRows[row], id: \.self) { letter in
-                        Button { vm.guess(letter) } label: {
+                        Button {
+                            let accepted = vm.guess(letter)
+                            if accepted { reportMatchResult(final: vm.isFinished) }
+                        } label: {
                             Text(String(letter))
                                 .font(.subheadline.bold())
                                 .foregroundStyle(keyTextColor(letter))
@@ -258,14 +284,15 @@ struct HangmanView: View {
             mode: .hangman,
             difficulty: vm.difficulty,
             completed: vm.game.isSolved,
-            title: vm.game.isSolved ? "Puzzle Rescued" : "Rescue Failed",
-            message: vm.game.isSolved ? "Solved \(vm.game.targetWord) with \(vm.game.wrongGuessCount) misses." : "The word was \(vm.game.targetWord).",
+            title: vm.game.isSolved ? "Puzzle Rescued" : "Lava Reached The Puzzle",
+            message: vm.game.isSolved ? "Solved \(vm.game.targetWord) with \(vm.game.wrongGuessCount) wrong letters." : "The word was \(vm.game.targetWord).",
             elapsedSeconds: vm.elapsedSeconds,
             score: vm.game.revealedUniqueCount,
             progress: vm.game.progress,
             stats: [
+                SoloResultStat(label: "Category", value: vm.game.category),
                 SoloResultStat(label: "Word", value: vm.game.targetWord.capitalized),
-                SoloResultStat(label: "Misses", value: "\(vm.game.wrongGuessCount)/\(vm.game.maxWrongGuesses)"),
+                SoloResultStat(label: "Wrong", value: "\(vm.game.wrongGuessCount)/\(vm.game.maxWrongGuesses)"),
                 SoloResultStat(label: "Pattern", value: displayPattern(vm.game.revealedPattern)),
                 SoloResultStat(label: "Mode", value: "Untimed")
             ]
@@ -278,10 +305,13 @@ struct HangmanView: View {
         onSoloResult(soloResult)
     }
 
-    private func reportMatchResult() {
-        guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
-        vm.stop()
+    private func reportMatchResult(final: Bool) {
+        guard sessionID != nil, let userID else { return }
+        if final {
+            guard !didReportFinalMatchResult else { return }
+            didReportFinalMatchResult = true
+            vm.stop()
+        }
         onMatchResult(MatchPlayerResult(
             userID: userID,
             mode: .hangman,
@@ -289,24 +319,36 @@ struct HangmanView: View {
             elapsedSeconds: vm.elapsedSeconds,
             score: vm.game.revealedUniqueCount,
             progress: vm.game.progress,
-            status: vm.game.isSolved ? "Solved" : (vm.game.isLost ? "Out of misses" : "Time expired"),
+            status: final ? finalStatus : "In progress",
             summary: [
                 "targetWord": vm.game.targetWord,
+                "category": vm.game.category,
+                "starterLetter": String(vm.game.starterLetter),
                 "correctLetters": sortedLetters(vm.game.correctLetters).joined(),
                 "wrongLetters": sortedLetters(vm.game.wrongLetters).joined(),
                 "wrongGuessCount": "\(vm.game.wrongGuessCount)",
                 "revealedPattern": vm.game.revealedPattern,
                 "revealedLetterCount": "\(vm.game.revealedUniqueCount)",
                 "maxWrongGuesses": "\(vm.game.maxWrongGuesses)",
-                "solved": vm.game.isSolved ? "true" : "false"
+                "lavaLevel": "\(vm.game.wrongGuessCount)",
+                "solved": vm.game.isSolved ? "true" : "false",
+                "final": final ? "true" : "false"
             ],
             details: [
+                "Category: \(vm.game.category)",
                 "Word: \(vm.game.targetWord)",
                 "Pattern: \(displayPattern(vm.game.revealedPattern))",
+                "Starter: \(vm.game.starterLetter)",
                 "Correct: \(sortedLetters(vm.game.correctLetters).joined(separator: ", ").ifEmpty("None"))",
                 "Wrong: \(sortedLetters(vm.game.wrongLetters).joined(separator: ", ").ifEmpty("None"))"
             ]
         ))
+    }
+
+    private var finalStatus: String {
+        if vm.game.isSolved { return "Puzzle rescued" }
+        if vm.game.isLost { return "Lava reached the puzzle" }
+        return "Time expired"
     }
 
     private func displayPattern(_ pattern: String) -> String {
@@ -321,7 +363,6 @@ struct HangmanView: View {
         String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
-
 
 private struct HangmanWrapLayout: Layout {
     var spacing: CGFloat = 8
@@ -362,15 +403,78 @@ private struct HangmanWrapLayout: Layout {
     }
 }
 
+private struct LavaRescueScene: View {
+    let misses: Int
+    let maxMisses: Int
+    let isSolved: Bool
+
+    private var lavaProgress: Double {
+        Double(misses) / Double(max(1, maxMisses))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .bottom) {
+                LinearGradient(colors: [Color.black.opacity(0.65), Color(red: 0.16, green: 0.08, blue: 0.22)], startPoint: .top, endPoint: .bottom)
+
+                ForEach(0..<7, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: geo.size.width * 0.86, height: 1)
+                        .offset(y: -CGFloat(index) * geo.size.height / 7)
+                }
+
+                LavaWave()
+                    .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.26, blue: 0.16), Color(red: 1.0, green: 0.64, blue: 0.12)], startPoint: .bottom, endPoint: .top))
+                    .frame(height: max(18, geo.size.height * CGFloat(lavaProgress)))
+                    .shadow(color: AppTheme.danger.opacity(0.45), radius: 18)
+
+                PuzzleRescueMascot(misses: misses, maxMisses: maxMisses, isSolved: isSolved)
+                    .frame(width: 112, height: 112)
+                    .offset(y: -geo.size.height * CGFloat(lavaProgress) * 0.16)
+
+                VStack {
+                    Spacer()
+                    Text(sceneText)
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.35), radius: 6)
+                        .padding(.bottom, 12)
+                }
+            }
+        }
+    }
+
+    private var sceneText: String {
+        if isSolved { return "Puzzle rescued" }
+        if misses >= maxMisses { return "Lava reached the puzzle" }
+        return "Keep the puzzle above lava"
+    }
+}
+
+private struct LavaWave: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.18))
+        path.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.minY + rect.height * 0.10), control: CGPoint(x: rect.width * 0.25, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.18), control: CGPoint(x: rect.width * 0.75, y: rect.minY + rect.height * 0.30))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 private struct PuzzleRescueMascot: View {
     let misses: Int
     let maxMisses: Int
+    let isSolved: Bool
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(AppTheme.crownGold.opacity(0.4), lineWidth: 6)
-                .scaleEffect(1 + CGFloat(misses) * 0.025)
+                .stroke(isSolved ? AppTheme.success.opacity(0.55) : AppTheme.crownGold.opacity(0.4), lineWidth: 6)
+                .scaleEffect(isSolved ? 1.12 : 1 + CGFloat(misses) * 0.025)
                 .opacity(max(0.2, 1 - Double(misses) * 0.1))
 
             PuzzlePieceShape()
@@ -380,7 +484,7 @@ private struct PuzzleRescueMascot: View {
                 .opacity(max(0.35, 1 - Double(misses) / Double(max(1, maxMisses)) * 0.45))
                 .overlay(face)
 
-            if misses > 0 {
+            if misses > 0, !isSolved {
                 ForEach(0..<min(misses, maxMisses), id: \.self) { index in
                     CrackMark(index: index)
                         .stroke(Color.white.opacity(0.85), lineWidth: 2)
@@ -395,10 +499,15 @@ private struct PuzzleRescueMascot: View {
                 Circle().fill(Color.white).frame(width: 9, height: 9)
                 Circle().fill(Color.white).frame(width: 9, height: 9)
             }
-            Capsule()
-                .stroke(Color.white, lineWidth: 3)
-                .frame(width: 32, height: misses >= maxMisses ? 6 : 14)
-                .rotationEffect(.degrees(misses >= maxMisses ? 0 : 0))
+            if isSolved {
+                SmileShape()
+                    .stroke(Color.white, lineWidth: 3)
+                    .frame(width: 34, height: 16)
+            } else {
+                Capsule()
+                    .stroke(Color.white, lineWidth: 3)
+                    .frame(width: 32, height: misses >= maxMisses ? 6 : 14)
+            }
         }
     }
 }
@@ -440,6 +549,15 @@ private struct CrackMark: Shape {
         path.move(to: CGPoint(x: x, y: y))
         path.addLine(to: CGPoint(x: x + 14, y: y + 12))
         path.addLine(to: CGPoint(x: x + 6, y: y + 24))
+        return path
+    }
+}
+
+private struct SmileShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.2))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.2), control: CGPoint(x: rect.midX, y: rect.maxY))
         return path
     }
 }

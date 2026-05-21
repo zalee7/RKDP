@@ -1,7 +1,7 @@
 import Foundation
 
 enum WordListService {
-    static let wordBankVersion = "2026-05-20-word-expansion-v1"
+    static let wordBankVersion = "2026-05-21-lava-rescue-v1"
 
     static let wordleAnswers: [String] = loadList(named: "wordle_answers", expectedLength: 5, fallback: [
         "CROWN", "BLOCK", "GRIDS", "TRACE", "LINKS"
@@ -18,20 +18,31 @@ enum WordListService {
 
     static let wordHuntValidWords: Set<String> = Set(loadList(named: "word_hunt_valid_words", minimumLength: 3, fallback: Array(anagramValidWords)))
 
-    static let hangmanWords: [String] = loadList(named: "hangman_words", minimumLength: 5, fallback: [
-        "CROWN", "PUZZLE", "VICTORY", "ADVENTURE"
+    static let hangmanWordEntries: [HangmanWordEntry] = loadCategorizedList(named: "hangman_words", minimumLength: 5, fallback: [
+        HangmanWordEntry(category: "Grid Duel", word: "CROWN"),
+        HangmanWordEntry(category: "Puzzle", word: "PUZZLE"),
+        HangmanWordEntry(category: "Competition", word: "VICTORY"),
+        HangmanWordEntry(category: "Adventure", word: "ADVENTURE")
     ])
 
-    static func hangmanWords(for difficulty: Difficulty) -> [String] {
-        let filtered = hangmanWords.filter { word in
+    static let hangmanWords: [String] = hangmanWordEntries.map(\.word)
+
+    static func hangmanEntries(for difficulty: Difficulty) -> [HangmanWordEntry] {
+        let filtered = hangmanWordEntries.filter { entry in
             switch difficulty {
-            case .easy: return word.count == 5
-            case .medium: return word.count == 6
-            case .hard: return word.count == 7
-            case .expert: return word.count >= 8
+            case .easy: return entry.word.count == 5
+            case .medium: return entry.word.count == 6
+            case .hard: return entry.word.count == 7
+            case .expert: return entry.word.count >= 8
             }
         }
-        return filtered.isEmpty ? hangmanWords : filtered
+        let categorized = filtered.filter { $0.category != "Mystery" }
+        if !categorized.isEmpty { return categorized }
+        return filtered.isEmpty ? hangmanWordEntries : filtered
+    }
+
+    static func hangmanWords(for difficulty: Difficulty) -> [String] {
+        hangmanEntries(for: difficulty).map(\.word)
     }
 
     static func anagramBaseWords(for difficulty: Difficulty) -> [String] {
@@ -49,6 +60,42 @@ enum WordListService {
             9: ["CARPENTER", "TRANSLATE", "IMPORTANT"]
         ]
         return loadList(named: "anagram_base_\(length)", expectedLength: length, fallback: fallbackByLength[length] ?? ["CASTLE"])
+    }
+
+
+    private static func loadCategorizedList(named name: String, minimumLength: Int, fallback: [HangmanWordEntry]) -> [HangmanWordEntry] {
+        let resourceURL = Bundle.main.url(forResource: name, withExtension: "txt", subdirectory: "WordLists")
+            ?? Bundle.main.url(forResource: name, withExtension: "txt")
+        guard let url = resourceURL,
+              let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            return normalizeCategorized(fallback, minimumLength: minimumLength)
+        }
+        let entries = raw.components(separatedBy: .newlines).compactMap { line -> HangmanWordEntry? in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return nil }
+            let pieces = trimmed.split(separator: "|", maxSplits: 1).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            if pieces.count == 2 {
+                return HangmanWordEntry(category: pieces[0], word: pieces[1])
+            }
+            return HangmanWordEntry(category: "Mystery", word: trimmed)
+        }
+        let loaded = normalizeCategorized(entries, minimumLength: minimumLength)
+        return loaded.isEmpty ? normalizeCategorized(fallback, minimumLength: minimumLength) : loaded
+    }
+
+    private static func normalizeCategorized(_ entries: [HangmanWordEntry], minimumLength: Int) -> [HangmanWordEntry] {
+        var seen = Set<String>()
+        var output: [HangmanWordEntry] = []
+        for entry in entries {
+            let category = entry.category.trimmingCharacters(in: .whitespacesAndNewlines).ifBlank("Mystery")
+            let word = entry.word.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard word.count >= minimumLength,
+                  word.unicodeScalars.allSatisfy({ CharacterSet.uppercaseLetters.contains($0) }),
+                  !seen.contains(word) else { continue }
+            seen.insert(word)
+            output.append(HangmanWordEntry(category: category, word: word))
+        }
+        return output
     }
 
     private static func loadList(named name: String, expectedLength: Int? = nil, minimumLength: Int = 1, fallback: [String]) -> [String] {
@@ -79,6 +126,21 @@ enum WordListService {
     }
 }
 
+struct HangmanWordEntry {
+    let category: String
+    let word: String
+}
+
+struct HangmanPuzzle {
+    let category: String
+    let word: String
+    let starterLetter: Character
+}
+
+private extension String {
+    func ifBlank(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
 struct WordlePuzzleData: Codable {
     let wordBankVersion: String
     let targets: [String]
@@ -101,6 +163,8 @@ struct HangmanPuzzleData: Codable {
     let targetWord: String
     let difficulty: String
     let maxWrongGuesses: Int
+    let category: String?
+    let starterLetter: String?
 }
 
 enum MultiplayerPuzzleDataFactory {
@@ -130,11 +194,14 @@ enum MultiplayerPuzzleDataFactory {
             )
             return encode(data)
         case .hangman:
+            let puzzle = HangmanGame.puzzle(difficulty: difficulty, seed: seed)
             let data = HangmanPuzzleData(
                 wordBankVersion: WordListService.wordBankVersion,
-                targetWord: HangmanGame.targetWord(difficulty: difficulty, seed: seed),
+                targetWord: puzzle.word,
                 difficulty: difficulty.rawValue,
-                maxWrongGuesses: 6
+                maxWrongGuesses: 6,
+                category: puzzle.category,
+                starterLetter: String(puzzle.starterLetter)
             )
             return encode(data)
         default:

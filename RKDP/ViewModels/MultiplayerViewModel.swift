@@ -271,9 +271,16 @@ final class MultiplayerViewModel: ObservableObject {
     func submitResult(_ result: MatchPlayerResult, session: GameSession) async {
         guard result.userID == user?.id else { return }
         if let existing = playerResults[result.userID] {
-            guard session.mode == .wordle,
-                  !existing.isFinalWordleResult,
-                  result.wordleRoundCount >= existing.wordleRoundCount else { return }
+            switch session.mode {
+            case .wordle:
+                guard !existing.isFinalWordleResult,
+                      result.wordleRoundCount >= existing.wordleRoundCount else { return }
+            case .hangman:
+                guard !MatchResolver.isFinalHangmanResult(existing),
+                      result.hangmanGuessCount >= existing.hangmanGuessCount else { return }
+            default:
+                return
+            }
         }
         do {
             try await rtdb.submitResult(sessionID: session.id, result: result)
@@ -818,6 +825,9 @@ enum MatchResolver {
             if hasClinchedWordleResult(results) { return true }
             return results.count >= session.players.count && results.values.allSatisfy(\.isFinalWordleResult)
         }
+        if session.mode == .hangman {
+            return results.count >= session.players.count && results.values.allSatisfy { isFinalHangmanResult($0) }
+        }
         return results.count >= session.players.count
     }
 
@@ -889,17 +899,22 @@ enum MatchResolver {
         return MatchResolution(winnerID: nil, reason: "Same score and word count")
     }
 
+    static func isFinalHangmanResult(_ result: MatchPlayerResult) -> Bool {
+        if let final = result.summary["final"] { return final == "true" }
+        return result.completed || result.status != "In progress"
+    }
+
     private static func compareHangman(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
         if a.completed != b.completed {
             let winner = a.completed ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Solved the Hangman word")
+            return MatchResolution(winnerID: winner.userID, reason: "Rescued the puzzle")
         }
         if a.completed && b.completed {
             if a.wrongGuessCount != b.wrongGuessCount {
                 let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
-                return MatchResolution(winnerID: winner.userID, reason: "Solved with fewer misses")
+                return MatchResolution(winnerID: winner.userID, reason: "Rescued with fewer wrong letters")
             }
-            return compareElapsed(a, b, fallback: "Same Hangman result")
+            return compareElapsed(a, b, fallback: "Same Lava Rescue result")
         }
         if a.revealedLetterCount != b.revealedLetterCount {
             let winner = a.revealedLetterCount > b.revealedLetterCount ? a : b
@@ -907,9 +922,9 @@ enum MatchResolver {
         }
         if a.wrongGuessCount != b.wrongGuessCount {
             let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Had fewer misses")
+            return MatchResolution(winnerID: winner.userID, reason: "Had fewer wrong letters")
         }
-        return compareElapsed(a, b, fallback: "Same Hangman progress")
+        return compareElapsed(a, b, fallback: "Same Lava Rescue progress")
     }
 
     private static func compareCompletion(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {

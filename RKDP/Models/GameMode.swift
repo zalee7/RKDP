@@ -28,7 +28,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "Anagrams"
         case .wordHunt:    return "Word Hunt"
         case .wordle:      return "Wordle"
-        case .hangman:     return "Hangman"
+        case .hangman:     return "Lava Rescue"
         }
     }
 
@@ -49,7 +49,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .wordle:
             return "Guess the hidden 5-letter word in up to 6 tries. Green = right spot, Yellow = wrong spot."
         case .hangman:
-            return "Guess letters to rescue the puzzle piece before you run out of misses."
+            return "Use the category and starter letter to rescue the puzzle piece before lava fills the arena."
         }
     }
 
@@ -62,7 +62,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "textformat.abc"
         case .wordHunt:    return "magnifyingglass"
         case .wordle:      return "character.cursor.ibeam"
-        case .hangman:     return "questionmark.diamond.fill"
+        case .hangman:     return "flame.fill"
         }
     }
 
@@ -78,7 +78,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "Timer ends; score, word count, then longest word decide"
         case .wordHunt:    return "Timer ends; score, word count, then longest word decide"
         case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"
-        case .hangman:     return "Solve the shared word; misses then time break ties"
+        case .hangman:     return "Rescue the shared word; wrong letters then time break ties"
         }
     }
 

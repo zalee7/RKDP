@@ -55,7 +55,7 @@ struct MatchmakingView: View {
         case .anagram:
             return "Anagrams pairs players with the same word length and rank tier."
         case .hangman:
-            return "Hangman pairs players with the same word length and rank tier."
+            return "Lava Rescue pairs players with the same word length, category puzzle rules, and rank tier."
         default:
             return "Ranked pairs players with the same mode, difficulty, rank tier, and wager."
         }
@@ -1228,6 +1228,15 @@ struct MatchBreakdownView: View {
         statGrid(modeStats(for: result))
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                Text("Category")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Spacer()
+                Text(result.summary["category"] ?? "Mystery")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.crownGold)
+            }
+            HStack {
                 Text("Target")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textSecondary)
@@ -1237,7 +1246,16 @@ struct MatchBreakdownView: View {
                     .foregroundStyle(AppTheme.crownGold)
             }
             HStack {
-                Text("Pattern")
+                Text("Starter")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Spacer()
+                Text(result.summary["starterLetter"] ?? "-")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+            }
+            HStack {
+                Text("Final Pattern")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textSecondary)
                 Spacer()
@@ -1245,39 +1263,23 @@ struct MatchBreakdownView: View {
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textPrimary)
             }
-            letterChipRow(title: "Correct", letters: result.summary["correctLetters"] ?? "", color: AppTheme.success)
-            letterChipRow(title: "Wrong", letters: result.summary["wrongLetters"] ?? "", color: AppTheme.danger)
+            HStack {
+                Text("Lava Level")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Spacer()
+                Text("\(result.wrongGuessCount)/\(result.maxWrongGuesses)")
+                    .font(.caption.bold())
+                    .foregroundStyle(result.wrongGuessCount >= result.maxWrongGuesses ? AppTheme.danger : AppTheme.textPrimary)
+            }
+            letterChipRow(title: "Correct Letters", letters: result.summary["correctLetters"] ?? "", color: AppTheme.success)
+            letterChipRow(title: "Wrong Letters", letters: result.summary["wrongLetters"] ?? "", color: AppTheme.danger)
         }
         .padding(10)
         .background(Color.black.opacity(0.24))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
         detailLines(result.details)
-    }
-
-    private func letterChipRow(title: String, letters: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption2.bold())
-                .foregroundStyle(AppTheme.textSecondary)
-            FlexibleWordWrap(spacing: 6) {
-                ForEach(Array(letters).map(String.init), id: \.self) { letter in
-                    Text(letter)
-                        .font(.caption.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(color.opacity(0.22))
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(color.opacity(0.36), lineWidth: 1))
-                }
-                if letters.isEmpty {
-                    Text("None")
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.textSecondary)
-                }
-            }
-        }
     }
 
     private func displayHangmanPattern(_ pattern: String) -> String {
@@ -1550,10 +1552,10 @@ struct MatchBreakdownView: View {
             ])
         case .hangman:
             stats.append(contentsOf: [
-                ("Solved", result.completed ? "Yes" : "No"),
-                ("Misses", "\(result.wrongGuessCount)/\(result.maxWrongGuesses)"),
+                ("Result", result.completed ? "Rescued" : "Failed"),
+                ("Wrong", "\(result.wrongGuessCount)/\(result.maxWrongGuesses)"),
                 ("Revealed", "\(result.revealedLetterCount)"),
-                ("Word", (result.summary["targetWord"] ?? "-").capitalized)
+                ("Category", result.summary["category"] ?? "Mystery")
             ])
         case .minesweeper:
             stats.append(contentsOf: [("Safe cells", result.summary["safeCells"] ?? "\(result.score)"), ("Mine hit", result.hitMine ? "Yes" : "No")])

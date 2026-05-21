@@ -220,20 +220,20 @@ struct HowToPlayView: View {
         case .hangman:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Guess letters to reveal the hidden word and rescue the puzzle piece.",
+                    "Guess letters to reveal the category word and rescue the puzzle piece.",
                     "Difficulty changes word length: 5 letters, 6 letters, 7 letters, or 8+ letters.",
-                    "You get 6 wrong guesses before the rescue fails.",
-                    "Repeated guesses do not count as misses.",
+                    "You get 6 wrong letters before the rescue fails.",
+                    "Repeated guesses do not raise the lava.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
                     "Tap letters on the keyboard to guess.",
                     "Correct letters fill every matching slot in the word.",
-                    "Wrong letters fill the miss meter and appear in the misses row.",
+                    "Wrong letters raise the lava meter and appear in the wrong letters row.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players get the same hidden word.",
-                    "Ranked Hangman has a 1:30 timer; solo Hangman is untimed.",
-                    "Solved beats unsolved. Ties use fewer misses, then faster time.",
+                    "Both players get the same category, starter letter, and target word.",
+                    "Ranked Lava Rescue has a 1:30 timer; solo Lava Rescue is untimed.",
+                    "Solved beats unsolved. Ties use fewer wrong letters, then faster time.",
                 ]),
             ]
         case .wordle:

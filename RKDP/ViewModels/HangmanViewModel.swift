@@ -16,9 +16,12 @@ final class HangmanViewModel: ObservableObject {
         self.difficulty = difficulty
         self.totalSeconds = timed ? 90 : nil
         let s = seed ?? Int.random(in: 0..<Int.max)
+        let puzzle = HangmanGame.puzzle(difficulty: difficulty, seed: s, puzzleData: puzzleData)
         self.game = HangmanGame(
-            targetWord: HangmanGame.targetWord(difficulty: difficulty, seed: s, puzzleData: puzzleData),
-            maxWrongGuesses: puzzleData?.maxWrongGuesses ?? 6
+            targetWord: puzzle.word,
+            category: puzzle.category,
+            maxWrongGuesses: puzzleData?.maxWrongGuesses ?? 6,
+            starterLetter: puzzle.starterLetter
         )
         if timed { startTimer() }
     }
@@ -32,27 +35,29 @@ final class HangmanViewModel: ObservableObject {
         [Array("QWERTYUIOP"), Array("ASDFGHJKL"), Array("ZXCVBNM")]
     }
 
-    func guess(_ letter: Character) {
-        guard !isFinished else { return }
+    @discardableResult
+    func guess(_ letter: Character) -> Bool {
+        guard !isFinished else { return false }
         let accepted = game.guess(letter)
         guard accepted else {
             message = "Already guessed"
             clearMessageSoon()
-            return
+            return false
         }
         SoundManager.shared.keyboardPress()
         if game.isSolved {
-            finish(message: "Rescued!")
+            finish(message: "Puzzle rescued!")
         } else if game.isLost {
-            finish(message: "The word was \(game.targetWord)")
+            finish(message: "Lava reached the puzzle")
         } else if game.targetWord.contains(letter) {
-            message = "Nice guess"
+            message = "Safe letter"
             clearMessageSoon()
         } else {
-            message = "Miss"
+            message = "Lava rising"
             clearMessageSoon()
             SoundManager.shared.wordInvalid()
         }
+        return true
     }
 
     func stop() { timer?.cancel() }

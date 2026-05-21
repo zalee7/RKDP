@@ -73,16 +73,19 @@ enum BotMatchService {
     }
 
     private static func hangmanResult(session: GameSession, bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
-        let puzzle = MultiplayerPuzzleDataFactory.decodeHangman(session.puzzleData)
-        let target = HangmanGame.targetWord(difficulty: session.difficulty, seed: session.seed, puzzleData: puzzle)
+        let puzzleData = MultiplayerPuzzleDataFactory.decodeHangman(session.puzzleData)
+        let puzzle = HangmanGame.puzzle(difficulty: session.difficulty, seed: session.seed, puzzleData: puzzleData)
+        let target = puzzle.word
         let uniqueLetters = Set(target).map(String.init).sorted().compactMap { $0.first }
         let solved = strongBot
-        let maxWrong = puzzle?.maxWrongGuesses ?? 6
+        let maxWrong = puzzleData?.maxWrongGuesses ?? 6
         let wrongCount = solved ? int(in: 0...2, rng: &rng) : int(in: 3...maxWrong, rng: &rng)
         let revealedCount = solved ? uniqueLetters.count : min(uniqueLetters.count - 1, int(in: 1...max(1, min(4, uniqueLetters.count)), rng: &rng))
-        let correctLetters = solved ? uniqueLetters : Array(uniqueLetters.prefix(revealedCount))
+        var correctSet = Set<Character>(solved ? uniqueLetters : Array(uniqueLetters.prefix(revealedCount)))
+        correctSet.insert(puzzle.starterLetter)
+        let correctLetters = uniqueLetters.filter { correctSet.contains($0) }
         let wrongLetters = botWrongLetters(excluding: Set(target), count: wrongCount, rng: &rng)
-        let pattern = target.map { correctLetters.contains($0) ? String($0) : "_" }.joined()
+        let pattern = target.map { correctSet.contains($0) ? String($0) : "_" }.joined()
         let elapsed = solved ? int(in: 42...min(88, max(42, elapsedSeconds)), rng: &rng) : elapsedSeconds
 
         return MatchPlayerResult(
@@ -90,24 +93,31 @@ enum BotMatchService {
             mode: .hangman,
             completed: solved,
             elapsedSeconds: elapsed,
-            score: revealedCount,
-            progress: Double(revealedCount) / Double(max(1, uniqueLetters.count)),
-            status: solved ? "Solved" : "Timed out",
+            score: correctLetters.count,
+            progress: Double(correctLetters.count) / Double(max(1, uniqueLetters.count)),
+            status: solved ? "Puzzle rescued" : "Time expired",
             summary: [
                 "targetWord": target,
+                "category": puzzle.category,
+                "starterLetter": String(puzzle.starterLetter),
                 "correctLetters": correctLetters.map(String.init).joined(),
                 "wrongLetters": wrongLetters.map(String.init).joined(),
                 "wrongGuessCount": "\(wrongCount)",
                 "revealedPattern": pattern,
-                "revealedLetterCount": "\(revealedCount)",
+                "revealedLetterCount": "\(correctLetters.count)",
                 "maxWrongGuesses": "\(maxWrong)",
+                "lavaLevel": "\(wrongCount)",
                 "solved": solved ? "true" : "false",
+                "final": "true",
                 "botResult": "true"
             ],
             details: [
+                "Category: \(puzzle.category)",
                 "Word: \(target)",
                 "Pattern: \(pattern.map { $0 == "_" ? "_" : String($0) }.joined(separator: " "))",
-                "Wrong guesses: \(wrongLetters.map(String.init).joined(separator: ", "))"
+                "Starter: \(puzzle.starterLetter)",
+                "Correct: \(correctLetters.map(String.init).joined(separator: ", "))",
+                "Wrong: \(wrongLetters.map(String.init).joined(separator: ", "))"
             ]
         )
     }
