@@ -237,7 +237,7 @@ struct StickDuelerAvatarView: View {
         case "avatar_outfit_armor": return AppTheme.royalBlue
         case "avatar_outfit_neon": return Color(hex: "7B42FF")
         case "avatar_outfit_royal": return AppTheme.crownGold
-        default: return AppTheme.hotPink
+        default: return Color(hex: style.bodyHex)
         }
     }
 
@@ -248,7 +248,7 @@ struct StickDuelerAvatarView: View {
         case "avatar_outfit_armor": return Color(hex: "71C8FF")
         case "avatar_outfit_neon": return Color(hex: "B794FF")
         case "avatar_outfit_royal": return Color(hex: "FFE887")
-        default: return Color(hex: "FF7FB7")
+        default: return Color(hex: style.bodyHex).opacity(0.78)
         }
     }
 
@@ -259,7 +259,7 @@ struct StickDuelerAvatarView: View {
         case "avatar_outfit_armor": return Color(hex: "1668D9")
         case "avatar_outfit_neon": return Color(hex: "3F1BC4")
         case "avatar_outfit_royal": return Color(hex: "D99500")
-        default: return Color(hex: "C21F68")
+        default: return Color(hex: style.bodyHex).opacity(0.58)
         }
     }
 

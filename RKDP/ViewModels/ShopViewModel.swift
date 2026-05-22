@@ -17,6 +17,7 @@ final class ShopViewModel: ObservableObject {
     }
 
     func items(for category: CosmeticCategory) -> [CosmeticItem] {
+        guard !category.isAvatarCategory else { return [] }
         let items: [CosmeticItem]
         if category == .title {
             let todayIDs = Set(DailyRotation.todaysTitles().map(\.id))
@@ -33,7 +34,7 @@ final class ShopViewModel: ObservableObject {
     }
 
     var ownedItems: [CosmeticItem] {
-        sortedForOwnership(CosmeticCatalog.all.filter { isOwned($0) })
+        sortedForOwnership(CosmeticCatalog.all.filter { isOwned($0) && !$0.category.isAvatarCategory })
     }
 
     private func sortedForOwnership(_ items: [CosmeticItem]) -> [CosmeticItem] {
@@ -168,6 +169,29 @@ final class ShopViewModel: ObservableObject {
             return true
         } catch {
             errorMessage = "Could not save that cosmetic. Please try again."
+            return false
+        }
+    }
+
+
+    @discardableResult
+    func setCustomAvatarBodyHex(_ hex: String) async -> Bool {
+        guard !isSaving else { return false }
+        var updatedCosmetics = ownedCosmetics
+        guard updatedCosmetics.setCustomAvatarBodyHex(hex) else {
+            errorMessage = "Use a valid 6-digit hex color."
+            return false
+        }
+        errorMessage = nil
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await store.updateCosmetics(userID: user.id, cosmetics: updatedCosmetics)
+            ownedCosmetics = updatedCosmetics
+            user.cosmetics = updatedCosmetics
+            return true
+        } catch {
+            errorMessage = "Could not save that avatar color. Please try again."
             return false
         }
     }

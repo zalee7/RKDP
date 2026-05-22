@@ -95,7 +95,7 @@ struct ProfileView: View {
                                 VStack(alignment: .leading, spacing: 14) {
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 8) {
-                                            ForEach(CosmeticCategory.allCases, id: \.self) { category in
+                                            ForEach(nonAvatarCosmeticCategories, id: \.self) { category in
                                                 let count = ownedItems.filter { $0.category == category }.count
                                                 Button { selectedOwnedCategory = category } label: {
                                                     HStack(spacing: 5) {
@@ -195,6 +195,10 @@ struct ProfileView: View {
         }
     }
 
+    private var nonAvatarCosmeticCategories: [CosmeticCategory] {
+        CosmeticCategory.allCases.filter { !$0.isAvatarCategory }
+    }
+
     @ViewBuilder
     private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -216,8 +220,16 @@ private struct AvatarEditorView: View {
     var onChanged: () async -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selectedCategory: CosmeticCategory = .avatarHead
+    @State private var bodyHexInput: String
+    @State private var bodyHexError: String?
 
     private let categories: [CosmeticCategory] = [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura, .avatarPose]
+
+    init(shop: ShopViewModel, onChanged: @escaping () async -> Void) {
+        self.shop = shop
+        self.onChanged = onChanged
+        _bodyHexInput = State(initialValue: shop.ownedCosmetics.customAvatarBodyHex)
+    }
 
     var body: some View {
         NavigationStack {
@@ -240,7 +252,7 @@ private struct AvatarEditorView: View {
                             HStack(spacing: 8) {
                                 ForEach(categories, id: \.self) { category in
                                     Button { selectedCategory = category } label: {
-                                        Text(category.rawValue.replacingOccurrences(of: "Avatar ", with: ""))
+                                        Text(label(for: category))
                                             .font(.caption.bold())
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 8)
@@ -251,6 +263,11 @@ private struct AvatarEditorView: View {
                                 }
                             }
                             .padding(.horizontal)
+                        }
+
+                        if selectedCategory == .avatarOutfit {
+                            bodyColorEditor
+                                .padding(.horizontal)
                         }
 
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
@@ -285,6 +302,95 @@ private struct AvatarEditorView: View {
             } message: {
                 Text(shop.errorMessage ?? "")
             }
+        }
+    }
+
+    private var bodyColorEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Custom Solid Color")
+                    .font(.headline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Spacer()
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(hex: OwnedCosmetics.normalizedHex(bodyHexInput) ?? shop.ownedCosmetics.customAvatarBodyHex))
+                    .frame(width: 42, height: 34)
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.white.opacity(0.65), lineWidth: 1))
+            }
+            Text("Used when Custom Solid is equipped. Premium body skins override this color.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+            HStack(spacing: 8) {
+                TextField("FF2F78", text: $bodyHexInput)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .font(.system(.subheadline, design: .monospaced).bold())
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.22))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(bodyHexError == nil ? AppTheme.cardBorder : AppTheme.danger, lineWidth: 1))
+                Button("Save") {
+                    Task { await saveBodyHex() }
+                }
+                .font(.caption.bold())
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppTheme.crownGold)
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
+                .disabled(shop.isSaving)
+            }
+            if let bodyHexError {
+                Text(bodyHexError)
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.danger)
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 8) {
+                ForEach(colorSwatches, id: \.self) { hex in
+                    Button {
+                        bodyHexInput = hex
+                        Task { await saveBodyHex() }
+                    } label: {
+                        Circle()
+                            .fill(Color(hex: hex))
+                            .frame(width: 30, height: 30)
+                            .overlay(Circle().stroke(hex == shop.ownedCosmetics.customAvatarBodyHex ? AppTheme.crownGold : Color.white.opacity(0.55), lineWidth: hex == shop.ownedCosmetics.customAvatarBodyHex ? 2.5 : 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var colorSwatches: [String] {
+        ["FF2F78", "12C8A2", "256BFF", "FFD02E", "7B42FF", "FFFFFF"]
+    }
+
+    private func label(for category: CosmeticCategory) -> String {
+        switch category {
+        case .avatarHead: return "Head"
+        case .avatarFace: return "Face"
+        case .avatarOutfit: return "Body"
+        case .avatarAura: return "Aura"
+        case .avatarPose: return "Pose"
+        default: return category.rawValue
+        }
+    }
+
+    private func saveBodyHex() async {
+        guard let normalized = OwnedCosmetics.normalizedHex(bodyHexInput) else {
+            bodyHexError = "Use a 6-digit hex color like FF2F78."
+            return
+        }
+        bodyHexError = nil
+        bodyHexInput = normalized
+        if await shop.setCustomAvatarBodyHex(normalized) {
+            await onChanged()
         }
     }
 }

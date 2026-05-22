@@ -545,7 +545,8 @@ final class FirestoreService {
                 "face": user.cosmetics.equippedAvatarFace,
                 "outfit": user.cosmetics.equippedAvatarOutfit,
                 "aura": user.cosmetics.equippedAvatarAura,
-                "pose": user.cosmetics.equippedAvatarPose
+                "pose": user.cosmetics.equippedAvatarPose,
+                "bodyHex": user.cosmetics.customAvatarBodyHex
             ],
             "searchID":   searchID
         ])
@@ -629,7 +630,8 @@ final class FirestoreService {
             face: dict["face"] as? String ?? AvatarStyle.default.face,
             outfit: dict["outfit"] as? String ?? AvatarStyle.default.outfit,
             aura: dict["aura"] as? String ?? AvatarStyle.default.aura,
-            pose: dict["pose"] as? String ?? AvatarStyle.default.pose
+            pose: dict["pose"] as? String ?? AvatarStyle.default.pose,
+            bodyHex: dict["bodyHex"] as? String ?? AvatarStyle.default.bodyHex
         )
     }
 

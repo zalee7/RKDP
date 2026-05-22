@@ -193,14 +193,51 @@ struct AvatarStyle: Codable, Equatable {
     var outfit: String
     var aura: String
     var pose: String
+    var bodyHex: String
+
+    static let defaultBodyHex = "FF2F78"
 
     static let `default` = AvatarStyle(
         head: "avatar_head_none",
         face: "avatar_face_smile",
         outfit: "avatar_outfit_basic",
         aura: "avatar_aura_none",
-        pose: "avatar_pose_neutral"
+        pose: "avatar_pose_neutral",
+        bodyHex: defaultBodyHex
     )
+
+    enum CodingKeys: String, CodingKey {
+        case head, face, outfit, aura, pose, bodyHex
+    }
+
+    init(head: String, face: String, outfit: String, aura: String, pose: String, bodyHex: String = AvatarStyle.defaultBodyHex) {
+        self.head = head
+        self.face = face
+        self.outfit = outfit
+        self.aura = aura
+        self.pose = pose
+        self.bodyHex = OwnedCosmetics.normalizedHex(bodyHex) ?? AvatarStyle.defaultBodyHex
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        head = try c.decodeIfPresent(String.self, forKey: .head) ?? Self.default.head
+        face = try c.decodeIfPresent(String.self, forKey: .face) ?? Self.default.face
+        outfit = try c.decodeIfPresent(String.self, forKey: .outfit) ?? Self.default.outfit
+        aura = try c.decodeIfPresent(String.self, forKey: .aura) ?? Self.default.aura
+        pose = try c.decodeIfPresent(String.self, forKey: .pose) ?? Self.default.pose
+        bodyHex = OwnedCosmetics.normalizedHex(try c.decodeIfPresent(String.self, forKey: .bodyHex) ?? Self.defaultBodyHex) ?? Self.defaultBodyHex
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(head, forKey: .head)
+        try c.encode(face, forKey: .face)
+        try c.encode(outfit, forKey: .outfit)
+        try c.encode(aura, forKey: .aura)
+        try c.encode(pose, forKey: .pose)
+        try c.encode(bodyHex, forKey: .bodyHex)
+    }
 }
 
 struct OwnedCosmetics: Codable {
@@ -214,6 +251,7 @@ struct OwnedCosmetics: Codable {
     var equippedAvatarOutfit: String
     var equippedAvatarAura: String
     var equippedAvatarPose: String
+    var customAvatarBodyHex: String
 
     static let defaultPurchasedIDs: Set<String> = [
         "title_puzzler", "theme_classic", "font_default", "border_default",
@@ -230,7 +268,8 @@ struct OwnedCosmetics: Codable {
         equippedAvatarFace: AvatarStyle.default.face,
         equippedAvatarOutfit: AvatarStyle.default.outfit,
         equippedAvatarAura: AvatarStyle.default.aura,
-        equippedAvatarPose: AvatarStyle.default.pose
+        equippedAvatarPose: AvatarStyle.default.pose,
+        customAvatarBodyHex: AvatarStyle.defaultBodyHex
     )
 
     var avatarStyle: AvatarStyle {
@@ -239,13 +278,14 @@ struct OwnedCosmetics: Codable {
             face: equippedAvatarFace,
             outfit: equippedAvatarOutfit,
             aura: equippedAvatarAura,
-            pose: equippedAvatarPose
+            pose: equippedAvatarPose,
+            bodyHex: customAvatarBodyHex
         )
     }
 
     enum CodingKeys: String, CodingKey {
         case purchasedIDs, equippedTitle, equippedBoardTheme, equippedNumberFont, equippedCellBorder
-        case equippedAvatarHead, equippedAvatarFace, equippedAvatarOutfit, equippedAvatarAura, equippedAvatarPose
+        case equippedAvatarHead, equippedAvatarFace, equippedAvatarOutfit, equippedAvatarAura, equippedAvatarPose, customAvatarBodyHex
     }
 
     init(
@@ -258,7 +298,8 @@ struct OwnedCosmetics: Codable {
         equippedAvatarFace: String,
         equippedAvatarOutfit: String,
         equippedAvatarAura: String,
-        equippedAvatarPose: String
+        equippedAvatarPose: String,
+        customAvatarBodyHex: String = AvatarStyle.defaultBodyHex
     ) {
         self.purchasedIDs = purchasedIDs.union(Self.defaultPurchasedIDs)
         self.equippedTitle = equippedTitle
@@ -270,6 +311,7 @@ struct OwnedCosmetics: Codable {
         self.equippedAvatarOutfit = equippedAvatarOutfit
         self.equippedAvatarAura = equippedAvatarAura
         self.equippedAvatarPose = equippedAvatarPose
+        self.customAvatarBodyHex = Self.normalizedHex(customAvatarBodyHex) ?? AvatarStyle.defaultBodyHex
     }
 
     init(from decoder: Decoder) throws {
@@ -285,6 +327,7 @@ struct OwnedCosmetics: Codable {
         equippedAvatarOutfit = try c.decodeIfPresent(String.self, forKey: .equippedAvatarOutfit) ?? defaults.equippedAvatarOutfit
         equippedAvatarAura = try c.decodeIfPresent(String.self, forKey: .equippedAvatarAura) ?? defaults.equippedAvatarAura
         equippedAvatarPose = try c.decodeIfPresent(String.self, forKey: .equippedAvatarPose) ?? defaults.equippedAvatarPose
+        customAvatarBodyHex = Self.normalizedHex(try c.decodeIfPresent(String.self, forKey: .customAvatarBodyHex) ?? defaults.customAvatarBodyHex) ?? defaults.customAvatarBodyHex
     }
 
     func encode(to encoder: Encoder) throws {
@@ -299,6 +342,24 @@ struct OwnedCosmetics: Codable {
         try c.encode(equippedAvatarOutfit, forKey: .equippedAvatarOutfit)
         try c.encode(equippedAvatarAura, forKey: .equippedAvatarAura)
         try c.encode(equippedAvatarPose, forKey: .equippedAvatarPose)
+        try c.encode(customAvatarBodyHex, forKey: .customAvatarBodyHex)
+    }
+
+
+    mutating func setCustomAvatarBodyHex(_ hex: String) -> Bool {
+        guard let normalized = Self.normalizedHex(hex) else { return false }
+        customAvatarBodyHex = normalized
+        equippedAvatarOutfit = "avatar_outfit_basic"
+        purchasedIDs.insert("avatar_outfit_basic")
+        return true
+    }
+
+    static func normalizedHex(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+        guard hex.count == 6,
+              hex.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789ABCDEFabcdef").contains($0) }) else { return nil }
+        return hex.uppercased()
     }
 
     mutating func equip(_ item: CosmeticItem) {
@@ -426,12 +487,12 @@ struct CosmeticCatalog {
     ]
 
     static let avatarOutfits: [CosmeticItem] = [
-        CosmeticItem(id: "avatar_outfit_basic", name: "Pink Piece",  category: .avatarOutfit, price: 0,     previewImageName: "", description: "Default hot-pink puzzle body."),
+        CosmeticItem(id: "avatar_outfit_basic", name: "Custom Solid", category: .avatarOutfit, price: 0,     previewImageName: "", description: "Pick any solid puzzle-piece color."),
         CosmeticItem(id: "avatar_outfit_hoodie", name: "Teal Piece",  category: .avatarOutfit, price: 900,   previewImageName: "", description: "Fresh teal puzzle body."),
-        CosmeticItem(id: "avatar_outfit_cape",   name: "Pink Hero",   category: .avatarOutfit, price: 1_400, previewImageName: "", description: "A brighter hero-style puzzle piece."),
-        CosmeticItem(id: "avatar_outfit_armor",  name: "Blue Guard",  category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Royal-blue ranked body with shield detail."),
+        CosmeticItem(id: "avatar_outfit_cape",   name: "Diamond Pink", category: .avatarOutfit, price: 1_400, previewImageName: "", description: "A glossy jewel-pink premium body."),
+        CosmeticItem(id: "avatar_outfit_armor",  name: "Royal Blue",  category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Royal-blue ranked body with shield detail."),
         CosmeticItem(id: "avatar_outfit_neon",   name: "Neon Piece", category: .avatarOutfit, price: 3_200, previewImageName: "", description: "Purple arcade puzzle body with neon trim."),
-        CosmeticItem(id: "avatar_outfit_royal",  name: "Gold Piece", category: .avatarOutfit, price: 4_500, previewImageName: "", description: "Legendary crown-gold puzzle body.")
+        CosmeticItem(id: "avatar_outfit_royal",  name: "Crown Gold", category: .avatarOutfit, price: 4_500, previewImageName: "", description: "Legendary crown-gold puzzle body.")
     ]
 
     static let avatarAuras: [CosmeticItem] = [

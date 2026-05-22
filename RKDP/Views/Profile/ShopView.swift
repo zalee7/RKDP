@@ -7,7 +7,8 @@ private enum ShopSection: Hashable, CaseIterable {
     case category(CosmeticCategory)
 
     static var allCases: [ShopSection] {
-        [.coinPacks, .rankedPass] + CosmeticCategory.allCases.map { .category($0) }
+        let shopCategories = CosmeticCategory.allCases.filter { !$0.isAvatarCategory }
+        return [.coinPacks, .rankedPass] + shopCategories.map { .category($0) }
     }
 
     var title: String {
@@ -250,7 +251,7 @@ struct ShopView: View {
             Text(category == .title ? "No new titles today" : "Everything here is owned")
                 .font(.headline.bold())
                 .foregroundStyle(AppTheme.textPrimary)
-            Text("Owned cosmetics now live on your Profile for faster equipping.")
+            Text("Owned cosmetics live on your Profile for faster equipping. Avatar parts live in Customize Avatar.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -502,23 +503,233 @@ struct ShopItemCard: View {
 private struct AvatarPartPreview: View {
     let item: CosmeticItem
 
-    private var style: AvatarStyle {
-        var style = AvatarStyle.default
-        switch item.category {
-        case .avatarHead: style.head = item.id
-        case .avatarFace: style.face = item.id
-        case .avatarOutfit: style.outfit = item.id
-        case .avatarAura: style.aura = item.id
-        case .avatarPose: style.pose = item.id
-        default: break
-        }
-        return style
-    }
-
     var body: some View {
         RoundedRectangle(cornerRadius: 10)
             .fill(AppTheme.cardBackground)
-            .overlay(StickDuelerAvatarView(style: style, size: 62))
+            .overlay(previewContent)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private var previewContent: some View {
+        switch item.category {
+        case .avatarHead:
+            headPreview
+        case .avatarFace:
+            facePreview
+        case .avatarOutfit:
+            bodySkinPreview
+        case .avatarAura:
+            auraPreview
+        case .avatarPose:
+            posePreview
+        default:
+            Image(systemName: "sparkles")
+                .font(.title.bold())
+                .foregroundStyle(AppTheme.crownGold)
+        }
+    }
+
+    private var headPreview: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 48, height: 48)
+            switch item.id {
+            case "avatar_head_crown":
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 32, weight: .black))
+                    .foregroundStyle(AppTheme.crownGold)
+            case "avatar_head_headphones":
+                Image(systemName: "headphones")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(AppTheme.teal)
+            case "avatar_head_wizard":
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(AppTheme.royalBlue)
+            case "avatar_head_lightning":
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 34, weight: .black))
+                    .foregroundStyle(AppTheme.crownGold)
+            case "avatar_head_halo":
+                Ellipse()
+                    .stroke(AppTheme.crownGold, lineWidth: 4)
+                    .frame(width: 44, height: 18)
+            default:
+                Image(systemName: "circle.dashed")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+    }
+
+    private var facePreview: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppTheme.hotPink.opacity(0.24))
+                .frame(width: 54, height: 46)
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.55), lineWidth: 1.5))
+            switch item.id {
+            case "avatar_face_focused":
+                VStack(spacing: 7) {
+                    Text("•   •")
+                    Capsule().frame(width: 18, height: 3)
+                }
+            case "avatar_face_wink":
+                Text("•  -")
+                    .offset(y: -2)
+                Text("⌣")
+                    .offset(y: 12)
+            case "avatar_face_shades":
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(.black)
+            case "avatar_face_gem":
+                HStack(spacing: 8) {
+                    Image(systemName: "diamond.fill")
+                    Image(systemName: "diamond.fill")
+                }
+                .foregroundStyle(AppTheme.hotPink)
+            default:
+                Image(systemName: "face.smiling.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .font(.system(size: 18, weight: .black, design: .rounded))
+        .foregroundStyle(.white)
+    }
+
+    private var bodySkinPreview: some View {
+        ZStack {
+            PreviewPuzzlePieceShape()
+                .fill(bodyFill)
+                .frame(width: 52, height: 52)
+                .overlay(PreviewPuzzlePieceShape().stroke(Color.white, lineWidth: 3))
+            if item.id == "avatar_outfit_basic" {
+                Text("HEX")
+                    .font(.caption2.black())
+                    .foregroundStyle(.white)
+            } else if item.id == "avatar_outfit_royal" {
+                Image(systemName: "crown.fill")
+                    .foregroundStyle(AppTheme.hotPink)
+                    .font(.caption.bold())
+            } else if item.id == "avatar_outfit_neon" {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(AppTheme.teal)
+                    .font(.caption.bold())
+            }
+        }
+        .shadow(color: bodyGlow.opacity(0.28), radius: 8, x: 0, y: 4)
+    }
+
+    private var auraPreview: some View {
+        ZStack {
+            Circle()
+                .stroke(auraColor.opacity(0.9), lineWidth: 4)
+                .frame(width: 50, height: 50)
+                .blur(radius: item.id == "avatar_aura_none" ? 0 : 1)
+            Circle()
+                .fill(auraColor.opacity(item.id == "avatar_aura_none" ? 0.08 : 0.22))
+                .frame(width: 36, height: 36)
+            Image(systemName: item.id == "avatar_aura_none" ? "circle" : "sparkles")
+                .font(.system(size: 21, weight: .bold))
+                .foregroundStyle(auraColor)
+        }
+    }
+
+    private var posePreview: some View {
+        Image(systemName: poseIcon)
+            .font(.system(size: 34, weight: .bold))
+            .foregroundStyle(AppTheme.crownGold)
+            .frame(width: 58, height: 58)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.24), lineWidth: 1))
+    }
+
+    private var bodyFill: LinearGradient {
+        switch item.id {
+        case "avatar_outfit_hoodie":
+            return LinearGradient(colors: [Color(hex: "7FFFE3"), AppTheme.teal], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_cape":
+            return LinearGradient(colors: [Color(hex: "FFB3D7"), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_armor":
+            return LinearGradient(colors: [Color(hex: "71C8FF"), AppTheme.royalBlue], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_neon":
+            return LinearGradient(colors: [AppTheme.hotPink, Color(hex: "7B42FF"), AppTheme.teal], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_royal":
+            return LinearGradient(colors: [Color(hex: "FFE887"), AppTheme.crownGold], startPoint: .topLeading, endPoint: .bottomTrailing)
+        default:
+            return LinearGradient(colors: [Color(hex: "FF7FB7"), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+
+    private var bodyGlow: Color {
+        switch item.id {
+        case "avatar_outfit_hoodie": return AppTheme.teal
+        case "avatar_outfit_armor": return AppTheme.royalBlue
+        case "avatar_outfit_royal": return AppTheme.crownGold
+        default: return AppTheme.hotPink
+        }
+    }
+
+    private var auraColor: Color {
+        switch item.id {
+        case "avatar_aura_teal": return AppTheme.teal
+        case "avatar_aura_pink": return AppTheme.hotPink
+        case "avatar_aura_crown": return AppTheme.crownGold
+        case "avatar_aura_storm": return AppTheme.royalBlue
+        default: return AppTheme.textSecondary
+        }
+    }
+
+    private var poseIcon: String {
+        switch item.id {
+        case "avatar_pose_victory": return "figure.wave"
+        case "avatar_pose_thinking": return "lightbulb.fill"
+        case "avatar_pose_ready": return "bolt.fill"
+        case "avatar_pose_flex": return "figure.strengthtraining.traditional"
+        default: return "figure.stand"
+        }
+    }
+}
+
+private struct PreviewPuzzlePieceShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let x = rect.minX
+        let y = rect.minY
+        var path = Path()
+        path.move(to: CGPoint(x: x + w * 0.18, y: y + h * 0.10))
+        path.addLine(to: CGPoint(x: x + w * 0.42, y: y + h * 0.10))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.58, y: y + h * 0.10),
+            control1: CGPoint(x: x + w * 0.43, y: y - h * 0.08),
+            control2: CGPoint(x: x + w * 0.57, y: y - h * 0.08)
+        )
+        path.addLine(to: CGPoint(x: x + w * 0.82, y: y + h * 0.10))
+        path.addLine(to: CGPoint(x: x + w * 0.82, y: y + h * 0.42))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.82, y: y + h * 0.58),
+            control1: CGPoint(x: x + w * 1.02, y: y + h * 0.43),
+            control2: CGPoint(x: x + w * 1.02, y: y + h * 0.57)
+        )
+        path.addLine(to: CGPoint(x: x + w * 0.82, y: y + h * 0.90))
+        path.addLine(to: CGPoint(x: x + w * 0.18, y: y + h * 0.90))
+        path.addLine(to: CGPoint(x: x + w * 0.18, y: y + h * 0.62))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.18, y: y + h * 0.38),
+            control1: CGPoint(x: x - w * 0.04, y: y + h * 0.60),
+            control2: CGPoint(x: x - w * 0.04, y: y + h * 0.40)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
