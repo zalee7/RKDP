@@ -368,7 +368,11 @@ private struct AvatarEditorView: View {
     }
 
     private var colorSwatches: [String] {
-        ["FF2F78", "12C8A2", "256BFF", "FFD02E", "7B42FF", "FFFFFF"]
+        [
+            "FF2F78", "12C8A2", "256BFF", "FFD02E", "7B42FF", "FFFFFF",
+            "FF6B1A", "8FFFE1", "11183A", "39D5FF", "FF9ED1", "050510",
+            "C9D2E3", "23D18B"
+        ]
     }
 
     private func label(for category: CosmeticCategory) -> String {

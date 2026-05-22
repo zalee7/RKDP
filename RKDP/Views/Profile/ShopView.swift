@@ -434,8 +434,10 @@ struct ShopItemCard: View {
                 }
 
                 // Badges
-                HStack(spacing: 4) {
-                    if isLimited && !isOwned {
+                VStack(alignment: .trailing, spacing: 4) {
+                    RarityBadgeView(rarity: item.rarity)
+                    HStack(spacing: 4) {
+                        if isLimited && !isOwned {
                         Text("LIMITED")
                             .font(.system(size: 9, weight: .black))
                             .padding(.horizontal, 5).padding(.vertical, 2)
@@ -443,20 +445,21 @@ struct ShopItemCard: View {
                             .foregroundStyle(.white)
                             .clipShape(Capsule())
                     }
-                    if isEquipped {
-                        Text("EQUIPPED")
-                            .font(.system(size: 9, weight: .black))
-                            .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(AppTheme.teal)
-                            .foregroundStyle(.white)
-                            .clipShape(Capsule())
-                    } else if isOwned {
-                        Text("OWNED")
-                            .font(.system(size: 9, weight: .black))
-                            .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(AppTheme.royalBlue)
-                            .foregroundStyle(.white)
-                            .clipShape(Capsule())
+                        if isEquipped {
+                            Text("EQUIPPED")
+                                .font(.system(size: 9, weight: .black))
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(AppTheme.teal)
+                                .foregroundStyle(.white)
+                                .clipShape(Capsule())
+                        } else if isOwned {
+                            Text("OWNED")
+                                .font(.system(size: 9, weight: .black))
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(AppTheme.royalBlue)
+                                .foregroundStyle(.white)
+                                .clipShape(Capsule())
+                        }
                     }
                 }
                 .padding(6)
@@ -496,6 +499,22 @@ struct ShopItemCard: View {
         case .avatarAura:   return "sparkles"
         case .avatarPose:   return "figure.wave"
         }
+    }
+}
+
+private struct RarityBadgeView: View {
+    let rarity: CosmeticRarity
+
+    var body: some View {
+        Text(rarity.rawValue.uppercased())
+            .font(.system(size: 8, weight: .black, design: .rounded))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(rarity.badgeColor.opacity(rarity == .free ? 0.28 : 0.94))
+            .foregroundStyle(rarity.textColor)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.28), lineWidth: 1))
+            .shadow(color: rarity.badgeColor.opacity(0.25), radius: 5, x: 0, y: 2)
     }
 }
 
@@ -539,10 +558,10 @@ private struct AvatarPartPreview: View {
                 .fill(Color.white.opacity(0.08))
                 .frame(width: 48, height: 48)
             switch item.id {
-            case "avatar_head_crown":
+            case "avatar_head_crown", "avatar_head_puzzle_crown":
                 Image(systemName: "crown.fill")
                     .font(.system(size: 32, weight: .black))
-                    .foregroundStyle(AppTheme.crownGold)
+                    .foregroundStyle(item.id == "avatar_head_puzzle_crown" ? AppTheme.hotPink : AppTheme.crownGold)
             case "avatar_head_headphones":
                 Image(systemName: "headphones")
                     .font(.system(size: 34, weight: .bold))
@@ -559,6 +578,27 @@ private struct AvatarPartPreview: View {
                 Ellipse()
                     .stroke(AppTheme.crownGold, lineWidth: 4)
                     .frame(width: 44, height: 18)
+            case "avatar_head_neon_visor":
+                Capsule()
+                    .fill(LinearGradient(colors: [AppTheme.hotPink, AppTheme.royalBlue], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: 46, height: 15)
+                    .overlay(Capsule().stroke(Color.white.opacity(0.7), lineWidth: 1.5))
+            case "avatar_head_star_clip":
+                Image(systemName: "star.fill")
+                    .font(.system(size: 31, weight: .black))
+                    .foregroundStyle(AppTheme.crownGold)
+            case "avatar_head_lava_helmet":
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 32, weight: .black))
+                    .foregroundStyle(Color(hex: "FF6B1A"))
+            case "avatar_head_pixel_cap":
+                Image(systemName: "square.grid.3x3.fill")
+                    .font(.system(size: 30, weight: .black))
+                    .foregroundStyle(AppTheme.royalBlue)
+            case "avatar_head_mini_crown":
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(AppTheme.crownGold)
             default:
                 Image(systemName: "circle.dashed")
                     .font(.system(size: 30, weight: .semibold))
@@ -594,6 +634,31 @@ private struct AvatarPartPreview: View {
                     Image(systemName: "diamond.fill")
                 }
                 .foregroundStyle(AppTheme.hotPink)
+            case "avatar_face_laugh":
+                Text("^  ^")
+                    .offset(y: -3)
+                Text("⌣")
+                    .offset(y: 12)
+            case "avatar_face_determined":
+                VStack(spacing: 8) { Text("•   •"); Capsule().frame(width: 24, height: 3) }
+            case "avatar_face_sleepy":
+                Text("-  -")
+                    .offset(y: -4)
+                Text(".")
+                    .offset(y: 12)
+            case "avatar_face_star":
+                HStack(spacing: 8) { Image(systemName: "star.fill"); Image(systemName: "star.fill") }
+                    .foregroundStyle(AppTheme.crownGold)
+            case "avatar_face_oops":
+                Text("•  •")
+                    .offset(y: -4)
+                Text("o")
+                    .offset(y: 12)
+            case "avatar_face_smirk":
+                Text("•  •")
+                    .offset(y: -4)
+                Text("⌒")
+                    .offset(y: 12)
             default:
                 Image(systemName: "face.smiling.fill")
                     .font(.system(size: 28, weight: .bold))
@@ -612,7 +677,7 @@ private struct AvatarPartPreview: View {
                 .overlay(PreviewPuzzlePieceShape().stroke(Color.white, lineWidth: 3))
             if item.id == "avatar_outfit_basic" {
                 Text("HEX")
-                    .font(.caption2.black())
+                    .font(.caption2.weight(.black))
                     .foregroundStyle(.white)
             } else if item.id == "avatar_outfit_royal" {
                 Image(systemName: "crown.fill")
@@ -664,6 +729,18 @@ private struct AvatarPartPreview: View {
             return LinearGradient(colors: [AppTheme.hotPink, Color(hex: "7B42FF"), AppTheme.teal], startPoint: .topLeading, endPoint: .bottomTrailing)
         case "avatar_outfit_royal":
             return LinearGradient(colors: [Color(hex: "FFE887"), AppTheme.crownGold], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_lava":
+            return LinearGradient(colors: [Color(hex: "FFD36B"), Color(hex: "FF6B1A"), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_frost":
+            return LinearGradient(colors: [Color(hex: "E9FFFF"), Color(hex: "71C8FF")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_galaxy":
+            return LinearGradient(colors: [Color(hex: "10142F"), Color(hex: "7B42FF"), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_mint":
+            return LinearGradient(colors: [Color(hex: "CFFFF1"), Color(hex: "23D18B")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_candy":
+            return LinearGradient(colors: [Color(hex: "FF9ED1"), Color(hex: "39D5FF")], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "avatar_outfit_obsidian":
+            return LinearGradient(colors: [Color(hex: "626A85"), Color(hex: "050510")], startPoint: .topLeading, endPoint: .bottomTrailing)
         default:
             return LinearGradient(colors: [Color(hex: "FF7FB7"), AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
@@ -674,6 +751,11 @@ private struct AvatarPartPreview: View {
         case "avatar_outfit_hoodie": return AppTheme.teal
         case "avatar_outfit_armor": return AppTheme.royalBlue
         case "avatar_outfit_royal": return AppTheme.crownGold
+        case "avatar_outfit_lava": return Color(hex: "FF6B1A")
+        case "avatar_outfit_frost": return Color(hex: "71C8FF")
+        case "avatar_outfit_galaxy": return Color(hex: "7B42FF")
+        case "avatar_outfit_mint": return Color(hex: "23D18B")
+        case "avatar_outfit_obsidian": return Color(hex: "050510")
         default: return AppTheme.hotPink
         }
     }
@@ -684,6 +766,11 @@ private struct AvatarPartPreview: View {
         case "avatar_aura_pink": return AppTheme.hotPink
         case "avatar_aura_crown": return AppTheme.crownGold
         case "avatar_aura_storm": return AppTheme.royalBlue
+        case "avatar_aura_lava": return Color(hex: "FF6B1A")
+        case "avatar_aura_star": return AppTheme.crownGold
+        case "avatar_aura_pixel": return Color(hex: "7B42FF")
+        case "avatar_aura_mint": return Color(hex: "23D18B")
+        case "avatar_aura_royal": return AppTheme.crownGold
         default: return AppTheme.textSecondary
         }
     }
@@ -694,6 +781,11 @@ private struct AvatarPartPreview: View {
         case "avatar_pose_thinking": return "lightbulb.fill"
         case "avatar_pose_ready": return "bolt.fill"
         case "avatar_pose_flex": return "figure.strengthtraining.traditional"
+        case "avatar_pose_point": return "hand.point.up.left.fill"
+        case "avatar_pose_jump": return "figure.run"
+        case "avatar_pose_celebrate": return "party.popper.fill"
+        case "avatar_pose_sneaky": return "eye.fill"
+        case "avatar_pose_power": return "bolt.circle.fill"
         default: return "figure.stand"
         }
     }

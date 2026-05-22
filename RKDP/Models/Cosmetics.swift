@@ -178,6 +178,38 @@ enum CosmeticCategory: String, Codable, CaseIterable {
     }
 }
 
+enum CosmeticRarity: String, CaseIterable {
+    case free = "Free"
+    case common = "Common"
+    case rare = "Rare"
+    case epic = "Epic"
+    case legendary = "Legendary"
+
+    static func forPrice(_ price: Int) -> CosmeticRarity {
+        switch price {
+        case 0: return .free
+        case 1...499: return .common
+        case 500...1_199: return .rare
+        case 1_200...2_499: return .epic
+        default: return .legendary
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .free: return Color.white.opacity(0.42)
+        case .common: return AppTheme.teal
+        case .rare: return AppTheme.royalBlue
+        case .epic: return AppTheme.hotPink
+        case .legendary: return AppTheme.crownGold
+        }
+    }
+
+    var textColor: Color {
+        self == .free ? AppTheme.textPrimary : .white
+    }
+}
+
 struct CosmeticItem: Identifiable, Codable {
     var id: String
     var name: String
@@ -185,6 +217,8 @@ struct CosmeticItem: Identifiable, Codable {
     var price: Int
     var previewImageName: String
     var description: String
+
+    var rarity: CosmeticRarity { CosmeticRarity.forPrice(price) }
 }
 
 struct AvatarStyle: Codable, Equatable {
@@ -439,6 +473,25 @@ struct CosmeticCatalog {
         CosmeticItem(id: "title_eternal",      name: "The Eternal",       category: .title, price: 1_500, previewImageName: "", description: "Has been solving since before the grid existed."),
         CosmeticItem(id: "title_obsidian",     name: "Obsidian",          category: .title, price: 500,  previewImageName: "", description: "Hard and flawless."),
         CosmeticItem(id: "title_zero",         name: "Zero Error",        category: .title, price: 600,  previewImageName: "", description: "Not one mistake. Ever."),
+        CosmeticItem(id: "title_path_finder",  name: "Path Finder",       category: .title, price: 250,  previewImageName: "", description: "Always sees the route through the board."),
+        CosmeticItem(id: "title_grid_runner",  name: "Grid Runner",       category: .title, price: 300,  previewImageName: "", description: "Fast feet across every puzzle lane."),
+        CosmeticItem(id: "title_puzzle_pilot", name: "Puzzle Pilot",      category: .title, price: 350,  previewImageName: "", description: "Flies through tricky patterns."),
+        CosmeticItem(id: "title_combo_crafter", name: "Combo Crafter",    category: .title, price: 450,  previewImageName: "", description: "Turns small moves into big chains."),
+        CosmeticItem(id: "title_quick_thinker", name: "Quick Thinker",    category: .title, price: 400,  previewImageName: "", description: "Decides before the timer blinks."),
+        CosmeticItem(id: "title_board_bender", name: "Board Bender",      category: .title, price: 550,  previewImageName: "", description: "Makes the board move their way."),
+        CosmeticItem(id: "title_letter_lynx",  name: "Letter Lynx",       category: .title, price: 500,  previewImageName: "", description: "Quick eyes for hidden words."),
+        CosmeticItem(id: "title_pattern_chaser", name: "Pattern Chaser",  category: .title, price: 650,  previewImageName: "", description: "Tracks every clue in motion."),
+        CosmeticItem(id: "title_neon_solver", name: "Neon Solver",       category: .title, price: 1_200, previewImageName: "", description: "Bright moves under arcade lights."),
+        CosmeticItem(id: "title_color_captain", name: "Color Captain",   category: .title, price: 1_350, previewImageName: "", description: "Commands paths, links, and color flow."),
+        CosmeticItem(id: "title_mine_dodger", name: "Mine Dodger",       category: .title, price: 1_250, previewImageName: "", description: "Somehow always steps safely."),
+        CosmeticItem(id: "title_wordsmith",   name: "Wordsmith",         category: .title, price: 1_450, previewImageName: "", description: "Turns letters into pressure."),
+        CosmeticItem(id: "title_grid_architect", name: "Grid Architect", category: .title, price: 1_700, previewImageName: "", description: "Builds clean wins from chaos."),
+        CosmeticItem(id: "title_lava_legend", name: "Lava Legend",       category: .title, price: 1_900, previewImageName: "", description: "Keeps cool when the arena heats up."),
+        CosmeticItem(id: "title_crown_strategist", name: "Crown Strategist", category: .title, price: 2_600, previewImageName: "", description: "Every move has royal intent."),
+        CosmeticItem(id: "title_final_piece", name: "The Final Piece",   category: .title, price: 3_000, previewImageName: "", description: "The one piece every win needs."),
+        CosmeticItem(id: "title_arcade_oracle", name: "Arcade Oracle",   category: .title, price: 3_200, previewImageName: "", description: "Reads the arena before it happens."),
+        CosmeticItem(id: "title_puzzle_royalty", name: "Puzzle Royalty", category: .title, price: 3_500, previewImageName: "", description: "A title with crown-level presence."),
+        CosmeticItem(id: "title_untouchable", name: "Untouchable",       category: .title, price: 4_000, previewImageName: "", description: "Good luck catching this score."),
     ]
 
     static let boardThemes: [CosmeticItem] = [
@@ -475,7 +528,13 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_head_headphones", name: "Headphones",     category: .avatarHead, price: 700,   previewImageName: "", description: "Locked-in puzzle focus."),
         CosmeticItem(id: "avatar_head_wizard",     name: "Wizard Hat",     category: .avatarHead, price: 1_500, previewImageName: "", description: "For strange grid magic."),
         CosmeticItem(id: "avatar_head_lightning",  name: "Lightning Hair", category: .avatarHead, price: 2_500, previewImageName: "", description: "Fast solve energy."),
-        CosmeticItem(id: "avatar_head_halo",       name: "Halo",           category: .avatarHead, price: 4_000, previewImageName: "", description: "Legendary clean-play glow.")
+        CosmeticItem(id: "avatar_head_halo",       name: "Halo",           category: .avatarHead, price: 4_000, previewImageName: "", description: "Legendary clean-play glow."),
+        CosmeticItem(id: "avatar_head_puzzle_crown", name: "Puzzle Crown", category: .avatarHead, price: 1_800, previewImageName: "", description: "A crown shaped for the puzzle arena."),
+        CosmeticItem(id: "avatar_head_neon_visor", name: "Neon Visor", category: .avatarHead, price: 1_300, previewImageName: "", description: "A bright visor for fast reads."),
+        CosmeticItem(id: "avatar_head_star_clip", name: "Star Clip", category: .avatarHead, price: 650, previewImageName: "", description: "A tiny star for a sharp little mascot."),
+        CosmeticItem(id: "avatar_head_lava_helmet", name: "Lava Helmet", category: .avatarHead, price: 2_600, previewImageName: "", description: "Heat-proof gear for rescue runs."),
+        CosmeticItem(id: "avatar_head_pixel_cap", name: "Pixel Cap", category: .avatarHead, price: 850, previewImageName: "", description: "Retro arcade headwear."),
+        CosmeticItem(id: "avatar_head_mini_crown", name: "Mini Crown", category: .avatarHead, price: 500, previewImageName: "", description: "Small crown, big confidence.")
     ]
 
     static let avatarFaces: [CosmeticItem] = [
@@ -483,7 +542,13 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_face_focused", name: "Focused",  category: .avatarFace, price: 500,   previewImageName: "", description: "Locked on the puzzle."),
         CosmeticItem(id: "avatar_face_wink",    name: "Wink",     category: .avatarFace, price: 700,   previewImageName: "", description: "A little postgame confidence."),
         CosmeticItem(id: "avatar_face_shades",  name: "Shades",   category: .avatarFace, price: 1_200, previewImageName: "", description: "Cool under ranked pressure."),
-        CosmeticItem(id: "avatar_face_gem",     name: "Gem Eyes", category: .avatarFace, price: 2_000, previewImageName: "", description: "Icon-pink jewel intensity.")
+        CosmeticItem(id: "avatar_face_gem",     name: "Gem Eyes", category: .avatarFace, price: 2_000, previewImageName: "", description: "Icon-pink jewel intensity."),
+        CosmeticItem(id: "avatar_face_laugh", name: "Laugh", category: .avatarFace, price: 450, previewImageName: "", description: "A cheerful post-win grin."),
+        CosmeticItem(id: "avatar_face_determined", name: "Determined", category: .avatarFace, price: 800, previewImageName: "", description: "Locked in and ready."),
+        CosmeticItem(id: "avatar_face_sleepy", name: "Sleepy", category: .avatarFace, price: 500, previewImageName: "", description: "Still solving, somehow."),
+        CosmeticItem(id: "avatar_face_star", name: "Star Eyes", category: .avatarFace, price: 1_500, previewImageName: "", description: "Bright-eyed arcade energy."),
+        CosmeticItem(id: "avatar_face_oops", name: "Oops", category: .avatarFace, price: 700, previewImageName: "", description: "For close calls and lucky saves."),
+        CosmeticItem(id: "avatar_face_smirk", name: "Champion Smirk", category: .avatarFace, price: 2_200, previewImageName: "", description: "A confident little flex.")
     ]
 
     static let avatarOutfits: [CosmeticItem] = [
@@ -492,7 +557,13 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_outfit_cape",   name: "Diamond Pink", category: .avatarOutfit, price: 1_400, previewImageName: "", description: "A glossy jewel-pink premium body."),
         CosmeticItem(id: "avatar_outfit_armor",  name: "Royal Blue",  category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Royal-blue ranked body with shield detail."),
         CosmeticItem(id: "avatar_outfit_neon",   name: "Neon Piece", category: .avatarOutfit, price: 3_200, previewImageName: "", description: "Purple arcade puzzle body with neon trim."),
-        CosmeticItem(id: "avatar_outfit_royal",  name: "Crown Gold", category: .avatarOutfit, price: 4_500, previewImageName: "", description: "Legendary crown-gold puzzle body.")
+        CosmeticItem(id: "avatar_outfit_royal",  name: "Crown Gold", category: .avatarOutfit, price: 4_500, previewImageName: "", description: "Legendary crown-gold puzzle body."),
+        CosmeticItem(id: "avatar_outfit_lava", name: "Lava Core", category: .avatarOutfit, price: 1_800, previewImageName: "", description: "Molten orange with arena heat."),
+        CosmeticItem(id: "avatar_outfit_frost", name: "Frost Piece", category: .avatarOutfit, price: 1_200, previewImageName: "", description: "Cool blue ice-gloss body."),
+        CosmeticItem(id: "avatar_outfit_galaxy", name: "Galaxy Piece", category: .avatarOutfit, price: 3_800, previewImageName: "", description: "A tiny night sky in puzzle form."),
+        CosmeticItem(id: "avatar_outfit_mint", name: "Mint Glow", category: .avatarOutfit, price: 900, previewImageName: "", description: "Soft mint with bright white trim."),
+        CosmeticItem(id: "avatar_outfit_candy", name: "Candy Piece", category: .avatarOutfit, price: 1_600, previewImageName: "", description: "Pink and blue candy arcade shine."),
+        CosmeticItem(id: "avatar_outfit_obsidian", name: "Obsidian Piece", category: .avatarOutfit, price: 4_200, previewImageName: "", description: "Dark glass for legendary style.")
     ]
 
     static let avatarAuras: [CosmeticItem] = [
@@ -500,7 +571,12 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_aura_teal",  name: "Teal Glow",   category: .avatarAura, price: 900,   previewImageName: "", description: "Soft Color Link energy."),
         CosmeticItem(id: "avatar_aura_pink",  name: "Pink Spark",  category: .avatarAura, price: 1_200, previewImageName: "", description: "Hot-pink victory sparks."),
         CosmeticItem(id: "avatar_aura_crown", name: "Crown Shine", category: .avatarAura, price: 2_500, previewImageName: "", description: "Gold rank radiance."),
-        CosmeticItem(id: "avatar_aura_storm", name: "Storm Ring",  category: .avatarAura, price: 4_000, previewImageName: "", description: "Legendary arena energy.")
+        CosmeticItem(id: "avatar_aura_storm", name: "Storm Ring",  category: .avatarAura, price: 4_000, previewImageName: "", description: "Legendary arena energy."),
+        CosmeticItem(id: "avatar_aura_lava", name: "Lava Bubble", category: .avatarAura, price: 1_600, previewImageName: "", description: "Warm rescue-run bubbles."),
+        CosmeticItem(id: "avatar_aura_star", name: "Star Burst", category: .avatarAura, price: 2_200, previewImageName: "", description: "A burst of tiny arcade stars."),
+        CosmeticItem(id: "avatar_aura_pixel", name: "Pixel Ring", category: .avatarAura, price: 1_100, previewImageName: "", description: "Retro square energy."),
+        CosmeticItem(id: "avatar_aura_mint", name: "Mint Mist", category: .avatarAura, price: 900, previewImageName: "", description: "Soft mint glow around the piece."),
+        CosmeticItem(id: "avatar_aura_royal", name: "Royal Pulse", category: .avatarAura, price: 3_200, previewImageName: "", description: "Gold and pink rank energy.")
     ]
 
     static let avatarPoses: [CosmeticItem] = [
@@ -508,7 +584,12 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_pose_victory",  name: "Victory",  category: .avatarPose, price: 700,   previewImageName: "", description: "Both arms up after a win."),
         CosmeticItem(id: "avatar_pose_thinking", name: "Thinking", category: .avatarPose, price: 700,   previewImageName: "", description: "A puzzler's pause."),
         CosmeticItem(id: "avatar_pose_ready",    name: "Ready",    category: .avatarPose, price: 1_100, previewImageName: "", description: "A planted stance for ranked."),
-        CosmeticItem(id: "avatar_pose_flex",     name: "Flex",     category: .avatarPose, price: 1_500, previewImageName: "", description: "For confident board clears.")
+        CosmeticItem(id: "avatar_pose_flex",     name: "Flex",     category: .avatarPose, price: 1_500, previewImageName: "", description: "For confident board clears."),
+        CosmeticItem(id: "avatar_pose_point", name: "Point", category: .avatarPose, price: 600, previewImageName: "", description: "Points right at the winning move."),
+        CosmeticItem(id: "avatar_pose_jump", name: "Jump", category: .avatarPose, price: 900, previewImageName: "", description: "A bouncy little victory pose."),
+        CosmeticItem(id: "avatar_pose_celebrate", name: "Celebrate", category: .avatarPose, price: 1_300, previewImageName: "", description: "Big arena celebration energy."),
+        CosmeticItem(id: "avatar_pose_sneaky", name: "Sneaky", category: .avatarPose, price: 1_000, previewImageName: "", description: "A quiet move before the win."),
+        CosmeticItem(id: "avatar_pose_power", name: "Power Up", category: .avatarPose, price: 2_400, previewImageName: "", description: "Powered-up puzzle stance.")
     ]
 
 }
