@@ -22,6 +22,7 @@ struct MatchmakingView: View {
     @State private var rewardAnimationFinished = false
     @State private var showCompatibilityHint = false
     @State private var didStartInitialSession = false
+    @State private var playedResultSoundSessionID: String?
     @Environment(\.dismiss) var dismiss
 
     init(user: AppUser, mode: GameMode, difficulty: Difficulty, entryKind: MatchmakingEntryKind = .ranked, onMatchFinished: @escaping () -> Void = {}) {
@@ -781,10 +782,22 @@ struct MatchmakingView: View {
         }
         .onAppear {
             SoundManager.shared.stopAllLoops()
+            playResultSoundIfNeeded(session: session)
             if (session.isRanked || session.isExhibition) && !session.containsBot { vm.beginRematchListening(session: session) }
         }
         .sheet(isPresented: $showBreakdown) {
             MatchBreakdownView(session: session, currentUserID: user.id, results: results)
+        }
+    }
+
+    private func playResultSoundIfNeeded(session: GameSession) {
+        guard playedResultSoundSessionID != session.id else { return }
+        guard let winnerID = session.winnerID else { return }
+        playedResultSoundSessionID = session.id
+        if winnerID == user.id {
+            SoundManager.shared.playMatchVictory()
+        } else {
+            SoundManager.shared.playMatchLoss()
         }
     }
 

@@ -9,6 +9,8 @@ final class SoundManager {
 
     enum AudioAsset: String, Hashable {
         case gameFound = "GameFound"
+        case gridLoss = "GridLoss"
+        case gridVictory = "GridVictory"
         case inOnlineGame = "InOnlineGame"
         case matchmaking = "Matchmaking"
         case otherKeyboardPress = "OtherKeyboardPress"
@@ -26,6 +28,14 @@ final class SoundManager {
 
     func playGameFound() {
         playOneShot(.gameFound, volume: 1.0)
+    }
+
+    func playMatchVictory() {
+        playOneShot(.gridVictory, volume: 1.0)
+    }
+
+    func playMatchLoss() {
+        playOneShot(.gridLoss, volume: 1.0)
     }
 
     func playMatchmakingLoop() {
