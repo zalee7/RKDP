@@ -34,8 +34,8 @@ struct FriendsView: View {
             .onAppear { vm.start(user: user) }
             .onDisappear { vm.stop() }
             .sheet(item: $inviteFriend) { friend in
-                InviteFriendSheet(friend: friend) { mode, difficulty in
-                    Task { await vm.sendInvite(from: user, to: friend, mode: mode, difficulty: difficulty) }
+                InviteFriendSheet(friend: friend) { mode, difficulty, inviteType in
+                    Task { await vm.sendInvite(from: user, to: friend, mode: mode, difficulty: difficulty, inviteType: inviteType) }
                 }
             }
             .fullScreenCover(item: $vm.activeExhibitionSession, onDismiss: {
@@ -203,7 +203,7 @@ struct FriendsView: View {
                 Text(incoming ? "From \(invite.fromUsername)" : "To \(invite.toUsername)")
                     .font(.headline)
                     .foregroundStyle(AppTheme.textPrimary)
-                Text("\(invite.mode.displayName) · \(invite.mode.difficultyLabel(invite.difficulty)) · expires in \(remainingText(invite))")
+                Text("\(invite.mode.displayName) · \(invite.mode.difficultyLabel(invite.difficulty)) · \(invite.isPlayLater ? "Play Later" : "Play Now") · expires in \(remainingText(invite))")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
             }
@@ -212,7 +212,11 @@ struct FriendsView: View {
                 Button("Decline") { Task { await vm.declineInvite(invite, currentUserID: user.id) } }
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textSecondary)
-                Button("Accept") { Task { await vm.acceptInvite(invite, currentUser: user) } }
+                Button(invite.isPlayLater ? "Play" : "Accept") { Task { await vm.playInvite(invite, currentUser: user) } }
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.teal)
+            } else if invite.isPlayLater {
+                Button("Play") { Task { await vm.playInvite(invite, currentUser: user) } }
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.teal)
             } else {
@@ -257,7 +261,7 @@ struct FriendsView: View {
 
 private struct InviteFriendSheet: View {
     let friend: FriendSummary
-    let onInvite: (GameMode, Difficulty) -> Void
+    let onInvite: (GameMode, Difficulty, ExhibitionInviteType) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var mode: GameMode = .colorLink
     @State private var difficulty: Difficulty = .medium
@@ -323,17 +327,37 @@ private struct InviteFriendSheet: View {
                         .background(AppTheme.cardBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                        Button {
-                            onInvite(mode, difficulty)
-                            dismiss()
-                        } label: {
-                            Label("Send Invite", systemImage: "paperplane.fill")
-                                .font(.headline.bold())
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(AppTheme.modeGradient(mode))
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        VStack(spacing: 10) {
+                            Button {
+                                onInvite(mode, difficulty, .playNow)
+                                dismiss()
+                            } label: {
+                                Label("Play Now", systemImage: "bolt.fill")
+                                    .font(.headline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(AppTheme.modeGradient(mode))
+                                    .foregroundStyle(.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+
+                            Button {
+                                onInvite(mode, difficulty, .playLater)
+                                dismiss()
+                            } label: {
+                                Label("Play Later", systemImage: "tray.full.fill")
+                                    .font(.headline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(AppTheme.cardBackground)
+                                    .foregroundStyle(AppTheme.crownGold)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.crownGold.opacity(0.45), lineWidth: 1))
+                            }
+                            Text("Play Later challenges stay open for 48 hours and use the same puzzle for both players.")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .multilineTextAlignment(.center)
                         }
                     }
                     .padding()

@@ -17,6 +17,7 @@ enum SessionResult: String, Codable {
 enum SessionKind: String, Codable {
     case ranked
     case exhibition
+    case asyncExhibition
 }
 
 struct PostMatchRewardSnapshot {
@@ -274,7 +275,9 @@ struct GameSession: Codable, Identifiable {
 
     var totalPot: Int { players.reduce(0) { $0 + $1.wager } }
     var isRanked: Bool { matchKind == .ranked }
-    var isExhibition: Bool { matchKind == .exhibition }
+    var isExhibition: Bool { matchKind == .exhibition || matchKind == .asyncExhibition }
+    var isLiveExhibition: Bool { matchKind == .exhibition }
+    var isAsyncExhibition: Bool { matchKind == .asyncExhibition }
     var containsBot: Bool { players.contains(where: \.isBot) }
     var botPlayer: MatchPlayer? { players.first(where: \.isBot) }
 

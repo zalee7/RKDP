@@ -164,8 +164,14 @@ final class MultiplayerViewModel: ObservableObject {
         if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
             opponentUser = try? await store.fetchUser(id: opponentID)
         }
-        state = .matchFound(session: session)
-        startMatchCountdown(session: session)
+        if session.isAsyncExhibition {
+            state = .inMatch(session: session)
+            listenForResults(session: session)
+            listenForSessionStatus(sessionID: session.id)
+        } else {
+            state = .matchFound(session: session)
+            startMatchCountdown(session: session)
+        }
     }
 
     func cancelSearch() async {
@@ -585,8 +591,14 @@ final class MultiplayerViewModel: ObservableObject {
         if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
             opponentUser = try? await store.fetchUser(id: opponentID)
         }
-        state = .matchFound(session: session)
-        startMatchCountdown(session: session)
+        if session.isAsyncExhibition {
+            state = .inMatch(session: session)
+            listenForResults(session: session)
+            listenForSessionStatus(sessionID: session.id)
+        } else {
+            state = .matchFound(session: session)
+            startMatchCountdown(session: session)
+        }
     }
 
     private func consumeRankedEntryIfNeeded(for session: GameSession) async -> Bool {
@@ -765,7 +777,9 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func handleViewDisappeared() {
-        if case .inMatch(let session) = state, finishedSessionID == nil, !isForfeiting {
+        if case .inMatch(let session) = state, session.isAsyncExhibition {
+            reset()
+        } else if case .inMatch(let session) = state, finishedSessionID == nil, !isForfeiting {
             Task { await forfeitMatch(session: session, resetAfterProcessing: true) }
         } else {
             reset()

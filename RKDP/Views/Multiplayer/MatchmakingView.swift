@@ -67,8 +67,10 @@ struct MatchmakingView: View {
 
     private var shouldBlockDismiss: Bool {
         switch vm.state {
-        case .matchFound, .inMatch:
+        case .matchFound:
             return true
+        case .inMatch(let session):
+            return !session.isAsyncExhibition
         default:
             return false
         }
@@ -77,6 +79,23 @@ struct MatchmakingView: View {
     private var activeInMatchSession: GameSession? {
         if case .inMatch(let session) = vm.state { return session }
         return nil
+    }
+
+    private var leaveAlertTitle: String {
+        if activeInMatchSession?.isAsyncExhibition == true { return "Leave challenge?" }
+        return activeInMatchSession?.isExhibition == true ? "Leave exhibition match?" : "Forfeit ranked match?"
+    }
+
+    private var leaveAlertActionTitle: String {
+        if activeInMatchSession?.isAsyncExhibition == true { return "Leave" }
+        return activeInMatchSession?.isExhibition == true ? "Leave" : "Forfeit"
+    }
+
+    private var leaveAlertMessage: String {
+        if activeInMatchSession?.isAsyncExhibition == true {
+            return "Your Play Later challenge will stay in Friends so you can come back before it expires."
+        }
+        return activeInMatchSession?.isExhibition == true ? "Leaving ends the exhibition for both players. No rank or coins are affected." : "Quitting now counts as a ranked loss and forfeits your wager."
     }
 
     var body: some View {
@@ -100,7 +119,7 @@ struct MatchmakingView: View {
             }
         }
         .foregroundStyle(AppTheme.textPrimary)
-        .navigationTitle(initialSession?.isExhibition == true ? "Exhibition Match" : "Ranked Match")
+        .navigationTitle(initialSession?.isAsyncExhibition == true ? "Play Later" : (initialSession?.isExhibition == true ? "Exhibition Match" : "Ranked Match"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(shouldBlockDismiss)
         .interactiveDismissDisabled(shouldBlockDismiss)
@@ -116,14 +135,18 @@ struct MatchmakingView: View {
             didNotifyFinished = true
             onMatchFinished()
         }
-        .alert(activeInMatchSession?.isExhibition == true ? "Leave exhibition match?" : "Forfeit ranked match?", isPresented: $showForfeitWarning) {
+        .alert(leaveAlertTitle, isPresented: $showForfeitWarning) {
             Button("Keep Playing", role: .cancel) {}
-            Button(activeInMatchSession?.isExhibition == true ? "Leave" : "Forfeit", role: .destructive) {
+            Button(leaveAlertActionTitle, role: .destructive) {
                 guard let session = activeInMatchSession else { return }
-                Task { await vm.forfeitMatch(session: session) }
+                if session.isAsyncExhibition {
+                    dismiss()
+                } else {
+                    Task { await vm.forfeitMatch(session: session) }
+                }
             }
         } message: {
-            Text(activeInMatchSession?.isExhibition == true ? "Leaving ends the exhibition for both players. No rank or coins are affected." : "Quitting now counts as a ranked loss and forfeits your wager.")
+            Text(leaveAlertMessage)
         }
     }
 
@@ -443,7 +466,7 @@ struct MatchmakingView: View {
                 Button {
                     showForfeitWarning = true
                 } label: {
-                    Label(session.isExhibition ? "Leave" : "Quit", systemImage: "flag.slash.fill")
+                    Label(session.isAsyncExhibition ? "Leave" : (session.isExhibition ? "Leave" : "Quit"), systemImage: session.isAsyncExhibition ? "xmark.circle.fill" : "flag.slash.fill")
                         .labelStyle(.iconOnly)
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
@@ -473,7 +496,7 @@ struct MatchmakingView: View {
                         ProgressView()
                         Text(myResult.status)
                             .font(.headline.bold())
-                        Text("Waiting for opponent…")
+                        Text(session.isAsyncExhibition ? "Saved. Waiting for your friend…" : "Waiting for opponent…")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1280,6 +1303,31 @@ struct MatchBreakdownView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
         detailLines(result.details)
+    }
+
+    private func letterChipRow(title: String, letters: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+            FlexibleWordWrap(spacing: 6) {
+                ForEach(Array(letters).map(String.init), id: \.self) { letter in
+                    Text(letter)
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(color.opacity(0.22))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(color.opacity(0.36), lineWidth: 1))
+                }
+                if letters.isEmpty {
+                    Text("None")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+        }
     }
 
     private func displayHangmanPattern(_ pattern: String) -> String {

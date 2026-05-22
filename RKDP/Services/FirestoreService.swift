@@ -908,12 +908,15 @@ final class FirestoreService {
         try db.collection("friendRequests").document(request.id).setData(from: updated, merge: true)
     }
 
-    func createExhibitionInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty) async throws -> ExhibitionInvite {
+    func createExhibitionInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty, inviteType: ExhibitionInviteType = .playNow) async throws -> ExhibitionInvite {
         let friendshipDoc = try await db.collection("friendships").document(friendshipID(user.id, friend.userID)).getDocument()
         guard friendshipDoc.exists else { throw FirestoreServiceError.notFriends }
         let now = Date()
-        let invite = ExhibitionInvite(
-            id: UUID().uuidString,
+        let seed = Int.random(in: 0..<Int.max)
+        let inviteID = UUID().uuidString
+        let sessionID = inviteType == .playLater ? "async_exhibition_\(inviteID)_\(UUID().uuidString.prefix(8))" : nil
+        var invite = ExhibitionInvite(
+            id: inviteID,
             fromID: user.id,
             fromUsername: user.username,
             toID: friend.userID,
@@ -922,9 +925,31 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .pending,
             createdAt: now,
-            expiresAt: now.addingTimeInterval(120),
-            sessionID: nil
+            expiresAt: now.addingTimeInterval(inviteType == .playLater ? 172_800 : 120),
+            sessionID: sessionID,
+            inviteType: inviteType
         )
+
+        if inviteType == .playLater, let sessionID {
+            let friendUser = try await fetchUser(id: friend.userID)
+            var session = GameSession(
+                id: sessionID,
+                mode: mode,
+                difficulty: difficulty,
+                status: .inProgress,
+                players: [
+                    MatchPlayer(userID: user.id, username: user.username, wager: 0, rankTier: user.rank(for: mode).displayTier, rankPoints: user.rank(for: mode).points, avatarStyle: user.cosmetics.avatarStyle),
+                    MatchPlayer(userID: friendUser.id, username: friendUser.username, wager: 0, rankTier: friendUser.rank(for: mode).displayTier, rankPoints: friendUser.rank(for: mode).points, avatarStyle: friendUser.cosmetics.avatarStyle)
+                ],
+                seed: seed,
+                puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+                createdAt: now,
+                matchKind: .asyncExhibition
+            )
+            session.playerIDs = [user.id, friendUser.id]
+            try db.collection("sessions").document(sessionID).setData(from: session)
+        }
+
         try db.collection("exhibitionInvites").document(invite.id).setData(from: invite)
         return invite
     }
@@ -934,6 +959,14 @@ final class FirestoreService {
         guard !invite.isExpired else {
             try? await expireExhibitionInvite(invite.id)
             throw FirestoreServiceError.exhibitionInviteExpired
+        }
+
+        if invite.isPlayLater, let existingSessionID = invite.sessionID {
+            let session = try await fetchSession(id: existingSessionID)
+            var updatedInvite = invite
+            updatedInvite.status = .accepted
+            try db.collection("exhibitionInvites").document(invite.id).setData(from: updatedInvite, merge: true)
+            return session
         }
 
         let fromUser = try await fetchUser(id: invite.fromID)
@@ -1039,7 +1072,13 @@ final class FirestoreService {
             .addSnapshotListener { snapshot, error in
                 if let error { print("Incoming exhibition invite listener error: \(error.localizedDescription)") }
                 let invites = snapshot?.documents.compactMap { try? $0.data(as: ExhibitionInvite.self) }
-                    .filter { $0.status == .pending && !$0.isExpired } ?? []
+                    .filter { invite in
+                        guard !invite.isExpired else { return false }
+                        if invite.isPlayLater {
+                            return invite.status == .pending || invite.status == .accepted
+                        }
+                        return invite.status == .pending
+                    } ?? []
                 onChange(invites)
             }
     }
@@ -1053,11 +1092,15 @@ final class FirestoreService {
                     try? document.data(as: ExhibitionInvite.self)
                 } ?? []
                 let activeInvites = decodedInvites.filter { invite in
+                    guard !invite.isExpired else { return false }
+                    if invite.isPlayLater {
+                        return (invite.status == .pending || invite.status == .accepted) && invite.sessionID != nil
+                    }
                     if invite.status == ExhibitionInviteStatus.pending {
-                        return !invite.isExpired
+                        return true
                     }
                     if invite.status == ExhibitionInviteStatus.accepted {
-                        return invite.sessionID != nil && !invite.isExpired
+                        return invite.sessionID != nil
                     }
                     return false
                 }

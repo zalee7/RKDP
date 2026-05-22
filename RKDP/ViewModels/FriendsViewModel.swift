@@ -13,6 +13,7 @@ final class FriendsViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var activeExhibitionSession: GameSession?
     private var activeExhibitionInviteID: String?
+    private var activeExhibitionInviteType: ExhibitionInviteType = .playNow
 
     private let store = FirestoreService.shared
     private var listeners: [ListenerRegistration] = []
@@ -103,9 +104,9 @@ final class FriendsViewModel: ObservableObject {
         }
     }
 
-    func sendInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty) async {
+    func sendInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty, inviteType: ExhibitionInviteType) async {
         do {
-            _ = try await store.createExhibitionInvite(from: user, to: friend, mode: mode, difficulty: difficulty)
+            _ = try await store.createExhibitionInvite(from: user, to: friend, mode: mode, difficulty: difficulty, inviteType: inviteType)
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -117,6 +118,7 @@ final class FriendsViewModel: ObservableObject {
             let session = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
             handledSessionIDs.insert(session.id)
             activeExhibitionInviteID = invite.id
+            activeExhibitionInviteType = invite.kind
             activeExhibitionSession = session
             errorMessage = nil
         } catch {
@@ -133,10 +135,33 @@ final class FriendsViewModel: ObservableObject {
         }
     }
 
+    func playInvite(_ invite: ExhibitionInvite, currentUser: AppUser) async {
+        do {
+            let session: GameSession
+            if invite.isPlayLater, let sessionID = invite.sessionID {
+                session = try await store.fetchSession(id: sessionID)
+                if invite.toID == currentUser.id && invite.status == .pending {
+                    _ = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
+                }
+            } else {
+                session = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
+            }
+            handledSessionIDs.insert(session.id)
+            activeExhibitionInviteID = invite.id
+            activeExhibitionInviteType = invite.kind
+            activeExhibitionSession = session
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 
     func closeActiveExhibitionInvite() async {
         guard let inviteID = activeExhibitionInviteID else { return }
+        let inviteType = activeExhibitionInviteType
         activeExhibitionInviteID = nil
+        activeExhibitionInviteType = .playNow
+        guard inviteType == .playNow else { return }
         do {
             try await store.completeExhibitionInvite(inviteID)
         } catch {
@@ -157,6 +182,7 @@ final class FriendsViewModel: ObservableObject {
             }
             handledSessionIDs.insert(sessionID)
             activeExhibitionInviteID = invite.id
+            activeExhibitionInviteType = invite.kind
             activeExhibitionSession = session
         } catch {
             errorMessage = error.localizedDescription

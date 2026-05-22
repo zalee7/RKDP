@@ -56,6 +56,11 @@ enum ExhibitionInviteStatus: String, Codable {
     case completed
 }
 
+enum ExhibitionInviteType: String, Codable {
+    case playNow
+    case playLater
+}
+
 struct ExhibitionInvite: Codable, Identifiable, Equatable {
     var id: String
     var fromID: String
@@ -68,8 +73,11 @@ struct ExhibitionInvite: Codable, Identifiable, Equatable {
     var createdAt: Date
     var expiresAt: Date
     var sessionID: String?
+    var inviteType: ExhibitionInviteType?
 
+    var kind: ExhibitionInviteType { inviteType ?? .playNow }
     var isExpired: Bool { Date() >= expiresAt }
+    var isPlayLater: Bool { kind == .playLater }
 
     func otherUsername(currentUserID: String) -> String {
         fromID == currentUserID ? toUsername : fromUsername
