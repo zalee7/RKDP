@@ -182,11 +182,17 @@ private struct HomeGameCategorySection: View {
 
 // MARK: - Mode Detail sheet
 
+private enum GameLobbyTab: String, CaseIterable {
+    case solo = "Solo"
+    case online = "Online"
+}
+
 struct GameModeDetailView: View {
     let mode: GameMode
     @EnvironmentObject var auth: AuthViewModel
     @Environment(\.dismiss) var dismiss
     @State private var selectedDifficulty: Difficulty
+    @State private var selectedTab: GameLobbyTab = .solo
     @State private var destination: NavigationPath = .init()
     @State private var showRankedAccessStore = false
 
@@ -202,6 +208,9 @@ struct GameModeDetailView: View {
     }
     private var rankedLockedReason: String? {
         mode.rankedLockReason(for: selectedDifficulty)
+    }
+    private var casualLockedReason: String? {
+        mode.casualLockReason(for: selectedDifficulty)
     }
     private var hasRankedEntry: Bool {
         user?.rankedAccess.canStartRanked(mode: mode) ?? false
@@ -231,6 +240,8 @@ struct GameModeDetailView: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         ModeLobbyHeader(mode: mode)
+                        LobbyTabSelector(selectedTab: $selectedTab)
+                            .padding(.horizontal)
 
                         VStack(spacing: 10) {
                             HStack {
@@ -239,15 +250,22 @@ struct GameModeDetailView: View {
                             }
                             HStack {
                                 ModeFactRow(icon: "timer", title: "Timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
-                                ModeFactRow(icon: "star.fill", title: "Rank Points", value: "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x ranked points", color: .yellow)
+                                ModeFactRow(
+                                    icon: selectedTab == .solo ? "sparkles" : "star.fill",
+                                    title: selectedTab == .solo ? "Best" : "Rank Points",
+                                    value: selectedTab == .solo ? bestSummary : "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x ranked points",
+                                    color: .yellow
+                                )
                             }
-                            RankedAccessMeterView(mode: mode, user: user)
+                            if selectedTab == .online {
+                                RankedAccessMeterView(mode: mode, user: user)
+                            }
                         }
                         .padding(.horizontal)
 
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
-                                Text((mode == .anagram || mode == .hangman) ? "Word Length" : "Difficulty")
+                                Text(selectedTab == .online ? "Choose Online Format" : ((mode == .anagram || mode == .hangman) ? "Word Length" : "Difficulty"))
                                     .font(.headline)
                                     .foregroundStyle(AppTheme.textPrimary)
                                 Spacer()
@@ -263,8 +281,10 @@ struct GameModeDetailView: View {
                                         mode: mode,
                                         difficulty: difficulty,
                                         isSelected: selectedDifficulty == difficulty,
-                                        soloLockedReason: user?.soloUnlockReason(mode: mode, difficulty: difficulty),
-                                        rankedLockedReason: mode.rankedLockReason(for: difficulty)
+                                        showsOnlineAvailability: selectedTab == .online,
+                                        soloLockedReason: selectedTab == .solo ? user?.soloUnlockReason(mode: mode, difficulty: difficulty) : nil,
+                                        rankedLockedReason: selectedTab == .online ? mode.rankedLockReason(for: difficulty) : nil,
+                                        casualLockedReason: selectedTab == .online ? mode.casualLockReason(for: difficulty) : nil
                                     ) {
                                         selectedDifficulty = difficulty
                                     }
@@ -274,27 +294,39 @@ struct GameModeDetailView: View {
                         }
 
                         VStack(spacing: 12) {
-                            LobbyActionButton(
-                                title: soloLockedReason == nil ? "Play Solo" : "Solo Locked",
-                                subtitle: soloLockedReason ?? "Practice \(mode.difficultyLabel(selectedDifficulty))",
-                                icon: soloLockedReason == nil ? "person.fill" : "lock.fill",
-                                gradient: AppTheme.brandGradient,
-                                disabled: soloLockedReason != nil
-                            ) {
-                                destination.append("solo")
-                            }
+                            if selectedTab == .solo {
+                                LobbyActionButton(
+                                    title: soloLockedReason == nil ? "Play Solo" : "Solo Locked",
+                                    subtitle: soloLockedReason ?? "Practice \(mode.difficultyLabel(selectedDifficulty))",
+                                    icon: soloLockedReason == nil ? "person.fill" : "lock.fill",
+                                    gradient: AppTheme.brandGradient,
+                                    disabled: soloLockedReason != nil
+                                ) {
+                                    destination.append("solo")
+                                }
+                            } else {
+                                LobbyActionButton(
+                                    title: rankedButtonTitle,
+                                    subtitle: rankedButtonSubtitle,
+                                    icon: rankedButtonIcon,
+                                    gradient: AppTheme.modeGradient(mode),
+                                    disabled: rankedLockedReason != nil || user == nil
+                                ) {
+                                    if hasRankedEntry {
+                                        destination.append("ranked")
+                                    } else {
+                                        showRankedAccessStore = true
+                                    }
+                                }
 
-                            LobbyActionButton(
-                                title: rankedButtonTitle,
-                                subtitle: rankedButtonSubtitle,
-                                icon: rankedButtonIcon,
-                                gradient: AppTheme.modeGradient(mode),
-                                disabled: rankedLockedReason != nil || user == nil
-                            ) {
-                                if hasRankedEntry {
-                                    destination.append("ranked")
-                                } else {
-                                    showRankedAccessStore = true
+                                LobbyActionButton(
+                                    title: casualLockedReason == nil ? "Casual Match" : "Casual Locked",
+                                    subtitle: casualLockedReason ?? "Random opponent · no rank or wager · tiny coin rewards",
+                                    icon: casualLockedReason == nil ? "shuffle.circle.fill" : "lock.fill",
+                                    gradient: AppTheme.brandGradient,
+                                    disabled: casualLockedReason != nil || user == nil
+                                ) {
+                                    destination.append("casual")
                                 }
                             }
                         }
@@ -310,6 +342,13 @@ struct GameModeDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }.foregroundStyle(AppTheme.accentBright)
+                }
+            }
+            .onChange(of: selectedTab) { _, tab in
+                guard tab == .online else { return }
+                if !mode.rankedDifficulties.contains(selectedDifficulty),
+                   !mode.casualDifficulties.contains(selectedDifficulty) {
+                    selectedDifficulty = mode.casualDifficulties.first ?? mode.rankedDifficulties.first ?? mode.defaultDifficulty
                 }
             }
             .sheet(isPresented: $showRankedAccessStore) {
@@ -345,6 +384,10 @@ struct GameModeDetailView: View {
                     )
                 } else if dest == "ranked", let user = auth.user {
                     MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty) {
+                        Task { await auth.refreshUser() }
+                    }
+                } else if dest == "casual", let user = auth.user {
+                    MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty, entryKind: .casual) {
                         Task { await auth.refreshUser() }
                     }
                 }
@@ -460,6 +503,33 @@ private struct ModeLobbyHeader: View {
     }
 }
 
+private struct LobbyTabSelector: View {
+    @Binding var selectedTab: GameLobbyTab
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(GameLobbyTab.allCases, id: \.self) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    Label(tab.rawValue, systemImage: tab == .solo ? "person.fill" : "network")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(selectedTab == tab ? AppTheme.crownGold : Color.white.opacity(0.08))
+                        .foregroundStyle(selectedTab == tab ? .white : AppTheme.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+}
+
 private struct ModeMiniPreview: View {
     let mode: GameMode
 
@@ -525,8 +595,10 @@ private struct DifficultyCardView: View {
     let mode: GameMode
     let difficulty: Difficulty
     let isSelected: Bool
+    let showsOnlineAvailability: Bool
     let soloLockedReason: String?
     let rankedLockedReason: String?
+    let casualLockedReason: String?
     let onSelect: () -> Void
 
     var body: some View {
@@ -562,8 +634,12 @@ private struct DifficultyCardView: View {
                 .foregroundStyle(AppTheme.textSecondary)
 
             HStack(spacing: 6) {
-                availabilityBadge("Solo", locked: soloLockedReason != nil)
-                availabilityBadge("Ranked", locked: rankedLockedReason != nil)
+                if !showsOnlineAvailability {
+                    availabilityBadge("Solo", locked: soloLockedReason != nil)
+                } else {
+                    availabilityBadge("Ranked", locked: rankedLockedReason != nil)
+                    availabilityBadge("Casual", locked: casualLockedReason != nil)
+                }
             }
 
             lockReasonText
@@ -589,6 +665,11 @@ private struct DifficultyCardView: View {
                 .lineLimit(2)
         } else if let rankedLockedReason {
             Text(rankedLockedReason)
+                .font(.caption2)
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(2)
+        } else if let casualLockedReason {
+            Text(casualLockedReason)
                 .font(.caption2)
                 .foregroundStyle(AppTheme.textSecondary)
                 .lineLimit(2)

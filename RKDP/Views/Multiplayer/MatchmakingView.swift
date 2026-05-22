@@ -1,10 +1,16 @@
 import SwiftUI
 
+enum MatchmakingEntryKind {
+    case ranked
+    case casual
+}
+
 struct MatchmakingView: View {
     let user: AppUser
     let mode: GameMode
     let difficulty: Difficulty
     let initialSession: GameSession?
+    let entryKind: MatchmakingEntryKind
     var onMatchFinished: () -> Void
 
     @StateObject private var vm = MultiplayerViewModel()
@@ -18,11 +24,12 @@ struct MatchmakingView: View {
     @State private var didStartInitialSession = false
     @Environment(\.dismiss) var dismiss
 
-    init(user: AppUser, mode: GameMode, difficulty: Difficulty, onMatchFinished: @escaping () -> Void = {}) {
+    init(user: AppUser, mode: GameMode, difficulty: Difficulty, entryKind: MatchmakingEntryKind = .ranked, onMatchFinished: @escaping () -> Void = {}) {
         self.user = user
         self.mode = mode
         self.difficulty = difficulty
         self.initialSession = nil
+        self.entryKind = entryKind
         self.onMatchFinished = onMatchFinished
     }
 
@@ -31,6 +38,7 @@ struct MatchmakingView: View {
         self.mode = exhibitionSession.mode
         self.difficulty = exhibitionSession.difficulty
         self.initialSession = exhibitionSession
+        self.entryKind = exhibitionSession.isCasual ? .casual : .ranked
         self.onMatchFinished = onMatchFinished
     }
 
@@ -49,6 +57,9 @@ struct MatchmakingView: View {
     }
 
     private var queueCriteriaHint: String {
+        if isCasualFlow {
+            return "Casual pairs random players with the same mode and \(queueSettingTitle.lowercased()). Rank, division, wagers, and ranked entries do not matter."
+        }
         switch mode {
         case .wordle:
             return "Wordle pairs players with the same guess count and rank tier."
@@ -76,6 +87,16 @@ struct MatchmakingView: View {
         }
     }
 
+    private var isCasualFlow: Bool {
+        entryKind == .casual || initialSession?.isCasual == true
+    }
+
+    private var navigationTitle: String {
+        if initialSession?.isAsyncExhibition == true { return "Play Later" }
+        if initialSession?.isExhibition == true { return "Exhibition Match" }
+        return isCasualFlow ? "Casual Match" : "Ranked Match"
+    }
+
     private var activeInMatchSession: GameSession? {
         if case .inMatch(let session) = vm.state { return session }
         return nil
@@ -83,17 +104,22 @@ struct MatchmakingView: View {
 
     private var leaveAlertTitle: String {
         if activeInMatchSession?.isAsyncExhibition == true { return "Leave challenge?" }
+        if activeInMatchSession?.isCasual == true { return "Leave casual match?" }
         return activeInMatchSession?.isExhibition == true ? "Leave exhibition match?" : "Forfeit ranked match?"
     }
 
     private var leaveAlertActionTitle: String {
         if activeInMatchSession?.isAsyncExhibition == true { return "Leave" }
+        if activeInMatchSession?.isCasual == true { return "Leave" }
         return activeInMatchSession?.isExhibition == true ? "Leave" : "Forfeit"
     }
 
     private var leaveAlertMessage: String {
         if activeInMatchSession?.isAsyncExhibition == true {
             return "Your Play Later challenge will stay in Friends so you can come back before it expires."
+        }
+        if activeInMatchSession?.isCasual == true {
+            return "Leaving gives the other player the casual win. No rank, W/L, or wager coins are affected."
         }
         return activeInMatchSession?.isExhibition == true ? "Leaving ends the exhibition for both players. No rank or coins are affected." : "Quitting now counts as a ranked loss and forfeits your wager."
     }
@@ -119,7 +145,7 @@ struct MatchmakingView: View {
             }
         }
         .foregroundStyle(AppTheme.textPrimary)
-        .navigationTitle(initialSession?.isAsyncExhibition == true ? "Play Later" : (initialSession?.isExhibition == true ? "Exhibition Match" : "Ranked Match"))
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(shouldBlockDismiss)
         .interactiveDismissDisabled(shouldBlockDismiss)
@@ -159,10 +185,14 @@ struct MatchmakingView: View {
     // MARK: - Wager picker
 
     private var wagerPicker: some View {
+        if isCasualFlow {
+            return AnyView(casualPicker)
+        }
+
         let wager = automaticWager
         let rank = user.rank(for: mode)
 
-        return ScrollView {
+        return AnyView(ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
                     Image(systemName: mode.icon)
@@ -241,6 +271,71 @@ struct MatchmakingView: View {
                 .disabled(!canAffordAutomaticWager)
             }
             .padding(.vertical)
+        })
+    }
+
+    private var casualPicker: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                VStack(spacing: 4) {
+                    Image(systemName: mode.icon)
+                        .font(.system(size: 40))
+                        .foregroundStyle(mode.accentColor)
+                    Text("\(mode.displayName) · \(mode.difficultyLabel(difficulty))")
+                        .font(.headline)
+                    Text("Random casual online")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.crownGold)
+                }
+
+                queueCriteriaCard(wager: nil, includeHint: true)
+                    .padding(.horizontal)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    casualInfoRow(icon: "shield.slash.fill", title: "No rank at stake", detail: "Rank points, divisions, and ranked W/L stay untouched.")
+                    casualInfoRow(icon: "circle.slash", title: "No wager", detail: "You never risk coins in casual matches.")
+                    casualInfoRow(icon: "shuffle.circle.fill", title: "Same puzzle", detail: "Both players get the same seed and puzzle data.")
+                    casualInfoRow(icon: "centsign.circle.fill", title: "Small daily coins", detail: "Win +10, loss/draw +3, capped at 100 casual coins per day.")
+                }
+                .padding()
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
+                .padding(.horizontal)
+
+                Button {
+                    didNotifyFinished = false
+                    rewardAnimationFinished = true
+                    inMatchMusicEnabled = true
+                    Task { await vm.startCasualSearch(user: user, mode: mode, difficulty: difficulty) }
+                } label: {
+                    Text("Find Casual Match")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppTheme.crownGold)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+            }
+            .padding(.vertical)
+        }
+    }
+
+    private func casualInfoRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(AppTheme.accentBright)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Spacer()
         }
     }
 
@@ -273,8 +368,13 @@ struct MatchmakingView: View {
             }
             queueCriterionRow(title: "Mode", value: mode.displayName)
             queueCriterionRow(title: queueSettingTitle, value: mode.difficultyLabel(difficulty))
-            queueCriterionRow(title: "Tier wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
-            queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
+            if isCasualFlow {
+                queueCriterionRow(title: "Queue type", value: "Random casual")
+                queueCriterionRow(title: "Stakes", value: "No rank · No wager")
+            } else {
+                queueCriterionRow(title: "Tier wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
+                queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
+            }
             if includeHint {
                 Text(queueCriteriaHint)
                     .font(.caption2)
@@ -316,7 +416,7 @@ struct MatchmakingView: View {
             queueCriteriaCard(wager: vm.selectedWager, includeHint: false)
                 .padding(.horizontal)
             if showCompatibilityHint {
-                Text("Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), rank tier, and wager.")
+                Text(isCasualFlow ? "Still searching? Casual only needs another player on the same \(mode.displayName) and \(queueSettingTitle.lowercased())." : "Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), rank tier, and wager.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -348,7 +448,7 @@ struct MatchmakingView: View {
         return VStack(spacing: 24) {
             Spacer()
 
-            Text(isBotOpponent ? "Training Bot Found!" : (session.isExhibition ? "Exhibition Ready!" : "Match Found!"))
+            Text(isBotOpponent ? "Training Bot Found!" : (session.isCasual ? "Casual Match Found!" : (session.isExhibition ? "Exhibition Ready!" : "Match Found!")))
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.textPrimary)
 
@@ -420,14 +520,14 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textPrimary)
             }
 
-            Text(isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…"))
+            Text(isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isCasual ? "No rank, no wager · starts automatically…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…")))
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
 
             Button {
                 Task { await vm.abortMatchFound(session: session) }
             } label: {
-                Label(session.isExhibition ? "Leave Exhibition" : "Abort (-1 coin)", systemImage: "xmark.circle")
+                Label((session.isExhibition || session.isCasual) ? "Leave Match" : "Abort (-1 coin)", systemImage: "xmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(.red)
             }
@@ -466,7 +566,7 @@ struct MatchmakingView: View {
                 Button {
                     showForfeitWarning = true
                 } label: {
-                    Label(session.isAsyncExhibition ? "Leave" : (session.isExhibition ? "Leave" : "Quit"), systemImage: session.isAsyncExhibition ? "xmark.circle.fill" : "flag.slash.fill")
+                    Label(session.isAsyncExhibition ? "Leave" : ((session.isExhibition || session.isCasual) ? "Leave" : "Quit"), systemImage: session.isAsyncExhibition ? "xmark.circle.fill" : "flag.slash.fill")
                         .labelStyle(.iconOnly)
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
@@ -575,6 +675,24 @@ struct MatchmakingView: View {
                         rewardAnimationFinished = true
                     }
                     .padding(.vertical, 10)
+                } else if session.isCasual {
+                    VStack(spacing: 6) {
+                        Text("Casual Match")
+                            .font(.headline.bold())
+                            .foregroundStyle(AppTheme.crownGold)
+                        Text("No rank, wager, leaderboard, ranked ticket, or W/L changed.")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                        if let casualReward = vm.casualRewardMessage {
+                            Label(casualReward, systemImage: "centsign.circle.fill")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(AppTheme.success)
+                                .padding(.top, 4)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
                 } else {
                     VStack(spacing: 4) {
                         Text("Exhibition Match")
@@ -625,6 +743,25 @@ struct MatchmakingView: View {
 
             if (session.isRanked || session.isExhibition) && !session.containsBot {
                 rematchControl(session: session, controlsReady: controlsReady)
+            }
+
+            if session.isCasual {
+                Button {
+                    didNotifyFinished = false
+                    rewardAnimationFinished = true
+                    Task { await vm.startCasualSearch(user: user, mode: session.mode, difficulty: session.difficulty) }
+                } label: {
+                    Label("Find New Casual", systemImage: "shuffle.circle.fill")
+                        .font(.headline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppTheme.crownGold)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+                .opacity(controlsReady ? 1 : 0.36)
+                .disabled(!controlsReady)
             }
 
             Button { dismiss() } label: {

@@ -196,4 +196,19 @@ extension GameMode {
     func rankedLockReason(for difficulty: Difficulty) -> String? {
         rankedDifficulties.contains(difficulty) ? nil : "Ranked uses \(rankedDifficulties.map { difficultyLabel($0) }.joined(separator: ", "))"
     }
+
+    var casualDifficulties: [Difficulty] {
+        switch self {
+        case .anagram, .wordHunt, .wordle, .hangman:
+            return Difficulty.allCases
+        case .sudoku, .minesweeper:
+            return [.medium]
+        case .colorLink, .gridlock:
+            return [.expert]
+        }
+    }
+
+    func casualLockReason(for difficulty: Difficulty) -> String? {
+        casualDifficulties.contains(difficulty) ? nil : "Casual uses \(casualDifficulties.map { difficultyLabel($0) }.joined(separator: ", "))"
+    }
 }

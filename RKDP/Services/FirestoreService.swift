@@ -334,6 +334,65 @@ final class FirestoreService {
             .setData(from: entry)
     }
 
+    struct AppliedCasualOutcome {
+        let user: AppUser
+        let coinDelta: Int
+        let didApplyRewards: Bool
+    }
+
+    func applyFinishedCasualSession(_ session: GameSession, for userID: String) async throws -> AppliedCasualOutcome {
+        guard session.isCasual,
+              session.status == .finished,
+              session.players.contains(where: { $0.userID == userID }) else {
+            let user = try await fetchUser(id: userID)
+            return AppliedCasualOutcome(user: user, coinDelta: 0, didApplyRewards: false)
+        }
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppliedCasualOutcome, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    if user.appliedCasualOutcomes[session.id] == true {
+                        return AppliedCasualOutcome(user: user, coinDelta: 0, didApplyRewards: false)
+                    }
+
+                    let result = session.result(for: userID) ?? .draw
+                    let requestedReward: Int
+                    switch result {
+                    case .win:
+                        requestedReward = CoinWallet.casualWinReward
+                    case .loss, .draw, .abandoned:
+                        requestedReward = CoinWallet.casualOtherReward
+                    }
+                    let granted = user.coinWallet.recordCasualReward(requestedReward)
+                    user.coins += granted
+                    user.appliedCasualOutcomes[session.id] = true
+
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return AppliedCasualOutcome(user: user, coinDelta: granted, didApplyRewards: true)
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let outcome = result as? AppliedCasualOutcome {
+                    continuation.resume(returning: outcome)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
     // MARK: - Game Sessions
 
     func createSession(_ session: GameSession) async throws -> String {
@@ -370,6 +429,7 @@ final class FirestoreService {
         userID: String,
         mode: GameMode,
         difficulty: Difficulty,
+        matchKind: SessionKind = .ranked,
         onMatch: @escaping (GameSession) -> Void
     ) -> ListenerRegistration {
         db.collection("sessions")
@@ -383,6 +443,7 @@ final class FirestoreService {
                 guard let session = sessions.first(where: {
                     $0.mode == mode &&
                     $0.difficulty == difficulty &&
+                    $0.matchKind == matchKind &&
                     $0.createdAt >= recentCutoff &&
                     $0.players.contains(where: { $0.userID == userID })
                 }) else { return }
@@ -573,6 +634,43 @@ final class FirestoreService {
         )
     }
 
+    func joinAndPairCasual(user: AppUser, mode: GameMode, difficulty: Difficulty, searchID: String) async throws {
+        let queueRef = queueCollection(mode: mode, difficulty: difficulty)
+
+        try await queueRef.document(user.id).setData([
+            "userID": user.id,
+            "username": user.username,
+            "queueKind": SessionKind.casual.rawValue,
+            "rankPoints": user.rank(for: mode).points,
+            "avatarStyle": [
+                "head": user.cosmetics.equippedAvatarHead,
+                "face": user.cosmetics.equippedAvatarFace,
+                "outfit": user.cosmetics.equippedAvatarOutfit,
+                "aura": user.cosmetics.equippedAvatarAura,
+                "pose": user.cosmetics.equippedAvatarPose,
+                "bodyHex": user.cosmetics.customAvatarBodyHex
+            ],
+            "searchID": searchID
+        ])
+
+        let snapshot = try await queueRef.getDocuments()
+        let others = snapshot.documents.filter {
+            $0.documentID != user.id &&
+            ($0.data()["queueKind"] as? String) == SessionKind.casual.rawValue
+        }
+        guard let opponentDoc = others.first else { return }
+        guard user.id > opponentDoc.documentID else { return }
+
+        _ = try await createAndNotifyCasual(
+            hostUser: user,
+            searchID: searchID,
+            opponentDoc: opponentDoc,
+            mode: mode,
+            difficulty: difficulty,
+            queueRef: queueRef
+        )
+    }
+
     /// Watch the queue; if a second player appears AND this user has the larger uid,
     /// create the session and notify both players.
     func listenForQueueMatch(
@@ -601,6 +699,52 @@ final class FirestoreService {
                             hostUser: user, wager: wager, tier: tier, searchID: searchID,
                             opponentDoc: opponentDoc,
                             mode: mode, difficulty: difficulty,
+                            queueRef: queueRef
+                        ) {
+                            onPaired(sessionID)
+                        }
+                    } else if let creatorSearchID = opponentDoc.data()["searchID"] as? String,
+                              let sessionID = try await self.waitForExistingSessionID(
+                        userID: user.id,
+                        opponentID: opponentID,
+                        mode: mode,
+                        difficulty: difficulty,
+                        creatorSearchID: creatorSearchID
+                    ) {
+                        onPaired(sessionID)
+                    }
+                } catch {
+                    // A concurrent listener may have already handled this pairing.
+                }
+            }
+        }
+    }
+
+    func listenForCasualQueueMatch(
+        user: AppUser, mode: GameMode, difficulty: Difficulty, searchID: String,
+        onPaired: @escaping (String) -> Void
+    ) -> ListenerRegistration {
+        let queueRef = queueCollection(mode: mode, difficulty: difficulty)
+
+        return queueRef.addSnapshotListener { [weak self] snapshot, error in
+            if let error { print("Casual queue listener error: \(error.localizedDescription)") }
+            guard let self, let snapshot else { return }
+            let others = snapshot.documents.filter {
+                $0.documentID != user.id &&
+                ($0.data()["queueKind"] as? String) == SessionKind.casual.rawValue
+            }
+            guard let opponentDoc = others.first else { return }
+
+            let opponentID = opponentDoc.documentID
+            Task {
+                do {
+                    if user.id > opponentID {
+                        if let sessionID = try await self.createAndNotifyCasual(
+                            hostUser: user,
+                            searchID: searchID,
+                            opponentDoc: opponentDoc,
+                            mode: mode,
+                            difficulty: difficulty,
                             queueRef: queueRef
                         ) {
                             onPaired(sessionID)
@@ -711,6 +855,73 @@ final class FirestoreService {
         ])
 
         // Each client removes its own queue entry after observing the session.
+        try? await queueRef.document(hostUser.id).delete()
+        return sessionID
+    }
+
+    private func createAndNotifyCasual(
+        hostUser: AppUser,
+        searchID: String,
+        opponentDoc: QueryDocumentSnapshot,
+        mode: GameMode,
+        difficulty: Difficulty,
+        queueRef: CollectionReference
+    ) async throws -> String? {
+        let opponentID = opponentDoc.documentID
+
+        let hostQueueDoc = try await queueRef.document(hostUser.id).getDocument()
+        let opponentQueueDoc = try await queueRef.document(opponentID).getDocument()
+        guard let hostQueue = hostQueueDoc.data(),
+              let opponentQueue = opponentQueueDoc.data(),
+              (hostQueue["searchID"] as? String) == searchID,
+              (hostQueue["queueKind"] as? String) == SessionKind.casual.rawValue,
+              (opponentQueue["queueKind"] as? String) == SessionKind.casual.rawValue,
+              opponentQueue["searchID"] is String else {
+            return nil
+        }
+
+        let sessionID = makeSessionID(
+            userID: hostUser.id,
+            opponentID: opponentID,
+            mode: mode,
+            difficulty: difficulty,
+            creatorSearchID: searchID
+        )
+
+        let existing = try await db.collection("sessions").document(sessionID).getDocument()
+        if existing.exists {
+            let status = existing.data()?["status"] as? String ?? ""
+            if status == SessionStatus.inProgress.rawValue || status == SessionStatus.waiting.rawValue {
+                return sessionID
+            }
+            return nil
+        }
+
+        let opponentUsername = opponentQueue["username"] as? String ?? "Opponent"
+        let opponentRankPoints = opponentQueue["rankPoints"] as? Int ?? 0
+        let opponentAvatarStyle = avatarStyle(from: opponentQueue["avatarStyle"])
+        let seed = Int.random(in: 0..<Int.max)
+        var session = GameSession(
+            id: sessionID,
+            mode: mode,
+            difficulty: difficulty,
+            status: .inProgress,
+            players: [
+                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: 0, rankTier: hostUser.rank(for: mode).displayTier, rankPoints: hostUser.rank(for: mode).points, avatarStyle: hostUser.cosmetics.avatarStyle),
+                MatchPlayer(userID: opponentID, username: opponentUsername, wager: 0, rankTier: RankTier.tier(for: opponentRankPoints), rankPoints: opponentRankPoints, avatarStyle: opponentAvatarStyle)
+            ],
+            seed: seed,
+            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+            createdAt: Date(),
+            matchKind: .casual
+        )
+        session.playerIDs = [hostUser.id, opponentID]
+
+        try db.collection("sessions").document(sessionID).setData(from: session)
+        try? await db.collection("users").document(hostUser.id).updateData([
+            "pendingSessionID": sessionID,
+            "pendingSearchID": searchID
+        ])
         try? await queueRef.document(hostUser.id).delete()
         return sessionID
     }

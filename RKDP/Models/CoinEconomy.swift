@@ -32,12 +32,48 @@ struct CoinWallet: Codable, Equatable {
     static let dailyClaimAmount = 100
     static let rewardedAdAmount = 75
     static let rewardedAdsPerDay = 5
+    static let casualWinReward = 10
+    static let casualOtherReward = 3
+    static let casualRewardDailyCap = 100
 
     var claimedDailyCoinDay: String? = nil
     var rewardedCoinAds: CoinDailyCounter = .empty
+    var casualRewards: CoinDailyCounter = .empty
     var processedTransactions: [String: Bool] = [:]
 
     static let empty = CoinWallet()
+
+    enum CodingKeys: String, CodingKey {
+        case claimedDailyCoinDay, rewardedCoinAds, casualRewards, processedTransactions
+    }
+
+    init(
+        claimedDailyCoinDay: String? = nil,
+        rewardedCoinAds: CoinDailyCounter = .empty,
+        casualRewards: CoinDailyCounter = .empty,
+        processedTransactions: [String: Bool] = [:]
+    ) {
+        self.claimedDailyCoinDay = claimedDailyCoinDay
+        self.rewardedCoinAds = rewardedCoinAds
+        self.casualRewards = casualRewards
+        self.processedTransactions = processedTransactions
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        claimedDailyCoinDay = try c.decodeIfPresent(String.self, forKey: .claimedDailyCoinDay)
+        rewardedCoinAds = (try? c.decode(CoinDailyCounter.self, forKey: .rewardedCoinAds)) ?? .empty
+        casualRewards = (try? c.decode(CoinDailyCounter.self, forKey: .casualRewards)) ?? .empty
+        processedTransactions = (try? c.decode([String: Bool].self, forKey: .processedTransactions)) ?? [:]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(claimedDailyCoinDay, forKey: .claimedDailyCoinDay)
+        try c.encode(rewardedCoinAds, forKey: .rewardedCoinAds)
+        try c.encode(casualRewards, forKey: .casualRewards)
+        try c.encode(processedTransactions, forKey: .processedTransactions)
+    }
 
     static func todayKey(date: Date = Date()) -> String {
         RankedAccess.todayKey(date: date)
@@ -63,6 +99,19 @@ struct CoinWallet: Codable, Equatable {
         let used = rewardedCoinAds.dayKey == dayKey ? rewardedCoinAds.count : 0
         rewardedCoinAds = CoinDailyCounter(dayKey: dayKey, count: used + 1)
         return true
+    }
+
+    func casualRewardRemaining(dayKey: String = todayKey()) -> Int {
+        let earned = casualRewards.dayKey == dayKey ? casualRewards.count : 0
+        return max(0, Self.casualRewardDailyCap - earned)
+    }
+
+    mutating func recordCasualReward(_ amount: Int, dayKey: String = todayKey()) -> Int {
+        let grant = min(max(0, amount), casualRewardRemaining(dayKey: dayKey))
+        guard grant > 0 else { return 0 }
+        let earned = casualRewards.dayKey == dayKey ? casualRewards.count : 0
+        casualRewards = CoinDailyCounter(dayKey: dayKey, count: earned + grant)
+        return grant
     }
 }
 

@@ -31,6 +31,7 @@ struct AppUser: Codable, Identifiable {
     var cosmetics: OwnedCosmetics = .default
     var soloCompletions: [GameMode: [Difficulty]] = [:]
     var appliedRankedOutcomes: [String: Bool] = [:]
+    var appliedCasualOutcomes: [String: Bool] = [:]
     var rankedAccess: RankedAccess = .empty
     var coinWallet: CoinWallet = .empty
     var botMatchProgress: BotMatchProgress = .empty
@@ -83,7 +84,7 @@ struct AppUser: Codable, Identifiable {
 
 extension AppUser {
     enum CodingKeys: String, CodingKey {
-        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes, rankedAccess, coinWallet, botMatchProgress
+        case id, username, email, avatarURL, coins, createdAt, ranks, cosmetics, soloCompletions, appliedRankedOutcomes, appliedCasualOutcomes, rankedAccess, coinWallet, botMatchProgress
     }
 
     init(from decoder: Decoder) throws {
@@ -109,6 +110,7 @@ extension AppUser {
             partial[mode] = item.value.compactMap { Difficulty(rawValue: $0) }
         }
         appliedRankedOutcomes = (try? c.decode([String: Bool].self, forKey: .appliedRankedOutcomes)) ?? [:]
+        appliedCasualOutcomes = (try? c.decode([String: Bool].self, forKey: .appliedCasualOutcomes)) ?? [:]
         rankedAccess = (try? c.decode(RankedAccess.self, forKey: .rankedAccess)) ?? .empty
         coinWallet = (try? c.decode(CoinWallet.self, forKey: .coinWallet)) ?? .empty
         botMatchProgress = (try? c.decode(BotMatchProgress.self, forKey: .botMatchProgress)) ?? .empty
@@ -134,6 +136,7 @@ extension AppUser {
         }
         try c.encode(rawSolo, forKey: .soloCompletions)
         try c.encode(appliedRankedOutcomes, forKey: .appliedRankedOutcomes)
+        try c.encode(appliedCasualOutcomes, forKey: .appliedCasualOutcomes)
         try c.encode(rankedAccess, forKey: .rankedAccess)
         try c.encode(coinWallet, forKey: .coinWallet)
         try c.encode(botMatchProgress, forKey: .botMatchProgress)

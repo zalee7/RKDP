@@ -22,6 +22,7 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var finishedSessionID: String?
     @Published var rewardErrorMessage: String?
     @Published var rewardSnapshot: PostMatchRewardSnapshot?
+    @Published var casualRewardMessage: String?
     @Published var rematchRequests: Set<String> = []
     @Published var rematchErrorMessage: String?
     @Published var isStartingRematch = false
@@ -83,6 +84,7 @@ final class MultiplayerViewModel: ObservableObject {
         finishedSessionID = nil
         rewardErrorMessage = nil
         rewardSnapshot = nil
+        casualRewardMessage = nil
         clearRematchState()
 
         self.user = user
@@ -104,7 +106,8 @@ final class MultiplayerViewModel: ObservableObject {
             matchDiscoveryListener = store.listenForActiveSession(
                 userID: user.id,
                 mode: mode,
-                difficulty: difficulty
+                difficulty: difficulty,
+                matchKind: .ranked
             ) { [weak self] session in
                 Task { await self?.consumeDiscoveredMatch(session: session, searchID: searchID) }
             }
@@ -125,6 +128,76 @@ final class MultiplayerViewModel: ObservableObject {
             // 3. Write to queue and try to pair immediately
             try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString)
             scheduleBotFallback(user: user, mode: mode, difficulty: difficulty, wager: wager, searchID: searchID)
+
+            if !isCurrentSearch(searchID) {
+                try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+                try? await store.clearPendingSession(userID: user.id)
+            }
+        } catch {
+            guard isCurrentSearch(searchID) else { return }
+            tearDownListeners()
+            try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    func startCasualSearch(user: AppUser, mode: GameMode, difficulty: Difficulty) async {
+        guard mode.casualDifficulties.contains(difficulty) else {
+            state = .error("\(mode.displayName) casual is only available at \(mode.casualDifficulties.map { mode.difficultyLabel($0) }.joined(separator: ", ")).")
+            return
+        }
+
+        let searchID = UUID()
+        activeSearchID = searchID
+        tearDownListeners()
+        countdownTask?.cancel()
+        countdownTask = nil
+        cancelBotTasks()
+        gameTimer?.invalidate()
+        playerResults = [:]
+        opponentUser = nil
+        elapsedSeconds = 0
+        matchCountdown = 5
+        finishedSessionID = nil
+        rewardErrorMessage = nil
+        rewardSnapshot = nil
+        casualRewardMessage = nil
+        clearRematchState()
+
+        self.user = user
+        self.mode = mode
+        self.difficulty = difficulty
+        self.selectedWager = nil
+        state = .searching
+
+        do {
+            try? await store.clearPendingSession(userID: user.id)
+            try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
+            guard isCurrentSearch(searchID) else { return }
+
+            matchDiscoveryListener = store.listenForActiveSession(
+                userID: user.id,
+                mode: mode,
+                difficulty: difficulty,
+                matchKind: .casual
+            ) { [weak self] session in
+                Task { await self?.consumeDiscoveredMatch(session: session, searchID: searchID) }
+            }
+
+            userDocListener = store.listenForMatch(userID: user.id) { [weak self] sessionID, pendingSearchID in
+                Task { await self?.consumeMatch(sessionID: sessionID, pendingSearchID: pendingSearchID, searchID: searchID) }
+            }
+
+            queueListener = store.listenForCasualQueueMatch(
+                user: user,
+                mode: mode,
+                difficulty: difficulty,
+                searchID: searchID.uuidString
+            ) { [weak self] sessionID in
+                Task { await self?.consumeMatch(sessionID: sessionID, pendingSearchID: searchID.uuidString, searchID: searchID) }
+            }
+
+            try await store.joinAndPairCasual(user: user, mode: mode, difficulty: difficulty, searchID: searchID.uuidString)
 
             if !isCurrentSearch(searchID) {
                 try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
@@ -159,6 +232,7 @@ final class MultiplayerViewModel: ObservableObject {
         finishedSessionID = nil
         rewardErrorMessage = nil
         rewardSnapshot = nil
+        casualRewardMessage = nil
         currentSessionID = session.id
 
         if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
@@ -264,9 +338,12 @@ final class MultiplayerViewModel: ObservableObject {
                 }
                 if session.isRanked {
                     await self.applyFinishedRewards(session)
+                } else if session.isCasual {
+                    await self.applyFinishedCasualRewards(session)
                 } else {
                     self.rewardSnapshot = nil
                     self.rewardErrorMessage = nil
+                    self.casualRewardMessage = nil
                 }
                 self.state = .finished(session: session)
                 self.finishedSessionID = session.id
@@ -339,9 +416,12 @@ final class MultiplayerViewModel: ObservableObject {
             let updated = try await store.fetchSession(id: session.id)
             if updated.isRanked {
                 await applyFinishedRewards(updated)
+            } else if updated.isCasual {
+                await applyFinishedCasualRewards(updated)
             } else {
                 rewardSnapshot = nil
                 rewardErrorMessage = nil
+                casualRewardMessage = nil
             }
             state = .finished(session: updated)
             finishedSessionID = updated.id
@@ -368,7 +448,7 @@ final class MultiplayerViewModel: ObservableObject {
             progress: 0,
             status: "Forfeited",
             summary: ["forfeit": "true"],
-            details: [session.isRanked ? "Quit the active ranked match." : "Left the exhibition match."]
+            details: [session.isRanked ? "Quit the active ranked match." : (session.isCasual ? "Left the casual match." : "Left the exhibition match.")]
         )
 
         let opponentResult = playerResults[opponent.userID] ?? MatchPlayerResult(
@@ -380,7 +460,7 @@ final class MultiplayerViewModel: ObservableObject {
             progress: 0,
             status: "Won by forfeit",
             summary: ["forfeitWin": "true"],
-            details: [session.isRanked ? "Opponent forfeited before the match was completed." : "Opponent left the exhibition match."]
+            details: [session.isRanked ? "Opponent forfeited before the match was completed." : (session.isCasual ? "Opponent left the casual match." : "Opponent left the exhibition match.")]
         )
 
         var results = playerResults
@@ -407,9 +487,12 @@ final class MultiplayerViewModel: ObservableObject {
             let updated = try await store.fetchSession(id: session.id)
             if updated.isRanked {
                 await applyFinishedRewards(updated)
+            } else if updated.isCasual {
+                await applyFinishedCasualRewards(updated)
             } else {
                 rewardSnapshot = nil
                 rewardErrorMessage = nil
+                casualRewardMessage = nil
             }
             state = .finished(session: updated)
             finishedSessionID = updated.id
@@ -641,6 +724,28 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    private func applyFinishedCasualRewards(_ session: GameSession) async {
+        guard session.isCasual, let currentUser = user else {
+            casualRewardMessage = nil
+            return
+        }
+        do {
+            let outcome = try await store.applyFinishedCasualSession(session, for: currentUser.id)
+            user = outcome.user
+            rewardSnapshot = nil
+            rewardErrorMessage = nil
+            if outcome.coinDelta > 0 {
+                casualRewardMessage = "+\(outcome.coinDelta) casual coins"
+            } else if outcome.didApplyRewards {
+                casualRewardMessage = "Daily casual coin cap reached"
+            } else {
+                casualRewardMessage = nil
+            }
+        } catch {
+            casualRewardMessage = "Result saved. Casual coins will retry on refresh."
+        }
+    }
+
     // MARK: - Helpers
 
     private func startGameTimer() {
@@ -772,6 +877,7 @@ final class MultiplayerViewModel: ObservableObject {
         finishedSessionID = nil
         rewardErrorMessage = nil
         rewardSnapshot = nil
+        casualRewardMessage = nil
         clearRematchState()
         isForfeiting = false
     }
