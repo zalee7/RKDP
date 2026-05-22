@@ -277,16 +277,22 @@ struct GameModeDetailView: View {
 
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                                 ForEach(Difficulty.allCases, id: \.self) { difficulty in
+                                    let onlineDisabled = selectedTab == .online &&
+                                        !mode.rankedDifficulties.contains(difficulty) &&
+                                        !mode.casualDifficulties.contains(difficulty)
                                     DifficultyCardView(
                                         mode: mode,
                                         difficulty: difficulty,
                                         isSelected: selectedDifficulty == difficulty,
                                         showsOnlineAvailability: selectedTab == .online,
+                                        isDisabled: onlineDisabled,
                                         soloLockedReason: selectedTab == .solo ? user?.soloUnlockReason(mode: mode, difficulty: difficulty) : nil,
                                         rankedLockedReason: selectedTab == .online ? mode.rankedLockReason(for: difficulty) : nil,
                                         casualLockedReason: selectedTab == .online ? mode.casualLockReason(for: difficulty) : nil
                                     ) {
-                                        selectedDifficulty = difficulty
+                                        if !onlineDisabled {
+                                            selectedDifficulty = difficulty
+                                        }
                                     }
                                 }
                             }
@@ -346,8 +352,12 @@ struct GameModeDetailView: View {
             }
             .onChange(of: selectedTab) { _, tab in
                 guard tab == .online else { return }
-                if !mode.rankedDifficulties.contains(selectedDifficulty),
-                   !mode.casualDifficulties.contains(selectedDifficulty) {
+                if mode.rankedDifficulties.count == 1,
+                   mode.casualDifficulties.count == 1,
+                   mode.rankedDifficulties.first == mode.casualDifficulties.first {
+                    selectedDifficulty = mode.rankedDifficulties[0]
+                } else if !mode.rankedDifficulties.contains(selectedDifficulty),
+                          !mode.casualDifficulties.contains(selectedDifficulty) {
                     selectedDifficulty = mode.casualDifficulties.first ?? mode.rankedDifficulties.first ?? mode.defaultDifficulty
                 }
             }
@@ -596,6 +606,7 @@ private struct DifficultyCardView: View {
     let difficulty: Difficulty
     let isSelected: Bool
     let showsOnlineAvailability: Bool
+    let isDisabled: Bool
     let soloLockedReason: String?
     let rankedLockedReason: String?
     let casualLockedReason: String?
@@ -614,6 +625,8 @@ private struct DifficultyCardView: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
     }
 
     private var cardContent: some View {
@@ -621,7 +634,7 @@ private struct DifficultyCardView: View {
             HStack {
                 Text(mode.difficultyLabel(difficulty))
                     .font(.headline.bold())
-                    .foregroundStyle(AppTheme.textPrimary)
+                    .foregroundStyle(isDisabled ? AppTheme.textSecondary : AppTheme.textPrimary)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
@@ -648,7 +661,9 @@ private struct DifficultyCardView: View {
 
     @ViewBuilder
     private var cardBackground: some View {
-        if isSelected {
+        if isDisabled {
+            Color.white.opacity(0.055)
+        } else if isSelected {
             AppTheme.modeGradient(mode)
                 .opacity(0.32)
         } else {
@@ -681,7 +696,8 @@ private struct DifficultyCardView: View {
     }
 
     private var cardBorderColor: Color {
-        isSelected ? AppTheme.accentBright : AppTheme.cardBorder
+        if isDisabled { return AppTheme.cardBorder.opacity(0.45) }
+        return isSelected ? AppTheme.accentBright : AppTheme.cardBorder
     }
 
     private var cardBorderWidth: CGFloat {
