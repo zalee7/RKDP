@@ -13,39 +13,19 @@ struct HomeView: View {
                 AppTheme.arenaBackground.ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 18) {
+                    VStack(spacing: 14) {
                         HomeBrandHeader()
                         if let user = auth.user { userHeader(user: user) }
 
-                        HStack(alignment: .center, spacing: 12) {
-                            HStack(spacing: 10) {
-                                Capsule()
-                                    .fill(AppTheme.brandGradient)
-                                    .frame(width: 6, height: 38)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Choose Your Game")
-                                        .font(.subheadline.bold())
-                                        .textCase(.uppercase)
-                                        .foregroundStyle(AppTheme.crownGold)
-                                    Text("Pick a mode, practice, or queue ranked")
-                                        .font(.caption)
-                                        .foregroundStyle(AppTheme.textSecondary)
-                                }
-                            }
-                            Spacer()
-                            Button { showHowToPlay = true } label: {
-                                Image(systemName: "questionmark.circle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(AppTheme.accentBright)
-                            }
-                            .accessibilityLabel("How to play")
+                        HomeChooseGameIntro {
+                            showHowToPlay = true
                         }
-                        .padding(.horizontal)
+                        .padding(.top, 2)
 
-                        VStack(spacing: 14) {
+                        VStack(spacing: 18) {
                             HomeGameCategorySection(
                                 title: "Grid Games",
-                                subtitle: "Paths, patterns, boards, and mines",
+                                subtitle: "Boards, paths, mines, patterns",
                                 modes: [.colorLink, .gridlock, .sudoku, .minesweeper],
                                 user: auth.user,
                                 accent: AppTheme.crownGold,
@@ -56,7 +36,7 @@ struct HomeView: View {
 
                             HomeGameCategorySection(
                                 title: "Word Games",
-                                subtitle: "Guesses, searches, and fast vocabulary plays",
+                                subtitle: "Words, guesses, searches",
                                 modes: [.wordle, .hangman, .wordHunt, .anagram],
                                 user: auth.user,
                                 accent: AppTheme.crownGold,
@@ -65,9 +45,9 @@ struct HomeView: View {
                                 selectedMode = mode
                             }
                         }
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 124)
                     }
-                    .padding(.top, 12)
+                    .padding(.top, 8)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -104,24 +84,35 @@ struct HomeView: View {
 
     @ViewBuilder
     private func userHeader(user: AppUser) -> some View {
-        HStack(spacing: 14) {
-            StickDuelerAvatarView(style: user.cosmetics.avatarStyle, size: 54)
+        HStack(spacing: 12) {
+            StickDuelerAvatarView(style: user.cosmetics.avatarStyle, size: 58)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.username).font(.headline).foregroundStyle(AppTheme.textPrimary)
+                Text(user.username)
+                    .font(.headline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
                 CoinBadgeView(amount: user.coins)
             }
-            Spacer()
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 320, alignment: .center)
+        .background(AppTheme.cardBackground.opacity(0.82))
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(AppTheme.cardBorder.opacity(0.9), lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
+        .frame(maxWidth: .infinity)
         .padding(.horizontal)
     }
 }
 
 private struct HomeBrandHeader: View {
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             Text("Grid Duel")
-                .font(.system(size: 34, weight: .black, design: .rounded))
+                .font(.system(size: 33, weight: .black, design: .rounded))
                 .foregroundStyle(AppTheme.brandGradient)
                 .shadow(color: AppTheme.crownGold.opacity(0.32), radius: 12, x: 0, y: 4)
             Text("Ranked Puzzle Arena")
@@ -130,7 +121,34 @@ private struct HomeBrandHeader: View {
                 .textCase(.uppercase)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 6)
+        .padding(.top, 2)
+        .padding(.horizontal)
+    }
+}
+
+private struct HomeChooseGameIntro: View {
+    let onHelp: () -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Choose Your Game")
+                    .font(.callout.bold())
+                    .textCase(.uppercase)
+                    .foregroundStyle(AppTheme.crownGold)
+                Button(action: onHelp) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(AppTheme.accentBright)
+                        .frame(width: 30, height: 30)
+                }
+                .accessibilityLabel("How to play")
+            }
+            Text("Solo, ranked, casual, and events")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal)
     }
 }
@@ -145,15 +163,15 @@ private struct HomeGameCategorySection: View {
     let onSelect: (GameMode) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .center, spacing: 13) {
+            VStack(alignment: .center, spacing: 5) {
                 HStack(spacing: 8) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(accent)
-                        .frame(width: 5, height: 24)
                     Image(systemName: icon)
                         .font(.caption.bold())
                         .foregroundStyle(accent)
+                        .frame(width: 25, height: 25)
+                        .background(accent.opacity(0.14))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     Text(title)
                         .font(.title3.bold())
                         .foregroundStyle(accent)
@@ -161,8 +179,10 @@ private struct HomeGameCategorySection: View {
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
+                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal)
+            .frame(maxWidth: .infinity)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
@@ -170,7 +190,7 @@ private struct HomeGameCategorySection: View {
                         GameModeCardView(mode: mode, user: user) {
                             onSelect(mode)
                         }
-                        .frame(width: 204, height: 248)
+                        .frame(width: 196, height: 232)
                     }
                 }
                 .padding(.horizontal)
@@ -985,12 +1005,12 @@ struct GameModeCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 11) {
+            VStack(spacing: 9) {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppTheme.modeGradient(mode))
-                    .frame(width: 86, height: 86)
-                    .overlay(Image(systemName: mode.icon).font(.system(size: 38, weight: .semibold)).foregroundStyle(.white))
-                    .shadow(color: AppTheme.modeShadow(mode), radius: 8)
+                    .frame(width: 78, height: 78)
+                    .overlay(Image(systemName: mode.icon).font(.system(size: 34, weight: .semibold)).foregroundStyle(.white))
+                    .shadow(color: AppTheme.modeShadow(mode), radius: 6)
 
                 Text(mode.displayName)
                     .font(.headline.bold()).foregroundStyle(AppTheme.textPrimary)
@@ -1002,7 +1022,7 @@ struct GameModeCardView: View {
                     RankProgressMiniView(info: user.rank(for: mode))
                 }
             }
-            .padding(16)
+            .padding(14)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 cardBackground
@@ -1010,9 +1030,9 @@ struct GameModeCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.62), lineWidth: 1.4)
+                    .strokeBorder(Color.white.opacity(0.68), lineWidth: 1.35)
             }
-            .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
+            .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 7)
         }
         .buttonStyle(.plain)
     }
@@ -1027,11 +1047,11 @@ struct GameModeCardView: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(AppTheme.modeGradient(mode))
-                    .opacity(0.24)
+                    .opacity(0.18)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(AppTheme.modeAccent(mode).opacity(0.58), lineWidth: 1)
+                    .strokeBorder(AppTheme.modeAccent(mode).opacity(0.44), lineWidth: 1)
             }
     }
 }
@@ -1059,10 +1079,10 @@ struct RankProgressMiniView: View {
                 .font(.system(size: 9))
                 .foregroundStyle(AppTheme.textSecondary)
             if let best = info.bestScore {
-                Text("Best: \(best) pts").font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
+                Text("Best: \(best) pts").font(.system(size: 8.5, weight: .medium)).foregroundStyle(AppTheme.accentBright.opacity(0.9))
             } else if let best = info.bestTime {
                 Text("Best: \(best / 60):\(String(format: "%02d", best % 60))")
-                    .font(.system(size: 9)).foregroundStyle(AppTheme.accentBright)
+                    .font(.system(size: 8.5, weight: .medium)).foregroundStyle(AppTheme.accentBright.opacity(0.9))
             }
         }
     }
