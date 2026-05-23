@@ -217,19 +217,40 @@ struct GameModeDetailView: View {
     }
     private var rankedButtonTitle: String {
         if rankedLockedReason != nil { return "Ranked Locked" }
-        return hasRankedEntry ? "Ranked Match" : "Ranked Access"
+        return hasRankedEntry ? "Ranked" : "Ranked Access"
     }
     private var rankedButtonSubtitle: String {
         if let rankedLockedReason { return rankedLockedReason }
         if hasRankedEntry {
             let status = user?.rankedAccess.statusText(for: mode) ?? "Free entry available"
-            return "Queue \(mode.difficultyLabel(selectedDifficulty)) · \(status)"
+            return "\(mode.difficultyLabel(selectedDifficulty)) · \(status) · \(divisionWagerText)"
         }
         return "Watch ad or unlock ranked"
     }
     private var rankedButtonIcon: String {
         if rankedLockedReason != nil { return "lock.fill" }
         return hasRankedEntry ? "flag.checkered.2.crossed" : "lock.open.fill"
+    }
+    private var divisionWagerText: String {
+        guard let user else { return "Division wager" }
+        return "\(Wager.fixed(for: user.rank(for: mode)).amount) coin wager"
+    }
+    private var onlineFormatSummary: String {
+        mode.difficultyLabel(selectedDifficulty)
+    }
+    private var timerOrFormatValue: String {
+        selectedTab == .solo ? selectedDifficulty.rankedTimeLabel(for: mode) : onlineFormatSummary
+    }
+    private var pointsSummary: String {
+        "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x"
+    }
+    private var onlineDifficultyTitle: String {
+        if mode.rankedDifficulties.count == 1,
+           mode.casualDifficulties.count == 1,
+           mode.rankedDifficulties.first == mode.casualDifficulties.first {
+            return "Online Format"
+        }
+        return "Choose Online Format"
     }
 
     var body: some View {
@@ -243,35 +264,43 @@ struct GameModeDetailView: View {
                         LobbyTabSelector(selectedTab: $selectedTab)
                             .padding(.horizontal)
 
-                        VStack(spacing: 10) {
-                            HStack {
-                                ModeFactRow(icon: "trophy.fill", title: "Rank", value: rankInfo.fullDisplayName, color: rankInfo.displayTier.color)
-                                ModeFactRow(icon: "chart.bar.fill", title: "W/L", value: rankInfo.recordDisplay, color: AppTheme.teal)
-                            }
-                            HStack {
-                                ModeFactRow(icon: "timer", title: "Timer", value: selectedDifficulty.rankedTimeLabel(for: mode), color: AppTheme.accentBright)
-                                ModeFactRow(
-                                    icon: selectedTab == .solo ? "sparkles" : "star.fill",
-                                    title: selectedTab == .solo ? "Best" : "Rank Points",
-                                    value: selectedTab == .solo ? bestSummary : "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x ranked points",
-                                    color: .yellow
-                                )
-                            }
-                            if selectedTab == .online {
-                                RankedAccessMeterView(mode: mode, user: user)
-                            }
-                        }
+                        LobbySummaryStrip(
+                            rankText: rankInfo.fullDisplayName,
+                            recordText: rankInfo.recordDisplay,
+                            formatTitle: selectedTab == .solo ? "Timer" : "Format",
+                            formatValue: timerOrFormatValue,
+                            fourthTitle: selectedTab == .solo ? "Best" : "Points",
+                            fourthValue: selectedTab == .solo ? bestSummary : pointsSummary,
+                            rankColor: rankInfo.displayTier.color
+                        )
                         .padding(.horizontal)
 
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
-                                Text(selectedTab == .online ? "Choose Online Format" : ((mode == .anagram || mode == .hangman) ? "Word Length" : "Difficulty"))
-                                    .font(.headline)
-                                    .foregroundStyle(AppTheme.textPrimary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(selectedTab == .online ? onlineDifficultyTitle : ((mode == .anagram || mode == .hangman) ? "Word Length" : "Difficulty"))
+                                        .font(.headline)
+                                        .foregroundStyle(AppTheme.textPrimary)
+                                    Text(selectedTab == .online ? "Unavailable formats are locked to keep queues healthy." : "Solo progression unlocks one step at a time.")
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                        .lineLimit(2)
+                                }
                                 Spacer()
-                                Text(bestSummary)
-                                    .font(.caption.bold())
-                                    .foregroundStyle(AppTheme.accentBright)
+                                if selectedTab == .online {
+                                    Text(onlineFormatSummary)
+                                        .font(.caption.bold())
+                                        .foregroundStyle(AppTheme.crownGold)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 5)
+                                        .background(AppTheme.crownGold.opacity(0.16))
+                                        .clipShape(Capsule())
+                                } else {
+                                    Text(bestSummary)
+                                        .font(.caption.bold())
+                                        .foregroundStyle(AppTheme.accentBright)
+                                        .lineLimit(1)
+                                }
                             }
                             .padding(.horizontal)
 
@@ -305,17 +334,18 @@ struct GameModeDetailView: View {
                                     title: soloLockedReason == nil ? "Play Solo" : "Solo Locked",
                                     subtitle: soloLockedReason ?? "Practice \(mode.difficultyLabel(selectedDifficulty))",
                                     icon: soloLockedReason == nil ? "person.fill" : "lock.fill",
-                                    gradient: AppTheme.brandGradient,
+                                    style: .primary,
                                     disabled: soloLockedReason != nil
                                 ) {
                                     destination.append("solo")
                                 }
                             } else {
-                                LobbyActionButton(
+                                OnlineActionCard(
                                     title: rankedButtonTitle,
                                     subtitle: rankedButtonSubtitle,
                                     icon: rankedButtonIcon,
-                                    gradient: AppTheme.modeGradient(mode),
+                                    chips: rankedChips,
+                                    style: hasRankedEntry ? .primary : .secondary,
                                     disabled: rankedLockedReason != nil || user == nil
                                 ) {
                                     if hasRankedEntry {
@@ -325,11 +355,12 @@ struct GameModeDetailView: View {
                                     }
                                 }
 
-                                LobbyActionButton(
-                                    title: casualLockedReason == nil ? "Casual Match" : "Casual Locked",
-                                    subtitle: casualLockedReason ?? "Random opponent · no rank or wager · tiny coin rewards",
+                                OnlineActionCard(
+                                    title: casualLockedReason == nil ? "Casual" : "Casual Locked",
+                                    subtitle: casualLockedReason ?? "\(mode.difficultyLabel(selectedDifficulty)) · same puzzle, random opponent",
                                     icon: casualLockedReason == nil ? "shuffle.circle.fill" : "lock.fill",
-                                    gradient: AppTheme.brandGradient,
+                                    chips: casualChips,
+                                    style: .secondary,
                                     disabled: casualLockedReason != nil || user == nil
                                 ) {
                                     destination.append("casual")
@@ -403,6 +434,29 @@ struct GameModeDetailView: View {
                 }
             }
         }
+    }
+
+    private var rankedChips: [LobbyActionChip] {
+        var chips = [
+            LobbyActionChip(text: mode.difficultyLabel(selectedDifficulty), icon: "slider.horizontal.3"),
+            LobbyActionChip(text: divisionWagerText, icon: "centsign.circle.fill"),
+            LobbyActionChip(text: "Points count", icon: "arrow.up.forward.circle.fill")
+        ]
+        if let user {
+            chips.insert(LobbyActionChip(text: user.rankedAccess.statusText(for: mode), icon: "ticket.fill"), at: 1)
+        } else {
+            chips.insert(LobbyActionChip(text: "Sign in", icon: "person.crop.circle.badge.exclamationmark"), at: 1)
+        }
+        return chips
+    }
+
+    private var casualChips: [LobbyActionChip] {
+        [
+            LobbyActionChip(text: mode.difficultyLabel(selectedDifficulty), icon: "slider.horizontal.3"),
+            LobbyActionChip(text: "No rank", icon: "minus.circle.fill"),
+            LobbyActionChip(text: "No wager", icon: "centsign.circle"),
+            LobbyActionChip(text: "+10 win", icon: "sparkles")
+        ]
     }
 
     private var bestSummary: String {
@@ -483,29 +537,29 @@ private struct ModeLobbyHeader: View {
     let mode: GameMode
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(AppTheme.modeGradient(mode))
-                    .frame(height: 150)
-                    .shadow(color: AppTheme.modeShadow(mode), radius: 18)
-                HStack(spacing: 18) {
+                    .frame(height: 118)
+                    .shadow(color: AppTheme.modeShadow(mode), radius: 12)
+                HStack(spacing: 14) {
                     RoundedRectangle(cornerRadius: 20)
                         .fill(Color.white.opacity(0.18))
-                        .frame(width: 84, height: 84)
-                        .overlay(Image(systemName: mode.icon).font(.system(size: 38, weight: .bold)).foregroundStyle(.white))
-                    VStack(alignment: .leading, spacing: 8) {
+                        .frame(width: 64, height: 64)
+                        .overlay(Image(systemName: mode.icon).font(.system(size: 30, weight: .bold)).foregroundStyle(.white))
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(mode.displayName)
-                            .font(.largeTitle.bold())
+                            .font(.title.bold())
                             .foregroundStyle(.white)
                         Text(mode.description)
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundStyle(.white.opacity(0.82))
-                            .lineLimit(3)
+                            .lineLimit(2)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(18)
+                .padding(14)
             }
             ModeMiniPreview(mode: mode)
         }
@@ -545,13 +599,13 @@ private struct ModeMiniPreview: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(0..<18, id: \.self) { index in
+            ForEach(0..<14, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 4)
                     .fill(previewColor(index))
-                    .frame(height: 18)
+                    .frame(height: 10)
             }
         }
-        .padding(10)
+        .padding(8)
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.cardBorder, lineWidth: 1))
@@ -573,6 +627,51 @@ private struct ModeMiniPreview: View {
         default:
             return AppTheme.modeAccent(mode).opacity(index % 2 == 0 ? 0.85 : 0.35)
         }
+    }
+}
+
+private struct LobbySummaryStrip: View {
+    let rankText: String
+    let recordText: String
+    let formatTitle: String
+    let formatValue: String
+    let fourthTitle: String
+    let fourthValue: String
+    let rankColor: Color
+
+    var body: some View {
+        HStack(spacing: 0) {
+            summaryItem(icon: "trophy.fill", title: "Rank", value: rankText, color: rankColor)
+            Divider().overlay(Color.white.opacity(0.18)).padding(.vertical, 8)
+            summaryItem(icon: "chart.bar.fill", title: "W/L", value: recordText, color: AppTheme.teal)
+            Divider().overlay(Color.white.opacity(0.18)).padding(.vertical, 8)
+            summaryItem(icon: formatTitle == "Timer" ? "timer" : "slider.horizontal.3", title: formatTitle, value: formatValue, color: AppTheme.accentBright)
+            Divider().overlay(Color.white.opacity(0.18)).padding(.vertical, 8)
+            summaryItem(icon: fourthTitle == "Best" ? "sparkles" : "star.fill", title: fourthTitle, value: fourthValue, color: AppTheme.crownGold)
+        }
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .background(AppTheme.cardBackground.opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.cardBorder.opacity(0.85), lineWidth: 1))
+    }
+
+    private func summaryItem(icon: String, title: String, value: String, color: Color) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.caption.bold())
+                .foregroundStyle(color)
+            Text(title)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(value)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(AppTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
     }
 }
 
@@ -616,7 +715,7 @@ private struct DifficultyCardView: View {
         Button(action: onSelect) {
             cardContent
             .padding(12)
-            .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: showsOnlineAvailability ? 118 : 104, alignment: .topLeading)
             .background(cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
@@ -626,7 +725,7 @@ private struct DifficultyCardView: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
-        .opacity(isDisabled ? 0.45 : 1)
+        .opacity(isDisabled ? 0.38 : 1)
     }
 
     private var cardContent: some View {
@@ -642,13 +741,13 @@ private struct DifficultyCardView: View {
                 }
             }
 
-            Text(rewardText)
+            Text(detailText)
                 .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
+                .foregroundStyle(isDisabled ? AppTheme.textSecondary.opacity(0.7) : AppTheme.textSecondary)
 
             HStack(spacing: 6) {
                 if !showsOnlineAvailability {
-                    availabilityBadge("Solo", locked: soloLockedReason != nil)
+                    availabilityBadge(soloLockedReason == nil ? "Solo" : "Locked", locked: soloLockedReason != nil)
                 } else {
                     availabilityBadge("Ranked", locked: rankedLockedReason != nil)
                     availabilityBadge("Casual", locked: casualLockedReason != nil)
@@ -662,10 +761,11 @@ private struct DifficultyCardView: View {
     @ViewBuilder
     private var cardBackground: some View {
         if isDisabled {
-            Color.white.opacity(0.055)
+            Color.black.opacity(0.20)
+                .overlay(Color.white.opacity(0.035))
         } else if isSelected {
             AppTheme.modeGradient(mode)
-                .opacity(0.32)
+                .opacity(0.26)
         } else {
             AppTheme.cardBackground
         }
@@ -691,17 +791,23 @@ private struct DifficultyCardView: View {
         }
     }
 
-    private var rewardText: String {
-        "\(String(format: "%.1f", mode.pointMultiplier(for: difficulty)))x ranked points"
+    private var detailText: String {
+        if showsOnlineAvailability {
+            return "\(String(format: "%.1f", mode.pointMultiplier(for: difficulty)))x points"
+        }
+        if soloLockedReason != nil {
+            return "Complete the previous step"
+        }
+        return mode == .anagram || mode == .hangman || mode == .wordHunt || mode == .wordle ? "Solo format" : "Solo difficulty"
     }
 
     private var cardBorderColor: Color {
-        if isDisabled { return AppTheme.cardBorder.opacity(0.45) }
+        if isDisabled { return AppTheme.cardBorder.opacity(0.25) }
         return isSelected ? AppTheme.accentBright : AppTheme.cardBorder
     }
 
     private var cardBorderWidth: CGFloat {
-        isSelected ? 2 : 1
+        isSelected ? 1.5 : 1
     }
 
     private func availabilityBadge(_ label: String, locked: Bool) -> some View {
@@ -715,11 +821,86 @@ private struct DifficultyCardView: View {
     }
 }
 
+private enum LobbyActionStyle {
+    case primary
+    case secondary
+    case destructive
+}
+
+private struct LobbyActionChip: Identifiable {
+    let id = UUID()
+    let text: String
+    let icon: String
+}
+
+private struct OnlineActionCard: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let chips: [LobbyActionChip]
+    let style: LobbyActionStyle
+    let disabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title3.bold())
+                        .frame(width: 34, height: 34)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(.headline.bold())
+                        Text(subtitle)
+                            .font(.caption)
+                            .opacity(0.82)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                }
+
+                FlowChipLayout(chips: chips, disabled: disabled)
+            }
+            .padding(14)
+            .background(backgroundStyle)
+            .foregroundStyle(foregroundStyle)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(borderColor, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+
+    private var backgroundStyle: AnyShapeStyle {
+        if disabled { return AnyShapeStyle(Color.white.opacity(0.07)) }
+        switch style {
+        case .primary:
+            return AnyShapeStyle(AppTheme.brandGradient)
+        case .secondary:
+            return AnyShapeStyle(AppTheme.cardBackground.opacity(0.9))
+        case .destructive:
+            return AnyShapeStyle(AppTheme.danger.opacity(0.75))
+        }
+    }
+
+    private var foregroundStyle: Color {
+        if disabled { return AppTheme.textSecondary }
+        return style == .secondary ? AppTheme.textPrimary : .white
+    }
+
+    private var borderColor: Color {
+        if disabled { return AppTheme.cardBorder.opacity(0.6) }
+        return style == .secondary ? Color.white.opacity(0.22) : Color.white.opacity(0.18)
+    }
+}
+
 private struct LobbyActionButton: View {
     let title: String
     let subtitle: String
     let icon: String
-    let gradient: LinearGradient
+    let style: LobbyActionStyle
     let disabled: Bool
     let action: () -> Void
 
@@ -738,13 +919,52 @@ private struct LobbyActionButton: View {
                     .font(.caption.bold())
             }
             .padding()
-            .background(disabled ? AnyShapeStyle(Color.white.opacity(0.08)) : AnyShapeStyle(gradient))
-            .foregroundStyle(disabled ? AppTheme.textSecondary : .white)
+            .background(backgroundStyle)
+            .foregroundStyle(foregroundStyle)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(disabled ? AppTheme.cardBorder : Color.white.opacity(0.18), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
+    }
+
+    private var backgroundStyle: AnyShapeStyle {
+        if disabled { return AnyShapeStyle(Color.white.opacity(0.08)) }
+        switch style {
+        case .primary:
+            return AnyShapeStyle(AppTheme.brandGradient)
+        case .secondary:
+            return AnyShapeStyle(AppTheme.cardBackground)
+        case .destructive:
+            return AnyShapeStyle(AppTheme.danger.opacity(0.75))
+        }
+    }
+
+    private var foregroundStyle: Color {
+        if disabled { return AppTheme.textSecondary }
+        return style == .secondary ? AppTheme.textPrimary : .white
+    }
+}
+
+private struct FlowChipLayout: View {
+    let chips: [LobbyActionChip]
+    let disabled: Bool
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)], alignment: .leading, spacing: 6) {
+            ForEach(chips) { chip in
+                Label(chip.text, systemImage: chip.icon)
+                    .font(.caption2.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(disabled ? 0.06 : 0.12))
+                    .foregroundStyle(disabled ? AppTheme.textSecondary : AppTheme.textPrimary)
+                    .clipShape(Capsule())
+            }
+        }
     }
 }
 
