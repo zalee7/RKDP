@@ -85,14 +85,15 @@ struct ShopView: View {
                             .padding()
                     case .category(let category):
                         let items = vm.items(for: category)
-                        if items.isEmpty {
+                        let ownedItems = vm.ownedItems.filter { $0.category == category }
+                        if items.isEmpty && ownedItems.isEmpty {
                             emptyStoreState(category: category)
                                 .padding()
                         } else if category == .title {
-                            titleGrid(items: items)
+                            titleGrid(items: items, ownedItems: ownedItems)
                         } else {
-                            itemGrid(items: items)
-                                .padding()
+                            categorizedShopGrid(availableItems: items, ownedItems: ownedItems)
+                                .padding(.vertical)
                         }
                     }
                 }
@@ -231,16 +232,45 @@ struct ShopView: View {
     }
 
     @ViewBuilder
-    private func titleGrid(items: [CosmeticItem]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Today's Titles")
-                .font(.headline.bold())
-                .padding(.horizontal)
+    private func categorizedShopGrid(availableItems: [CosmeticItem], ownedItems: [CosmeticItem]) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if !ownedItems.isEmpty {
+                itemSection(title: "Owned", subtitle: "Equip anything you already have.", items: ownedItems)
+            }
+            if !availableItems.isEmpty {
+                itemSection(title: "Available", subtitle: "Unlock new cosmetics with coins.", items: availableItems)
+            }
+        }
+        .padding(.horizontal)
+    }
 
+    private func itemSection(title: String, subtitle: String, items: [CosmeticItem]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.uppercased())
+                    .font(.caption.bold())
+                    .foregroundStyle(title == "Owned" ? AppTheme.teal : AppTheme.crownGold)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
             itemGrid(items: items)
-                .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private func titleGrid(items: [CosmeticItem], ownedItems: [CosmeticItem]) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if !ownedItems.isEmpty {
+                itemSection(title: "Owned", subtitle: "Equip one of your saved titles.", items: ownedItems)
+            }
+
+            if !items.isEmpty {
+                itemSection(title: "Today's Titles", subtitle: "Limited rotation titles available today.", items: items)
+            }
         }
         .padding(.vertical)
+        .padding(.horizontal)
     }
 
     private func emptyStoreState(category: CosmeticCategory) -> some View {

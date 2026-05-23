@@ -270,23 +270,8 @@ private struct AvatarEditorView: View {
                                 .padding(.horizontal)
                         }
 
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(CosmeticCatalog.all.filter { $0.category == selectedCategory }) { item in
-                                ShopItemCard(
-                                    item: item,
-                                    isOwned: shop.isOwned(item),
-                                    isEquipped: shop.isEquipped(item),
-                                    canAfford: shop.canAfford(item),
-                                    isLimited: false
-                                ) {
-                                    Task {
-                                        let changed = shop.isOwned(item) ? await shop.equip(item) : await shop.purchase(item)
-                                        if changed { await onChanged() }
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
+                        avatarItemsSection
+                            .padding(.horizontal)
                         .padding(.bottom, 24)
                     }
                 }
@@ -365,6 +350,62 @@ private struct AvatarEditorView: View {
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var avatarItemsSection: some View {
+        let allItems = CosmeticCatalog.all.filter { $0.category == selectedCategory }
+        let ownedItems = allItems.filter { shop.isOwned($0) }
+        let availableItems = allItems.filter { !shop.isOwned($0) }
+
+        return VStack(alignment: .leading, spacing: 18) {
+            if !ownedItems.isEmpty {
+                avatarItemGroup(
+                    title: "Owned",
+                    subtitle: "Equip the parts you already unlocked.",
+                    items: ownedItems,
+                    tint: AppTheme.teal
+                )
+            }
+
+            if !availableItems.isEmpty {
+                avatarItemGroup(
+                    title: "Available",
+                    subtitle: "Buy new parts with coins.",
+                    items: availableItems,
+                    tint: AppTheme.crownGold
+                )
+            }
+        }
+    }
+
+    private func avatarItemGroup(title: String, subtitle: String, items: [CosmeticItem], tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title.uppercased())
+                    .font(.caption.bold())
+                    .foregroundStyle(tint)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(items) { item in
+                    ShopItemCard(
+                        item: item,
+                        isOwned: shop.isOwned(item),
+                        isEquipped: shop.isEquipped(item),
+                        canAfford: shop.canAfford(item),
+                        isLimited: false
+                    ) {
+                        Task {
+                            let changed = shop.isOwned(item) ? await shop.equip(item) : await shop.purchase(item)
+                            if changed { await onChanged() }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var colorSwatches: [String] {
