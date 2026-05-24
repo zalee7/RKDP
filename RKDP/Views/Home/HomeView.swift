@@ -1004,11 +1004,7 @@ struct GameModeCardView: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(AppTheme.modeGradient(mode))
-                    .frame(width: 64, height: 64)
-                    .overlay(Image(systemName: mode.icon).font(.system(size: 29, weight: .semibold)).foregroundStyle(.white))
-                    .shadow(color: AppTheme.modeShadow(mode), radius: 6)
+                AnimatedModeThumbnailView(mode: mode, size: 64)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(mode.displayName)
@@ -1097,6 +1093,166 @@ struct GameModeCardView: View {
         if let guesses = info.bestGuesses { return "\(guesses) guesses" }
         if let progress = info.bestProgress { return "\(Int((progress * 100).rounded()))%" }
         return "--"
+    }
+}
+
+private struct AnimatedModeThumbnailView: View {
+    let mode: GameMode
+    var size: CGFloat = 64
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isAnimating = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+                .fill(AppTheme.modeGradient(mode))
+
+            movingHighlight
+            modeMotionOverlay
+
+            Image(systemName: mode.icon)
+                .font(.system(size: size * 0.45, weight: .semibold))
+                .foregroundStyle(.white)
+                .offset(iconOffset)
+                .rotationEffect(iconRotation)
+                .scaleEffect(iconScale)
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+        )
+        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (isAnimating ? 9 : 6), x: 0, y: 3)
+        .scaleEffect(reduceMotion ? 1 : (isAnimating ? thumbnailScale : 1))
+        .animation(reduceMotion ? nil : .easeInOut(duration: duration).repeatForever(autoreverses: true), value: isAnimating)
+        .onAppear {
+            guard !reduceMotion else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                isAnimating = true
+            }
+        }
+        .onChange(of: reduceMotion) { _, reduced in
+            isAnimating = !reduced
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var movingHighlight: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.08 : 0.22), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: size * 0.34, height: size * 1.45)
+            .rotationEffect(.degrees(18))
+            .offset(x: reduceMotion ? 0 : (isAnimating ? size * 0.72 : -size * 0.72))
+            .blendMode(.screen)
+            .opacity(reduceMotion ? 0.25 : 0.7)
+    }
+
+    @ViewBuilder
+    private var modeMotionOverlay: some View {
+        switch mode {
+        case .colorLink:
+            Circle()
+                .stroke(Color.white.opacity(isAnimating ? 0.22 : 0.10), lineWidth: 2)
+                .frame(width: size * 0.55, height: size * 0.55)
+                .offset(x: isAnimating ? 4 : -3, y: isAnimating ? -2 : 3)
+        case .gridlock, .sudoku:
+            Image(systemName: "square.grid.3x3.fill")
+                .font(.system(size: size * 0.58, weight: .bold))
+                .foregroundStyle(Color.white.opacity(isAnimating ? 0.16 : 0.08))
+                .offset(x: isAnimating ? 3 : -2, y: isAnimating ? -2 : 2)
+        case .minesweeper:
+            Circle()
+                .fill(AppTheme.hotPink.opacity(isAnimating ? 0.22 : 0.08))
+                .frame(width: size * 0.72, height: size * 0.72)
+                .scaleEffect(isAnimating ? 1.06 : 0.92)
+        case .wordle:
+            HStack(spacing: 2) {
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                        .frame(width: size * 0.15, height: size * 0.15)
+                }
+            }
+            .offset(y: isAnimating ? -12 : -9)
+        case .hangman:
+            Circle()
+                .fill(Color(hex: "FF5A1F").opacity(isAnimating ? 0.18 : 0.08))
+                .blur(radius: 2)
+                .frame(width: size * 0.82, height: size * 0.82)
+        case .wordHunt:
+            Circle()
+                .stroke(Color.white.opacity(isAnimating ? 0.18 : 0.08), lineWidth: 2)
+                .frame(width: size * 0.62, height: size * 0.62)
+                .offset(x: isAnimating ? -3 : 3)
+        case .anagram:
+            Text("Aa")
+                .font(.system(size: size * 0.28, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white.opacity(isAnimating ? 0.20 : 0.08))
+                .offset(x: isAnimating ? 13 : 9, y: isAnimating ? -14 : -10)
+        }
+    }
+
+    private var iconOffset: CGSize {
+        guard !reduceMotion else { return .zero }
+        switch mode {
+        case .wordHunt:
+            return CGSize(width: isAnimating ? 1.7 : -1.7, height: 0)
+        case .anagram:
+            return CGSize(width: 0, height: isAnimating ? -1.3 : 1.3)
+        case .hangman, .minesweeper:
+            return CGSize(width: 0, height: isAnimating ? -1.1 : 1.1)
+        default:
+            return CGSize(width: 0, height: isAnimating ? -1.6 : 1.6)
+        }
+    }
+
+    private var iconRotation: Angle {
+        guard !reduceMotion else { return .zero }
+        switch mode {
+        case .anagram:
+            return .degrees(isAnimating ? 2 : -2)
+        case .wordHunt:
+            return .degrees(isAnimating ? -1.5 : 1.5)
+        default:
+            return .zero
+        }
+    }
+
+    private var iconScale: CGFloat {
+        guard !reduceMotion else { return 1 }
+        return isAnimating ? 1.035 : 0.995
+    }
+
+    private var thumbnailScale: CGFloat {
+        switch mode {
+        case .minesweeper, .hangman: return 1.025
+        default: return 1.015
+        }
+    }
+
+    private var duration: Double {
+        switch mode {
+        case .colorLink: return 3.6
+        case .gridlock: return 3.2
+        case .sudoku: return 4.2
+        case .minesweeper: return 2.9
+        case .wordle: return 3.4
+        case .hangman: return 3.0
+        case .wordHunt: return 3.8
+        case .anagram: return 4.0
+        }
+    }
+
+    private var delay: Double {
+        Double(GameMode.allCases.firstIndex(of: mode) ?? 0) * 0.18
     }
 }
 
