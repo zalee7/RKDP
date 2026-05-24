@@ -22,29 +22,10 @@ struct HomeView: View {
                         }
                         .padding(.top, 2)
 
-                        VStack(spacing: 18) {
-                            HomeGameCategorySection(
-                                title: "Grid Games",
-                                subtitle: "Boards, paths, mines, patterns",
-                                modes: [.colorLink, .gridlock, .sudoku, .minesweeper],
-                                user: auth.user,
-                                accent: AppTheme.crownGold,
-                                icon: "square.grid.3x3.fill"
-                            ) { mode in
-                                selectedMode = mode
-                            }
-
-                            HomeGameCategorySection(
-                                title: "Word Games",
-                                subtitle: "Words, guesses, searches",
-                                modes: [.wordle, .hangman, .wordHunt, .anagram],
-                                user: auth.user,
-                                accent: AppTheme.crownGold,
-                                icon: "book.closed.fill"
-                            ) { mode in
-                                selectedMode = mode
-                            }
+                        HomeModeList(user: auth.user) { mode in
+                            selectedMode = mode
                         }
+                        .padding(.top, 4)
                         .padding(.bottom, 124)
                     }
                     .padding(.top, 8)
@@ -197,6 +178,23 @@ private struct HomeGameCategorySection: View {
                 .padding(.vertical, 8)
             }
         }
+    }
+}
+
+private struct HomeModeList: View {
+    let user: AppUser?
+    let onSelect: (GameMode) -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ForEach(GameMode.allCases) { mode in
+                GameModeCardView(mode: mode, user: user) {
+                    onSelect(mode)
+                }
+                .frame(height: 108)
+            }
+        }
+        .padding(.horizontal)
     }
 }
 
@@ -1005,24 +1003,35 @@ struct GameModeCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 9) {
+            HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppTheme.modeGradient(mode))
-                    .frame(width: 78, height: 78)
-                    .overlay(Image(systemName: mode.icon).font(.system(size: 34, weight: .semibold)).foregroundStyle(.white))
+                    .frame(width: 64, height: 64)
+                    .overlay(Image(systemName: mode.icon).font(.system(size: 29, weight: .semibold)).foregroundStyle(.white))
                     .shadow(color: AppTheme.modeShadow(mode), radius: 6)
 
-                Text(mode.displayName)
-                    .font(.headline.bold()).foregroundStyle(AppTheme.textPrimary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(mode.displayName)
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
 
-                if let user {
-                    RankProgressMiniView(info: user.rank(for: mode))
+                    if let user {
+                        CompactModeStatsView(info: user.rank(for: mode))
+                    } else {
+                        Text("Tap to choose solo or online")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
                 }
+
+                Spacer(minLength: 8)
+
+                modeBestColumn
             }
-            .padding(14)
+            .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 cardBackground
@@ -1047,16 +1056,83 @@ struct GameModeCardView: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(AppTheme.modeGradient(mode))
-                    .opacity(0.18)
+                    .opacity(0.14)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(AppTheme.modeAccent(mode).opacity(0.44), lineWidth: 1)
             }
     }
+
+    @ViewBuilder
+    private var modeBestColumn: some View {
+        if let user {
+            let info = user.rank(for: mode)
+            VStack(alignment: .trailing, spacing: 5) {
+                Text("Best")
+                    .font(.system(size: 9, weight: .bold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(bestText(info))
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.accentBright.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary.opacity(0.85))
+            }
+            .frame(width: 72, alignment: .trailing)
+        } else {
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary.opacity(0.85))
+        }
+    }
+
+    private func bestText(_ info: RankInfo) -> String {
+        if let score = info.bestScore { return "\(score) pts" }
+        if let time = info.bestTime { return "\(time / 60):\(String(format: "%02d", time % 60))" }
+        if let moves = info.bestMoves { return "\(moves) moves" }
+        if let guesses = info.bestGuesses { return "\(guesses) guesses" }
+        if let progress = info.bestProgress { return "\(Int((progress * 100).rounded()))%" }
+        return "--"
+    }
 }
 
-// Compact rank progress shown inside each tile
+private struct CompactModeStatsView: View {
+    let info: RankInfo
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    RankIconView(tier: info.displayTier, division: info.division, size: 16)
+                    Text(info.fullDisplayName)
+                        .font(.caption.bold())
+                        .foregroundStyle(info.displayTier.color)
+                        .lineLimit(1)
+                }
+
+                RecordTextView(
+                    wins: info.wins,
+                    losses: info.losses,
+                    font: .system(size: 11, weight: .bold)
+                )
+            }
+
+            RankDivisionProgressView(info: info, height: 3, spacing: 3)
+                .frame(maxWidth: 152)
+
+            Text(info.divisionProgressDisplay)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(1)
+        }
+    }
+}
+
+// Compact rank progress shown inside older tiles and other small surfaces
 struct RankProgressMiniView: View {
     let info: RankInfo
 
