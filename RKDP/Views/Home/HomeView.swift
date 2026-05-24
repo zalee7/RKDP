@@ -1108,6 +1108,7 @@ private struct AnimatedModeThumbnailView: View {
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
                 .fill(AppTheme.modeGradient(mode))
 
+            glowRing
             movingHighlight
             modeMotionOverlay
 
@@ -1122,9 +1123,9 @@ private struct AnimatedModeThumbnailView: View {
         .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-                .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                .stroke(Color.white.opacity(reduceMotion ? 0.24 : (isAnimating ? 0.46 : 0.26)), lineWidth: 1.2)
         )
-        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (isAnimating ? 9 : 6), x: 0, y: 3)
+        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (isAnimating ? 14 : 7), x: 0, y: 3)
         .scaleEffect(reduceMotion ? 1 : (isAnimating ? thumbnailScale : 1))
         .animation(reduceMotion ? nil : .easeInOut(duration: duration).repeatForever(autoreverses: true), value: isAnimating)
         .onAppear {
@@ -1139,20 +1140,27 @@ private struct AnimatedModeThumbnailView: View {
         .accessibilityHidden(true)
     }
 
+    private var glowRing: some View {
+        RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+            .stroke(AppTheme.modeAccent(mode).opacity(reduceMotion ? 0.14 : (isAnimating ? 0.55 : 0.16)), lineWidth: 2.2)
+            .scaleEffect(reduceMotion ? 1 : (isAnimating ? 1.05 : 0.96))
+            .blur(radius: reduceMotion ? 0 : 1.2)
+    }
+
     private var movingHighlight: some View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.08 : 0.22), .clear],
+                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.10 : 0.36), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            .frame(width: size * 0.34, height: size * 1.45)
+            .frame(width: size * 0.42, height: size * 1.55)
             .rotationEffect(.degrees(18))
-            .offset(x: reduceMotion ? 0 : (isAnimating ? size * 0.72 : -size * 0.72))
+            .offset(x: reduceMotion ? 0 : (isAnimating ? size * 0.82 : -size * 0.82))
             .blendMode(.screen)
-            .opacity(reduceMotion ? 0.25 : 0.7)
+            .opacity(reduceMotion ? 0.28 : 0.95)
     }
 
     @ViewBuilder
@@ -1160,43 +1168,43 @@ private struct AnimatedModeThumbnailView: View {
         switch mode {
         case .colorLink:
             Circle()
-                .stroke(Color.white.opacity(isAnimating ? 0.22 : 0.10), lineWidth: 2)
-                .frame(width: size * 0.55, height: size * 0.55)
-                .offset(x: isAnimating ? 4 : -3, y: isAnimating ? -2 : 3)
+                .stroke(Color.white.opacity(isAnimating ? 0.34 : 0.12), lineWidth: 2.4)
+                .frame(width: size * 0.62, height: size * 0.62)
+                .offset(x: isAnimating ? 6 : -5, y: isAnimating ? -4 : 4)
         case .gridlock, .sudoku:
             Image(systemName: "square.grid.3x3.fill")
                 .font(.system(size: size * 0.58, weight: .bold))
-                .foregroundStyle(Color.white.opacity(isAnimating ? 0.16 : 0.08))
-                .offset(x: isAnimating ? 3 : -2, y: isAnimating ? -2 : 2)
+                .foregroundStyle(Color.white.opacity(isAnimating ? 0.26 : 0.10))
+                .offset(x: isAnimating ? 5 : -4, y: isAnimating ? -4 : 3)
         case .minesweeper:
             Circle()
-                .fill(AppTheme.hotPink.opacity(isAnimating ? 0.22 : 0.08))
-                .frame(width: size * 0.72, height: size * 0.72)
-                .scaleEffect(isAnimating ? 1.06 : 0.92)
+                .fill(AppTheme.hotPink.opacity(isAnimating ? 0.34 : 0.10))
+                .frame(width: size * 0.78, height: size * 0.78)
+                .scaleEffect(isAnimating ? 1.12 : 0.88)
         case .wordle:
             HStack(spacing: 2) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 3)
-                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
-                        .frame(width: size * 0.15, height: size * 0.15)
+                        .stroke(Color.white.opacity(isAnimating ? 0.42 : 0.18), lineWidth: 1.2)
+                        .frame(width: size * 0.16, height: size * 0.16)
                 }
             }
-            .offset(y: isAnimating ? -12 : -9)
+            .offset(y: isAnimating ? -15 : -9)
         case .hangman:
             Circle()
-                .fill(Color(hex: "FF5A1F").opacity(isAnimating ? 0.18 : 0.08))
-                .blur(radius: 2)
-                .frame(width: size * 0.82, height: size * 0.82)
+                .fill(Color(hex: "FF5A1F").opacity(isAnimating ? 0.34 : 0.12))
+                .blur(radius: 2.5)
+                .frame(width: size * 0.9, height: size * 0.9)
         case .wordHunt:
             Circle()
-                .stroke(Color.white.opacity(isAnimating ? 0.18 : 0.08), lineWidth: 2)
-                .frame(width: size * 0.62, height: size * 0.62)
-                .offset(x: isAnimating ? -3 : 3)
+                .stroke(Color.white.opacity(isAnimating ? 0.32 : 0.10), lineWidth: 2.2)
+                .frame(width: size * 0.7, height: size * 0.7)
+                .offset(x: isAnimating ? -6 : 5)
         case .anagram:
             Text("Aa")
                 .font(.system(size: size * 0.28, weight: .black, design: .rounded))
-                .foregroundStyle(Color.white.opacity(isAnimating ? 0.20 : 0.08))
-                .offset(x: isAnimating ? 13 : 9, y: isAnimating ? -14 : -10)
+                .foregroundStyle(Color.white.opacity(isAnimating ? 0.34 : 0.12))
+                .offset(x: isAnimating ? 15 : 8, y: isAnimating ? -17 : -9)
         }
     }
 
@@ -1204,13 +1212,13 @@ private struct AnimatedModeThumbnailView: View {
         guard !reduceMotion else { return .zero }
         switch mode {
         case .wordHunt:
-            return CGSize(width: isAnimating ? 1.7 : -1.7, height: 0)
+            return CGSize(width: isAnimating ? 3.8 : -3.8, height: 0)
         case .anagram:
-            return CGSize(width: 0, height: isAnimating ? -1.3 : 1.3)
+            return CGSize(width: 0, height: isAnimating ? -3.2 : 3.2)
         case .hangman, .minesweeper:
-            return CGSize(width: 0, height: isAnimating ? -1.1 : 1.1)
+            return CGSize(width: 0, height: isAnimating ? -3.0 : 3.0)
         default:
-            return CGSize(width: 0, height: isAnimating ? -1.6 : 1.6)
+            return CGSize(width: 0, height: isAnimating ? -3.5 : 3.5)
         }
     }
 
@@ -1218,9 +1226,9 @@ private struct AnimatedModeThumbnailView: View {
         guard !reduceMotion else { return .zero }
         switch mode {
         case .anagram:
-            return .degrees(isAnimating ? 2 : -2)
+            return .degrees(isAnimating ? 4 : -4)
         case .wordHunt:
-            return .degrees(isAnimating ? -1.5 : 1.5)
+            return .degrees(isAnimating ? -3 : 3)
         default:
             return .zero
         }
@@ -1228,26 +1236,26 @@ private struct AnimatedModeThumbnailView: View {
 
     private var iconScale: CGFloat {
         guard !reduceMotion else { return 1 }
-        return isAnimating ? 1.035 : 0.995
+        return isAnimating ? 1.075 : 0.98
     }
 
     private var thumbnailScale: CGFloat {
         switch mode {
-        case .minesweeper, .hangman: return 1.025
-        default: return 1.015
+        case .minesweeper, .hangman: return 1.055
+        default: return 1.035
         }
     }
 
     private var duration: Double {
         switch mode {
-        case .colorLink: return 3.6
-        case .gridlock: return 3.2
-        case .sudoku: return 4.2
-        case .minesweeper: return 2.9
-        case .wordle: return 3.4
-        case .hangman: return 3.0
-        case .wordHunt: return 3.8
-        case .anagram: return 4.0
+        case .colorLink: return 3.1
+        case .gridlock: return 2.9
+        case .sudoku: return 3.5
+        case .minesweeper: return 2.5
+        case .wordle: return 2.9
+        case .hangman: return 2.6
+        case .wordHunt: return 3.2
+        case .anagram: return 3.4
         }
     }
 
