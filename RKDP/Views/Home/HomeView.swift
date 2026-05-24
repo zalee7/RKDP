@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct HomeView: View {
     @EnvironmentObject var auth: AuthViewModel
@@ -92,11 +93,11 @@ struct HomeView: View {
 private struct HomeBrandHeader: View {
     var body: some View {
         VStack(spacing: 2) {
-            Text("Grid Duel")
+            Text("Puzzle Party")
                 .font(.system(size: 33, weight: .black, design: .rounded))
                 .foregroundStyle(AppTheme.brandGradient)
                 .shadow(color: AppTheme.crownGold.opacity(0.32), radius: 12, x: 0, y: 4)
-            Text("Ranked Puzzle Arena")
+            Text("Solo, Ranked, Casual")
                 .font(.caption.bold())
                 .foregroundStyle(AppTheme.textSecondary)
                 .textCase(.uppercase)
@@ -191,7 +192,7 @@ private struct HomeModeList: View {
                 GameModeCardView(mode: mode, user: user) {
                     onSelect(mode)
                 }
-                .frame(height: 108)
+                .frame(height: 124)
             }
         }
         .padding(.horizontal)
@@ -383,6 +384,17 @@ struct GameModeDetailView: View {
                                 ) {
                                     destination.append("casual")
                                 }
+
+                                OnlineActionCard(
+                                    title: "Party",
+                                    subtitle: "\(mode.difficultyLabel(selectedDifficulty)) · create or join with a code",
+                                    icon: "person.3.fill",
+                                    chips: partyChips,
+                                    style: .secondary,
+                                    disabled: user == nil
+                                ) {
+                                    destination.append("party")
+                                }
                             }
                         }
                         .padding(.horizontal)
@@ -449,6 +461,8 @@ struct GameModeDetailView: View {
                     MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty, entryKind: .casual) {
                         Task { await auth.refreshUser() }
                     }
+                } else if dest == "party", let user = auth.user {
+                    PartyRoomView(user: user, mode: mode, difficulty: selectedDifficulty)
                 }
             }
         }
@@ -457,7 +471,7 @@ struct GameModeDetailView: View {
     private var rankedChips: [LobbyActionChip] {
         var chips = [
             LobbyActionChip(text: mode.difficultyLabel(selectedDifficulty), icon: "slider.horizontal.3"),
-            LobbyActionChip(text: divisionWagerText, icon: "centsign.circle.fill"),
+            LobbyActionChip(text: divisionWagerText, icon: "circle.fill", usesCoinIcon: true),
             LobbyActionChip(text: "Points count", icon: "arrow.up.forward.circle.fill")
         ]
         if let user {
@@ -472,8 +486,17 @@ struct GameModeDetailView: View {
         [
             LobbyActionChip(text: mode.difficultyLabel(selectedDifficulty), icon: "slider.horizontal.3"),
             LobbyActionChip(text: "No rank", icon: "minus.circle.fill"),
-            LobbyActionChip(text: "No wager", icon: "centsign.circle"),
-            LobbyActionChip(text: "+10 win", icon: "sparkles")
+            LobbyActionChip(text: "No wager", icon: "slash.circle"),
+            LobbyActionChip(text: "+10 win", icon: "sparkles", usesCoinIcon: true)
+        ]
+    }
+
+    private var partyChips: [LobbyActionChip] {
+        [
+            LobbyActionChip(text: "Join code", icon: "number.circle.fill"),
+            LobbyActionChip(text: "Up to 8", icon: "person.3.sequence.fill"),
+            LobbyActionChip(text: "No rank", icon: "minus.circle.fill"),
+            LobbyActionChip(text: "Same puzzle", icon: "square.grid.3x3.fill")
         ]
     }
 
@@ -849,6 +872,7 @@ private struct LobbyActionChip: Identifiable {
     let id = UUID()
     let text: String
     let icon: String
+    var usesCoinIcon: Bool = false
 }
 
 private struct OnlineActionCard: View {
@@ -971,7 +995,16 @@ private struct FlowChipLayout: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)], alignment: .leading, spacing: 6) {
             ForEach(chips) { chip in
-                Label(chip.text, systemImage: chip.icon)
+                HStack(spacing: 4) {
+                    if chip.usesCoinIcon {
+                        CoinIconView(size: 12)
+                    } else {
+                        Image(systemName: chip.icon)
+                    }
+                    Text(chip.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
                     .font(.caption2.bold())
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -1003,31 +1036,35 @@ struct GameModeCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                AnimatedModeThumbnailView(mode: mode, size: 64)
+            HStack(spacing: 14) {
+                AnimatedModeThumbnailView(mode: mode, size: 68)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text(mode.displayName)
-                        .font(.headline.bold())
+                        .font(.system(size: 22, weight: .black, design: .rounded))
                         .foregroundStyle(AppTheme.textPrimary)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.82)
+                        .minimumScaleFactor(0.74)
 
                     if let user {
                         CompactModeStatsView(info: user.rank(for: mode))
                     } else {
                         Text("Tap to choose solo or online")
-                            .font(.caption)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(AppTheme.textSecondary)
                             .lineLimit(1)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 8)
+                modeStatColumn
 
-                modeBestColumn
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(AppTheme.textSecondary.opacity(0.85))
             }
-            .padding(12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 cardBackground
@@ -1061,28 +1098,52 @@ struct GameModeCardView: View {
     }
 
     @ViewBuilder
-    private var modeBestColumn: some View {
+    private var modeStatColumn: some View {
         if let user {
             let info = user.rank(for: mode)
-            VStack(alignment: .trailing, spacing: 5) {
-                Text("Best")
-                    .font(.system(size: 9, weight: .bold))
-                    .textCase(.uppercase)
-                    .foregroundStyle(AppTheme.textSecondary)
-                Text(bestText(info))
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.accentBright.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.textSecondary.opacity(0.85))
+            VStack(alignment: .trailing, spacing: 7) {
+                modeStatPill(label: "W/L") {
+                    RecordTextView(
+                        wins: info.wins,
+                        losses: info.losses,
+                        font: .system(size: 13, weight: .black)
+                    )
+                }
+
+                modeStatPill(label: "Best") {
+                    Text(bestText(info))
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(AppTheme.accentBright.opacity(0.95))
+                }
             }
-            .frame(width: 72, alignment: .trailing)
-        } else {
-            Image(systemName: "chevron.right")
-                .font(.caption.bold())
-                .foregroundStyle(AppTheme.textSecondary.opacity(0.85))
+            .frame(width: 88, alignment: .trailing)
+        }
+    }
+
+    private func modeStatPill<Content: View>(
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .center, spacing: 2) {
+            Text(label)
+                .font(.system(size: 8.5, weight: .black))
+                .textCase(.uppercase)
+                .foregroundStyle(AppTheme.textSecondary)
+
+            content()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                }
         }
     }
 
@@ -1108,7 +1169,6 @@ private struct AnimatedModeThumbnailView: View {
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
                 .fill(AppTheme.modeGradient(mode))
 
-            glowRing
             movingHighlight
             modeMotionOverlay
 
@@ -1123,9 +1183,9 @@ private struct AnimatedModeThumbnailView: View {
         .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-                .stroke(Color.white.opacity(reduceMotion ? 0.24 : (isAnimating ? 0.46 : 0.26)), lineWidth: 1.2)
+                .stroke(Color.white.opacity(0.24), lineWidth: 1)
         )
-        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (isAnimating ? 14 : 7), x: 0, y: 3)
+        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (isAnimating ? 9 : 6), x: 0, y: 3)
         .scaleEffect(reduceMotion ? 1 : (isAnimating ? thumbnailScale : 1))
         .animation(reduceMotion ? nil : .easeInOut(duration: duration).repeatForever(autoreverses: true), value: isAnimating)
         .onAppear {
@@ -1140,27 +1200,20 @@ private struct AnimatedModeThumbnailView: View {
         .accessibilityHidden(true)
     }
 
-    private var glowRing: some View {
-        RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-            .stroke(AppTheme.modeAccent(mode).opacity(reduceMotion ? 0.14 : (isAnimating ? 0.55 : 0.16)), lineWidth: 2.2)
-            .scaleEffect(reduceMotion ? 1 : (isAnimating ? 1.05 : 0.96))
-            .blur(radius: reduceMotion ? 0 : 1.2)
-    }
-
     private var movingHighlight: some View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.10 : 0.36), .clear],
+                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.08 : 0.22), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            .frame(width: size * 0.42, height: size * 1.55)
+            .frame(width: size * 0.34, height: size * 1.45)
             .rotationEffect(.degrees(18))
-            .offset(x: reduceMotion ? 0 : (isAnimating ? size * 0.82 : -size * 0.82))
+            .offset(x: reduceMotion ? 0 : (isAnimating ? size * 0.72 : -size * 0.72))
             .blendMode(.screen)
-            .opacity(reduceMotion ? 0.28 : 0.95)
+            .opacity(reduceMotion ? 0.25 : 0.7)
     }
 
     @ViewBuilder
@@ -1168,43 +1221,43 @@ private struct AnimatedModeThumbnailView: View {
         switch mode {
         case .colorLink:
             Circle()
-                .stroke(Color.white.opacity(isAnimating ? 0.34 : 0.12), lineWidth: 2.4)
-                .frame(width: size * 0.62, height: size * 0.62)
-                .offset(x: isAnimating ? 6 : -5, y: isAnimating ? -4 : 4)
+                .stroke(Color.white.opacity(isAnimating ? 0.22 : 0.10), lineWidth: 2)
+                .frame(width: size * 0.55, height: size * 0.55)
+                .offset(x: isAnimating ? 4 : -3, y: isAnimating ? -2 : 3)
         case .gridlock, .sudoku:
             Image(systemName: "square.grid.3x3.fill")
                 .font(.system(size: size * 0.58, weight: .bold))
-                .foregroundStyle(Color.white.opacity(isAnimating ? 0.26 : 0.10))
-                .offset(x: isAnimating ? 5 : -4, y: isAnimating ? -4 : 3)
+                .foregroundStyle(Color.white.opacity(isAnimating ? 0.16 : 0.08))
+                .offset(x: isAnimating ? 3 : -2, y: isAnimating ? -2 : 2)
         case .minesweeper:
             Circle()
-                .fill(AppTheme.hotPink.opacity(isAnimating ? 0.34 : 0.10))
-                .frame(width: size * 0.78, height: size * 0.78)
-                .scaleEffect(isAnimating ? 1.12 : 0.88)
+                .fill(AppTheme.hotPink.opacity(isAnimating ? 0.22 : 0.08))
+                .frame(width: size * 0.72, height: size * 0.72)
+                .scaleEffect(isAnimating ? 1.06 : 0.92)
         case .wordle:
             HStack(spacing: 2) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 3)
-                        .stroke(Color.white.opacity(isAnimating ? 0.42 : 0.18), lineWidth: 1.2)
-                        .frame(width: size * 0.16, height: size * 0.16)
+                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                        .frame(width: size * 0.15, height: size * 0.15)
                 }
             }
-            .offset(y: isAnimating ? -15 : -9)
+            .offset(y: isAnimating ? -12 : -9)
         case .hangman:
             Circle()
-                .fill(Color(hex: "FF5A1F").opacity(isAnimating ? 0.34 : 0.12))
-                .blur(radius: 2.5)
-                .frame(width: size * 0.9, height: size * 0.9)
+                .fill(Color(hex: "FF5A1F").opacity(isAnimating ? 0.18 : 0.08))
+                .blur(radius: 2)
+                .frame(width: size * 0.82, height: size * 0.82)
         case .wordHunt:
             Circle()
-                .stroke(Color.white.opacity(isAnimating ? 0.32 : 0.10), lineWidth: 2.2)
-                .frame(width: size * 0.7, height: size * 0.7)
-                .offset(x: isAnimating ? -6 : 5)
+                .stroke(Color.white.opacity(isAnimating ? 0.18 : 0.08), lineWidth: 2)
+                .frame(width: size * 0.62, height: size * 0.62)
+                .offset(x: isAnimating ? -3 : 3)
         case .anagram:
             Text("Aa")
                 .font(.system(size: size * 0.28, weight: .black, design: .rounded))
-                .foregroundStyle(Color.white.opacity(isAnimating ? 0.34 : 0.12))
-                .offset(x: isAnimating ? 15 : 8, y: isAnimating ? -17 : -9)
+                .foregroundStyle(Color.white.opacity(isAnimating ? 0.20 : 0.08))
+                .offset(x: isAnimating ? 13 : 9, y: isAnimating ? -14 : -10)
         }
     }
 
@@ -1212,13 +1265,13 @@ private struct AnimatedModeThumbnailView: View {
         guard !reduceMotion else { return .zero }
         switch mode {
         case .wordHunt:
-            return CGSize(width: isAnimating ? 3.8 : -3.8, height: 0)
+            return CGSize(width: isAnimating ? 1.7 : -1.7, height: 0)
         case .anagram:
-            return CGSize(width: 0, height: isAnimating ? -3.2 : 3.2)
+            return CGSize(width: 0, height: isAnimating ? -1.3 : 1.3)
         case .hangman, .minesweeper:
-            return CGSize(width: 0, height: isAnimating ? -3.0 : 3.0)
+            return CGSize(width: 0, height: isAnimating ? -1.1 : 1.1)
         default:
-            return CGSize(width: 0, height: isAnimating ? -3.5 : 3.5)
+            return CGSize(width: 0, height: isAnimating ? -1.6 : 1.6)
         }
     }
 
@@ -1226,9 +1279,9 @@ private struct AnimatedModeThumbnailView: View {
         guard !reduceMotion else { return .zero }
         switch mode {
         case .anagram:
-            return .degrees(isAnimating ? 4 : -4)
+            return .degrees(isAnimating ? 2 : -2)
         case .wordHunt:
-            return .degrees(isAnimating ? -3 : 3)
+            return .degrees(isAnimating ? -1.5 : 1.5)
         default:
             return .zero
         }
@@ -1236,26 +1289,26 @@ private struct AnimatedModeThumbnailView: View {
 
     private var iconScale: CGFloat {
         guard !reduceMotion else { return 1 }
-        return isAnimating ? 1.075 : 0.98
+        return isAnimating ? 1.035 : 0.995
     }
 
     private var thumbnailScale: CGFloat {
         switch mode {
-        case .minesweeper, .hangman: return 1.055
-        default: return 1.035
+        case .minesweeper, .hangman: return 1.025
+        default: return 1.015
         }
     }
 
     private var duration: Double {
         switch mode {
-        case .colorLink: return 3.1
-        case .gridlock: return 2.9
-        case .sudoku: return 3.5
-        case .minesweeper: return 2.5
-        case .wordle: return 2.9
-        case .hangman: return 2.6
-        case .wordHunt: return 3.2
-        case .anagram: return 3.4
+        case .colorLink: return 3.6
+        case .gridlock: return 3.2
+        case .sudoku: return 4.2
+        case .minesweeper: return 2.9
+        case .wordle: return 3.4
+        case .hangman: return 3.0
+        case .wordHunt: return 3.8
+        case .anagram: return 4.0
         }
     }
 
@@ -1268,30 +1321,26 @@ private struct CompactModeStatsView: View {
     let info: RankInfo
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    RankIconView(tier: info.displayTier, division: info.division, size: 16)
-                    Text(info.fullDisplayName)
-                        .font(.caption.bold())
-                        .foregroundStyle(info.displayTier.color)
-                        .lineLimit(1)
-                }
-
-                RecordTextView(
-                    wins: info.wins,
-                    losses: info.losses,
-                    font: .system(size: 11, weight: .bold)
-                )
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                RankIconView(tier: info.displayTier, division: info.division, size: 18)
+                Text(info.fullDisplayName)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(info.displayTier.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
 
-            RankDivisionProgressView(info: info, height: 3, spacing: 3)
-                .frame(maxWidth: 152)
+            VStack(spacing: 4) {
+                RankDivisionProgressView(info: info, height: 3, spacing: 3)
 
-            Text(info.divisionProgressDisplay)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(AppTheme.textSecondary)
-                .lineLimit(1)
+                Text(info.divisionProgressDisplay)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .frame(maxWidth: 170)
         }
     }
 }
@@ -1324,6 +1373,499 @@ struct RankProgressMiniView: View {
                 Text("Best: \(best / 60):\(String(format: "%02d", best % 60))")
                     .font(.system(size: 8.5, weight: .medium)).foregroundStyle(AppTheme.accentBright.opacity(0.9))
             }
+        }
+    }
+}
+
+// MARK: - Party Mode
+
+struct PartyRoomView: View {
+    let user: AppUser
+    let mode: GameMode
+    let difficulty: Difficulty
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var vm = PartyRoomViewModel()
+
+    var body: some View {
+        ZStack {
+            AppTheme.arenaBackground.ignoresSafeArea()
+
+            if let room = vm.room {
+                switch room.status {
+                case .lobby:
+                    partyLobby(room)
+                case .inProgress:
+                    partyGame(room)
+                case .finished:
+                    PartyScoreboardView(room: room, currentUserID: user.id) {
+                        dismiss()
+                    }
+                case .canceled:
+                    partyClosed(title: "Party Canceled", message: "The host closed this party room.")
+                case .expired:
+                    partyClosed(title: "Party Expired", message: "Create a new room to keep playing.")
+                }
+            } else {
+                createOrJoinView
+            }
+
+            if vm.isWorking {
+                ProgressView()
+                    .tint(AppTheme.crownGold)
+                    .padding(20)
+                    .background(AppTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+        }
+        .navigationTitle("Party")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .alert("Party", isPresented: Binding(
+            get: { vm.errorMessage != nil },
+            set: { if !$0 { vm.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
+        }
+        .onDisappear {
+            vm.stopListening()
+        }
+    }
+
+    private var createOrJoinView: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                partyHeader(title: "Party Mode", subtitle: "Create a room for \(mode.displayName), or join any party with a code.")
+
+                VStack(spacing: 12) {
+                    partyInfoRow(icon: mode.icon, title: "\(mode.displayName) Party", value: "\(mode.difficultyLabel(difficulty)) · same puzzle for everyone")
+                    partyInfoRow(icon: "person.3.fill", title: "Room Size", value: "2-8 players · no rank, coins, or wagers")
+
+                    Button {
+                        Task { await vm.create(user: user, mode: mode, difficulty: difficulty) }
+                    } label: {
+                        Label("Create Party", systemImage: "plus.circle.fill")
+                            .font(.headline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(AppTheme.brandGradient)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding()
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Join With Code")
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+
+                    TextField("ABC123", text: $vm.joinCode)
+                        .font(.system(size: 24, weight: .black, design: .rounded))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .background(Color.white.opacity(0.10))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    Button {
+                        Task { await vm.join(user: user) }
+                    } label: {
+                        Label("Join Party", systemImage: "number.circle.fill")
+                            .font(.headline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(AppTheme.cardBackground.opacity(0.95))
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding()
+                .background(AppTheme.cardBackground.opacity(0.76))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+            }
+            .padding()
+        }
+    }
+
+    private func partyLobby(_ room: PartyRoom) -> some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                partyHeader(title: "Code \(room.code)", subtitle: "\(room.mode.displayName) · \(room.mode.difficultyLabel(room.difficulty))")
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Label("\(room.players.count)/\(room.maxPlayers)", systemImage: "person.3.fill")
+                            .font(.headline.bold())
+                            .foregroundStyle(AppTheme.crownGold)
+                        Spacer()
+                        Text(room.isHost(user.id) ? "Host" : "Joined")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(AppTheme.teal.opacity(0.18))
+                            .foregroundStyle(AppTheme.teal)
+                            .clipShape(Capsule())
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 10)], spacing: 10) {
+                        ForEach(room.players) { player in
+                            PartyPlayerTile(player: player)
+                        }
+                    }
+                }
+                .padding()
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+
+                if room.isHost(user.id) {
+                    Button {
+                        Task { await vm.start(userID: user.id) }
+                    } label: {
+                        Label(room.players.count >= 2 ? "Start Party" : "Need 2 Players", systemImage: "play.fill")
+                            .font(.headline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(room.players.count >= 2 ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(Color.white.opacity(0.08)))
+                            .foregroundStyle(room.players.count >= 2 ? .white : AppTheme.textSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(room.players.count < 2)
+                }
+
+                Button(role: .destructive) {
+                    Task {
+                        await vm.leave(userID: user.id)
+                        dismiss()
+                    }
+                } label: {
+                    Label(room.isHost(user.id) ? "Cancel Party" : "Leave Party", systemImage: "xmark.circle.fill")
+                        .font(.headline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppTheme.danger.opacity(0.18))
+                        .foregroundStyle(AppTheme.danger)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+        }
+    }
+
+    private func partyGame(_ room: PartyRoom) -> some View {
+        ZStack(alignment: .top) {
+            SoloGameView(
+                mode: room.mode,
+                difficulty: room.difficulty,
+                user: user,
+                sessionID: "party_\(room.code)",
+                seed: room.seed,
+                puzzleData: room.puzzleData,
+                onMatchResult: { result in
+                    Task { await vm.submit(result) }
+                }
+            )
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Party \(room.code)")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.crownGold)
+                    Text("\(submittedCount(room))/\(room.players.count) finished")
+                        .font(.caption2.bold())
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+                Spacer()
+                Button {
+                    Task {
+                        await vm.leave(userID: user.id)
+                        dismiss()
+                    }
+                } label: {
+                    Label("Leave", systemImage: "xmark.circle.fill")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(AppTheme.danger.opacity(0.18))
+                        .foregroundStyle(AppTheme.danger)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(10)
+            .background(AppTheme.cardBackground.opacity(0.94))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal)
+            .padding(.top, 8)
+        }
+    }
+
+    private func partyClosed(title: String, message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.3.sequence.fill")
+                .font(.system(size: 44, weight: .bold))
+                .foregroundStyle(AppTheme.crownGold)
+            Text(title)
+                .font(.title2.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Back") { dismiss() }
+                .font(.headline.bold())
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(AppTheme.brandGradient)
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
+        }
+        .padding()
+    }
+
+    private func partyHeader(title: String, subtitle: String) -> some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 32, weight: .black, design: .rounded))
+                .foregroundStyle(AppTheme.brandGradient)
+                .multilineTextAlignment(.center)
+            Text(subtitle)
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func partyInfoRow(icon: String, title: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3.bold())
+                .foregroundStyle(AppTheme.crownGold)
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func submittedCount(_ room: PartyRoom) -> Int {
+        room.players.filter { player in
+            guard let result = player.result else { return false }
+            if result.status == "Abandoned" { return true }
+            if result.mode == .wordle { return result.isFinalWordleResult }
+            if result.mode == .hangman { return result.summary["final"] == "true" || result.completed }
+            return true
+        }.count
+    }
+}
+
+private struct PartyPlayerTile: View {
+    let player: PartyPlayer
+
+    var body: some View {
+        VStack(spacing: 8) {
+            StickDuelerAvatarView(style: player.avatarStyle, size: 44)
+            Text(player.username)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            if player.isHost {
+                Text("HOST")
+                    .font(.system(size: 9, weight: .black))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppTheme.crownGold.opacity(0.20))
+                    .foregroundStyle(AppTheme.crownGold)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 112)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
+    }
+}
+
+private struct PartyScoreboardView: View {
+    let room: PartyRoom
+    let currentUserID: String
+    let onDone: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(spacing: 6) {
+                    Text("Party Results")
+                        .font(.system(size: 32, weight: .black, design: .rounded))
+                        .foregroundStyle(AppTheme.brandGradient)
+                    Text(room.winnerReason ?? "Same puzzle, no rank or coins")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(PartyScoring.standings(for: room)) { standing in
+                        PartyStandingRow(
+                            standing: standing,
+                            mode: room.mode,
+                            isCurrentUser: standing.player.userID == currentUserID
+                        )
+                    }
+                }
+                .padding()
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+
+                Button(action: onDone) {
+                    Label("Back to Games", systemImage: "house.fill")
+                        .font(.headline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppTheme.brandGradient)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+        }
+    }
+}
+
+private struct PartyStandingRow: View {
+    let standing: PartyStanding
+    let mode: GameMode
+    let isCurrentUser: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("#\(standing.placement)")
+                .font(.headline.black())
+                .foregroundStyle(standing.placement == 1 ? AppTheme.crownGold : AppTheme.textSecondary)
+                .frame(width: 38)
+
+            StickDuelerAvatarView(style: standing.player.avatarStyle, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(isCurrentUser ? "You" : standing.player.username)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    if standing.player.abandoned {
+                        Text("LEFT")
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(AppTheme.danger)
+                    }
+                }
+                Text(PartyScoring.summary(for: standing.result, mode: mode))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(isCurrentUser ? AppTheme.crownGold.opacity(0.13) : Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(isCurrentUser ? AppTheme.crownGold.opacity(0.45) : Color.white.opacity(0.10), lineWidth: 1))
+    }
+}
+
+@MainActor
+private final class PartyRoomViewModel: ObservableObject {
+    @Published var room: PartyRoom?
+    @Published var joinCode = ""
+    @Published var errorMessage: String?
+    @Published var isWorking = false
+
+    private let store = FirestoreService.shared
+    private var listener: ListenerRegistration?
+
+    func create(user: AppUser, mode: GameMode, difficulty: Difficulty) async {
+        await run {
+            let created = try await store.createPartyRoom(host: user, mode: mode, difficulty: difficulty)
+            attach(to: created.code)
+            room = created
+        }
+    }
+
+    func join(user: AppUser) async {
+        await run {
+            let joined = try await store.joinPartyRoom(code: joinCode, user: user)
+            attach(to: joined.code)
+            room = joined
+        }
+    }
+
+    func start(userID: String) async {
+        guard let room else { return }
+        await run {
+            self.room = try await store.startPartyRoom(code: room.code, hostID: userID)
+        }
+    }
+
+    func submit(_ result: MatchPlayerResult) async {
+        guard let room, room.status == .inProgress else { return }
+        do {
+            self.room = try await store.submitPartyResult(code: room.code, userID: result.userID, result: result)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func leave(userID: String) async {
+        guard let room else { return }
+        await run {
+            self.room = try await store.leavePartyRoom(code: room.code, userID: userID)
+        }
+    }
+
+    func stopListening() {
+        listener?.remove()
+        listener = nil
+    }
+
+    private func attach(to code: String) {
+        stopListening()
+        listener = store.listenForPartyRoom(code: code) { [weak self] room in
+            Task { @MainActor in
+                self?.room = room
+            }
+        }
+    }
+
+    private func run(_ operation: @escaping () async throws -> Void) async {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await operation()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

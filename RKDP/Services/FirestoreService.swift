@@ -14,6 +14,11 @@ enum FirestoreServiceError: LocalizedError {
     case dailyCoinsAlreadyClaimed
     case rewardedCoinLimitReached
     case unknownCoinPack
+    case partyRoomNotFound
+    case partyRoomFull
+    case partyRoomExpired
+    case partyRoomAlreadyStarted
+    case notPartyHost
 
     var errorDescription: String? {
         switch self {
@@ -41,6 +46,16 @@ enum FirestoreServiceError: LocalizedError {
             return "You have reached today's rewarded coin ad limit."
         case .unknownCoinPack:
             return "That coin pack is not available yet."
+        case .partyRoomNotFound:
+            return "That party code was not found."
+        case .partyRoomFull:
+            return "That party room is full."
+        case .partyRoomExpired:
+            return "That party room expired."
+        case .partyRoomAlreadyStarted:
+            return "That party already started."
+        case .notPartyHost:
+            return "Only the host can do that."
         }
     }
 }
@@ -1317,6 +1332,265 @@ final class FirestoreService {
                 }
                 onChange(activeInvites)
             }
+    }
+
+    // MARK: - Party Rooms
+
+    func createPartyRoom(host: AppUser, mode: GameMode, difficulty: Difficulty) async throws -> PartyRoom {
+        let now = Date()
+        let seed = Int.random(in: 0..<Int.max)
+        let player = PartyPlayer(
+            userID: host.id,
+            username: host.username,
+            avatarStyle: host.cosmetics.avatarStyle,
+            joinedAt: now,
+            isHost: true,
+            result: nil,
+            abandoned: false
+        )
+
+        for _ in 0..<12 {
+            let code = makePartyCode()
+            let ref = db.collection("partyRooms").document(code)
+            let existing = try await ref.getDocument()
+            guard !existing.exists else { continue }
+
+            let room = PartyRoom(
+                code: code,
+                hostID: host.id,
+                mode: mode,
+                difficulty: difficulty,
+                status: .lobby,
+                players: [player],
+                playerIDs: [host.id],
+                seed: seed,
+                puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+                createdAt: now,
+                expiresAt: now.addingTimeInterval(1_800),
+                startedAt: nil,
+                finishedAt: nil,
+                winnerID: nil,
+                winnerReason: nil,
+                maxPlayers: 8
+            )
+            try ref.setData(from: room)
+            return room
+        }
+
+        throw FirestoreServiceError.invalidFriendAction
+    }
+
+    func joinPartyRoom(code rawCode: String, user: AppUser) async throws -> PartyRoom {
+        let code = normalizedPartyCode(rawCode)
+        guard !code.isEmpty else { throw FirestoreServiceError.partyRoomNotFound }
+        let roomRef = db.collection("partyRooms").document(code)
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<PartyRoom, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var room = try transaction.getDocument(roomRef).data(as: PartyRoom.self)
+                    guard room.status == .lobby else { return fail(FirestoreServiceError.partyRoomAlreadyStarted) }
+                    guard Date() < room.expiresAt else {
+                        room.status = .expired
+                        let expiredData = try Firestore.Encoder().encode(room)
+                        transaction.setData(expiredData, forDocument: roomRef, merge: true)
+                        return fail(FirestoreServiceError.partyRoomExpired)
+                    }
+
+                    if room.containsPlayer(user.id) {
+                        return room
+                    }
+
+                    guard room.players.count < room.maxPlayers else { return fail(FirestoreServiceError.partyRoomFull) }
+
+                    let player = PartyPlayer(
+                        userID: user.id,
+                        username: user.username,
+                        avatarStyle: user.cosmetics.avatarStyle,
+                        joinedAt: Date(),
+                        isHost: false,
+                        result: nil,
+                        abandoned: false
+                    )
+                    room.players.append(player)
+                    room.playerIDs = room.players.map(\.userID)
+                    let encoded = try Firestore.Encoder().encode(room)
+                    transaction.setData(encoded, forDocument: roomRef, merge: true)
+                    return room
+                } catch {
+                    return fail(error is DecodingError ? FirestoreServiceError.partyRoomNotFound : error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let room = result as? PartyRoom {
+                    continuation.resume(returning: room)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.partyRoomNotFound)
+                }
+            })
+        }
+    }
+
+    func startPartyRoom(code: String, hostID: String) async throws -> PartyRoom {
+        let roomRef = db.collection("partyRooms").document(normalizedPartyCode(code))
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<PartyRoom, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var room = try transaction.getDocument(roomRef).data(as: PartyRoom.self)
+                    guard room.hostID == hostID else { return fail(FirestoreServiceError.notPartyHost) }
+                    guard room.status == .lobby else { return fail(FirestoreServiceError.partyRoomAlreadyStarted) }
+                    guard Date() < room.expiresAt else { return fail(FirestoreServiceError.partyRoomExpired) }
+                    guard room.players.count >= 2 else { return fail(FirestoreServiceError.invalidFriendAction) }
+                    room.status = .inProgress
+                    room.startedAt = Date()
+                    let encoded = try Firestore.Encoder().encode(room)
+                    transaction.setData(encoded, forDocument: roomRef, merge: true)
+                    return room
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let room = result as? PartyRoom {
+                    continuation.resume(returning: room)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.partyRoomNotFound)
+                }
+            })
+        }
+    }
+
+    func submitPartyResult(code: String, userID: String, result: MatchPlayerResult) async throws -> PartyRoom {
+        try await mutatePartyRoom(code: code) { room in
+            guard let index = room.players.firstIndex(where: { $0.userID == userID }) else {
+                throw FirestoreServiceError.invalidFriendAction
+            }
+            room.players[index].result = result
+            room.players[index].abandoned = false
+            room = self.finishPartyRoomIfReady(room)
+        }
+    }
+
+    func leavePartyRoom(code: String, userID: String) async throws -> PartyRoom {
+        try await mutatePartyRoom(code: code) { room in
+            switch room.status {
+            case .lobby:
+                if room.hostID == userID {
+                    room.status = .canceled
+                    room.finishedAt = Date()
+                } else {
+                    room.players.removeAll { $0.userID == userID }
+                    room.playerIDs = room.players.map(\.userID)
+                }
+            case .inProgress:
+                guard let index = room.players.firstIndex(where: { $0.userID == userID }) else { return }
+                if room.players[index].result == nil {
+                    room.players[index].result = MatchPlayerResult(
+                        userID: userID,
+                        mode: room.mode,
+                        completed: false,
+                        elapsedSeconds: 0,
+                        score: 0,
+                        progress: 0,
+                        status: "Abandoned",
+                        summary: ["abandoned": "true"],
+                        details: ["Left the party match."]
+                    )
+                    room.players[index].abandoned = true
+                }
+                room = self.finishPartyRoomIfReady(room)
+            case .finished, .canceled, .expired:
+                break
+            }
+        }
+    }
+
+    func listenForPartyRoom(code rawCode: String, onChange: @escaping (PartyRoom?) -> Void) -> ListenerRegistration {
+        db.collection("partyRooms")
+            .document(normalizedPartyCode(rawCode))
+            .addSnapshotListener { snapshot, error in
+                if let error { print("Party room listener error: \(error.localizedDescription)") }
+                onChange(try? snapshot?.data(as: PartyRoom.self))
+            }
+    }
+
+    private func mutatePartyRoom(code rawCode: String, mutate: @escaping (inout PartyRoom) throws -> Void) async throws -> PartyRoom {
+        let roomRef = db.collection("partyRooms").document(normalizedPartyCode(rawCode))
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<PartyRoom, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var room = try transaction.getDocument(roomRef).data(as: PartyRoom.self)
+                    try mutate(&room)
+                    let encoded = try Firestore.Encoder().encode(room)
+                    transaction.setData(encoded, forDocument: roomRef, merge: true)
+                    return room
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let room = result as? PartyRoom {
+                    continuation.resume(returning: room)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.partyRoomNotFound)
+                }
+            })
+        }
+    }
+
+    private func finishPartyRoomIfReady(_ room: PartyRoom) -> PartyRoom {
+        guard room.status == .inProgress,
+              !room.players.isEmpty,
+              room.players.allSatisfy({ player in
+                  guard let result = player.result else { return false }
+                  return isFinalPartyResult(result)
+              }) else {
+            return room
+        }
+
+        var resolved = PartyScoring.resolvedRoom(room)
+        resolved.status = .finished
+        resolved.finishedAt = Date()
+        return resolved
+    }
+
+    private func isFinalPartyResult(_ result: MatchPlayerResult) -> Bool {
+        if result.status == "Abandoned" { return true }
+        switch result.mode {
+        case .wordle:
+            return result.isFinalWordleResult
+        case .hangman:
+            return result.summary["final"] == "true" || result.completed || result.wrongGuessCount >= result.maxWrongGuesses
+        default:
+            return true
+        }
+    }
+
+    private func makePartyCode() -> String {
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+        return String((0..<6).compactMap { _ in alphabet.randomElement() })
+    }
+
+    private func normalizedPartyCode(_ code: String) -> String {
+        code.uppercased().filter { $0.isLetter || $0.isNumber }
     }
 
     private func friendshipID(_ a: String, _ b: String) -> String {

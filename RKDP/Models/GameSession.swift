@@ -19,6 +19,7 @@ enum SessionKind: String, Codable {
     case casual
     case exhibition
     case asyncExhibition
+    case party
 }
 
 struct PostMatchRewardSnapshot {
@@ -280,6 +281,7 @@ struct GameSession: Codable, Identifiable {
     var isExhibition: Bool { matchKind == .exhibition || matchKind == .asyncExhibition }
     var isLiveExhibition: Bool { matchKind == .exhibition }
     var isAsyncExhibition: Bool { matchKind == .asyncExhibition }
+    var isParty: Bool { matchKind == .party }
     var containsBot: Bool { players.contains(where: \.isBot) }
     var botPlayer: MatchPlayer? { players.first(where: \.isBot) }
 
