@@ -9,6 +9,11 @@ struct ProfileView: View {
     @State private var isGrantingTesterAccess = false
     @State private var selectedOwnedCategory: CosmeticCategory = .title
     @State private var showAvatarEditor = false
+    @State private var recentGames: [GameSession] = []
+    @State private var isLoadingRecentGames = false
+    @State private var recentGamesError: String?
+    @State private var selectedRecentGame: GameSession?
+    @State private var showAllRecentGames = false
 
     init(user: AppUser, onDone: (() -> Void)? = nil) {
         self.user = user
@@ -69,6 +74,8 @@ struct ProfileView: View {
                             #endif
                         }
                         .padding(.top, 24)
+
+                        recentGamesSection
 
                         // Per-mode ranks
                         sectionCard(title: "Rankings") {
@@ -192,11 +199,90 @@ struct ProfileView: View {
                     await auth.refreshUser()
                 }
             }
+            .sheet(item: $selectedRecentGame) { session in
+                MatchBreakdownView(
+                    session: session,
+                    currentUserID: user.id,
+                    results: session.playerResults ?? [:]
+                )
+            }
+            .sheet(isPresented: $showAllRecentGames) {
+                RecentGamesListView(sessions: recentGames, currentUserID: user.id)
+            }
+            .task {
+                await loadRecentGames()
+            }
         }
     }
 
     private var nonAvatarCosmeticCategories: [CosmeticCategory] {
         CosmeticCategory.allCases.filter { !$0.isAvatarCategory }
+    }
+
+    private var recentGamesSection: some View {
+        sectionCard(title: "Recent Games") {
+            VStack(alignment: .leading, spacing: 12) {
+                if isLoadingRecentGames && recentGames.isEmpty {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(AppTheme.crownGold)
+                        Text("Loading recent matches...")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+                } else if let recentGamesError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(recentGamesError)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.warning)
+                        Button("Retry") {
+                            Task { await loadRecentGames() }
+                        }
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.crownGold)
+                    }
+                } else if recentGames.isEmpty {
+                    Text("Your latest online matches will appear here with dates and breakdowns.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                } else {
+                    ForEach(Array(recentGames.prefix(5))) { session in
+                        RecentGameRow(session: session, currentUserID: user.id) {
+                            selectedRecentGame = session
+                        }
+                    }
+
+                    if recentGames.count > 5 {
+                        Button {
+                            showAllRecentGames = true
+                        } label: {
+                            Label("View All Recent Games", systemImage: "clock.arrow.circlepath")
+                                .font(.caption.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.08))
+                                .foregroundStyle(AppTheme.textPrimary)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func loadRecentGames() async {
+        isLoadingRecentGames = true
+        recentGamesError = nil
+        do {
+            recentGames = try await FirestoreService.shared.fetchRecentFinishedSessions(for: user.id, limit: 20)
+        } catch {
+            recentGamesError = "Could not load recent games right now."
+        }
+        isLoadingRecentGames = false
     }
 
     @ViewBuilder
@@ -223,7 +309,7 @@ private struct AvatarEditorView: View {
     @State private var bodyHexInput: String
     @State private var bodyHexError: String?
 
-    private let categories: [CosmeticCategory] = [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura, .avatarPose]
+    private let categories: [CosmeticCategory] = [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura]
 
     init(shop: ShopViewModel, onChanged: @escaping () async -> Void) {
         self.shop = shop
@@ -483,4 +569,176 @@ struct StatRow: View {
         }
         .font(.subheadline)
     }
+}
+
+private struct RecentGamesListView: View {
+    let sessions: [GameSession]
+    let currentUserID: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedSession: GameSession?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(sessions) { session in
+                            RecentGameRow(session: session, currentUserID: currentUserID) {
+                                selectedSession = session
+                            }
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Recent Games")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.accentBright)
+                }
+            }
+            .sheet(item: $selectedSession) { session in
+                MatchBreakdownView(
+                    session: session,
+                    currentUserID: currentUserID,
+                    results: session.playerResults ?? [:]
+                )
+            }
+        }
+    }
+}
+
+private struct RecentGameRow: View {
+    let session: GameSession
+    let currentUserID: String
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(AppTheme.modeGradient(session.mode))
+                    .frame(width: 42, height: 42)
+                    .overlay(Image(systemName: session.mode.icon).font(.subheadline.bold()).foregroundStyle(.white))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(session.mode.displayName)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .lineLimit(1)
+                        Text(kindLabel)
+                            .font(.system(size: 10, weight: .black, design: .rounded))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(kindColor.opacity(0.18))
+                            .foregroundStyle(kindColor)
+                            .clipShape(Capsule())
+                    }
+                    Text(opponentText)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                    Text(reasonText)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(outcomeLabel)
+                        .font(.caption.bold())
+                        .foregroundStyle(outcomeColor)
+                    Text(dateText)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.trailing)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.cardBorder.opacity(0.8), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(session.mode.displayName), \(kindLabel), \(outcomeLabel), \(dateText)")
+    }
+
+    private var outcomeLabel: String {
+        switch session.result(for: currentUserID) ?? .draw {
+        case .win: return "Win"
+        case .loss: return "Loss"
+        case .draw: return "Draw"
+        case .abandoned: return "Left"
+        }
+    }
+
+    private var outcomeColor: Color {
+        switch session.result(for: currentUserID) ?? .draw {
+        case .win: return AppTheme.success
+        case .loss, .abandoned: return AppTheme.danger
+        case .draw: return AppTheme.crownGold
+        }
+    }
+
+    private var kindLabel: String {
+        switch session.matchKind {
+        case .ranked: return "Ranked"
+        case .casual: return "Casual"
+        case .exhibition, .asyncExhibition: return "Exhibition"
+        case .party: return "Party"
+        }
+    }
+
+    private var kindColor: Color {
+        switch session.matchKind {
+        case .ranked: return AppTheme.crownGold
+        case .casual: return AppTheme.teal
+        case .exhibition, .asyncExhibition: return AppTheme.hotPink
+        case .party: return AppTheme.royalBlue
+        }
+    }
+
+    private var opponentText: String {
+        let names = session.players
+            .filter { $0.userID != currentUserID }
+            .map(\.username)
+            .filter { !$0.isEmpty }
+        return names.isEmpty ? "No opponent listed" : "vs \(names.joined(separator: ", "))"
+    }
+
+    private var reasonText: String {
+        if let forfeiter = forfeitPlayer {
+            return forfeiter.userID == currentUserID ? "You forfeited" : "\(forfeiter.username) forfeited"
+        }
+        return session.winnerReason ?? session.mode.winConditionText
+    }
+
+    private var forfeitPlayer: MatchPlayer? {
+        if let forfeiterID = session.playerResults?.first(where: { $0.value.summary["forfeit"] == "true" })?.key {
+            return session.players.first { $0.userID == forfeiterID }
+        }
+        guard session.winnerReason == "Opponent forfeited", let winnerID = session.winnerID else { return nil }
+        return session.players.first { $0.userID != winnerID }
+    }
+
+    private var dateText: String {
+        guard let date = session.finishedAt ?? session.startedAt else { return "Recent" }
+        return Self.dateFormatter.string(from: date)
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
 }

@@ -432,6 +432,19 @@ final class FirestoreService {
             .filter { user.appliedRankedOutcomes[$0.id] != true }
     }
 
+    func fetchRecentFinishedSessions(for userID: String, limit: Int = 20) async throws -> [GameSession] {
+        let snapshot = try await db.collection("sessions")
+            .whereField("playerIDs", arrayContains: userID)
+            .whereField("status", isEqualTo: SessionStatus.finished.rawValue)
+            .order(by: "finishedAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+
+        return try snapshot.documents
+            .map { try $0.data(as: GameSession.self) }
+            .filter { $0.matchKind == .ranked || $0.matchKind == .casual || $0.isExhibition }
+    }
+
     func listenForSession(id: String, onChange: @escaping (GameSession) -> Void) -> ListenerRegistration {
         db.collection("sessions").document(id)
             .addSnapshotListener { snapshot, _ in

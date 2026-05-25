@@ -76,7 +76,7 @@ struct TournamentView: View {
                 Spacer()
                 CoinBadgeView(amount: vm.user.coins)
             }
-            Text("Each tournament is only against players in your current rank tier for that mode. Enter with coins, play one shared-seed attempt, and claim a virtual coin prize if you place after it closes. No rank or W/L changes.")
+            Text("Same rank tier, one shared puzzle attempt, coin prizes, and no rank impact.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -100,19 +100,20 @@ private struct TournamentCard: View {
     let preview: TournamentPrizePreview
     let userCoins: Int
     let onAction: (TournamentCardAction) -> Void
+    @State private var showStandings = false
 
     private var canAfford: Bool { userCoins >= tournament.entryFee }
     private var hasResult: Bool { entry?.result != nil }
     private var canClaim: Bool { tournament.isClosed && (entry?.prizeClaimed == false) && preview.prize > 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(AppTheme.modeGradient(tournament.mode))
-                    .frame(width: 54, height: 54)
+                    .frame(width: 50, height: 50)
                     .overlay(Image(systemName: tournament.mode.icon).font(.title3.bold()).foregroundStyle(.white))
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(tournament.mode.displayName)
                         .font(.headline.bold())
                     Text("\(tournament.rankTier.displayName) rank only · \(tournament.mode.difficultyLabel(tournament.difficulty))")
@@ -128,49 +129,63 @@ private struct TournamentCard: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                statTile("Entries", "\(standings.count)")
-                statTile("Paid", "Top \(preview.paidPlaces)")
-                statTile("Prize", preview.prize > 0 ? "\(preview.prize)" : "--")
-            }
-
             TimelineView(.periodic(from: Date(), by: 1)) { context in
                 closesRow(now: context.date)
             }
 
-            leaderboardSection
-
-            if let place = preview.place {
-                Text("Your place: #\(place)")
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.crownGold)
-            } else {
-                Text("One attempt. Shared puzzle. Best result wins the hourly board.")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
+            HStack(spacing: 10) {
+                compactPill(icon: "person.2.fill", label: "Entries", value: "\(standings.count)")
+                compactPill(icon: statusIcon, label: "Status", value: statusText)
             }
 
             if let result = entry?.result {
-                Text("Submitted: \(result.completed ? "Complete" : "Incomplete") · Score \(result.score) · Time \(formattedTime(result.elapsedSeconds))")
+                Text("Submitted · \(resultSummary(for: result))")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            } else if entry == nil {
+                Text("Enter once, play when ready, then check standings after the hour closes.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
             }
 
-            Button(action: { onAction(buttonAction) }) {
-                Label(buttonTitle, systemImage: buttonIcon)
-                    .font(.subheadline.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(buttonEnabled ? AppTheme.crownGold : AppTheme.cardBorder)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            HStack(spacing: 10) {
+                Button {
+                    showStandings = true
+                } label: {
+                    Label("Standings", systemImage: "list.number")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.09))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                }
+
+                Button(action: { onAction(buttonAction) }) {
+                    Label(buttonTitle, systemImage: buttonIcon)
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(buttonEnabled ? AppTheme.crownGold : AppTheme.cardBorder)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .disabled(!buttonEnabled)
             }
-            .disabled(!buttonEnabled)
         }
         .padding()
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .sheet(isPresented: $showStandings) {
+            TournamentStandingsSheet(
+                tournament: tournament,
+                entry: entry,
+                standings: standings,
+                preview: preview
+            )
+        }
     }
 
     private var buttonAction: TournamentCardAction {
@@ -199,19 +214,66 @@ private struct TournamentCard: View {
         return canClaim
     }
 
-    private func statTile(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.subheadline.bold())
-                .foregroundStyle(AppTheme.textPrimary)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(AppTheme.textSecondary)
+    private var statusText: String {
+        if entry == nil { return canAfford ? "Open" : "Need coins" }
+        if !hasResult { return "Ready" }
+        if entry?.prizeClaimed == true { return "Claimed" }
+        if !tournament.isClosed { return "Submitted" }
+        return preview.prize > 0 ? "Prize ready" : "Complete"
+    }
+
+    private var statusIcon: String {
+        if entry == nil { return canAfford ? "ticket.fill" : "exclamationmark.circle.fill" }
+        if !hasResult { return "play.fill" }
+        if entry?.prizeClaimed == true { return "checkmark.seal.fill" }
+        if !tournament.isClosed { return "hourglass" }
+        return preview.prize > 0 ? "gift.fill" : "checkmark.circle.fill"
+    }
+
+    private func compactPill(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.crownGold)
+                .frame(width: 22, height: 22)
+                .background(AppTheme.crownGold.opacity(0.14))
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.caption2.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(value)
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
         .padding(.vertical, 9)
         .background(Color.white.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func resultSummary(for result: TournamentResult?) -> String {
+        guard let result else { return "No attempt" }
+        switch tournament.mode {
+        case .anagram, .wordHunt:
+            return "\(result.score) pts · \(result.wordCount ?? 0) words · L\(result.longestWord ?? 0)"
+        case .wordle:
+            return "\(result.completed ? "Solved" : "Failed") · \(result.guesses ?? 0) guesses · \(formattedTime(result.elapsedSeconds))"
+        case .hangman:
+            return "\(result.completed ? "Rescued" : "Failed") · \(result.score) letters · \(formattedTime(result.elapsedSeconds))"
+        case .gridlock:
+            let progress = Int((result.progress * 100).rounded())
+            let moves = result.moves.map { " · \($0)m" } ?? ""
+            return "\(result.completed ? "Done" : "\(progress)%")\(moves) · \(formattedTime(result.elapsedSeconds))"
+        default:
+            let progress = Int((result.progress * 100).rounded())
+            return "\(result.completed ? "Done" : "\(progress)%") · \(formattedTime(result.elapsedSeconds))"
+        }
     }
 
     private func closesRow(now: Date) -> some View {
@@ -224,11 +286,94 @@ private struct TournamentCard: View {
                 .font(.caption.bold())
                 .foregroundStyle(isClosed ? AppTheme.success : AppTheme.textPrimary)
             Spacer()
-            Text("\(tournament.rankTier.displayName) rank only")
+            Text("\(tournament.rankTier.displayName) only")
                 .font(.caption2.bold())
                 .foregroundStyle(AppTheme.crownGold)
         }
         .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func countdownText(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+}
+
+private struct TournamentStandingsSheet: View {
+    let tournament: DailyTournament
+    let entry: TournamentEntry?
+    let standings: [TournamentEntry]
+    let preview: TournamentPrizePreview
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        header
+                        prizeSummary
+                        leaderboardSection
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Standings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.accentBright)
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(AppTheme.modeGradient(tournament.mode))
+                .frame(width: 54, height: 54)
+                .overlay(Image(systemName: tournament.mode.icon).font(.title3.bold()).foregroundStyle(.white))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(tournament.mode.displayName)
+                    .font(.title3.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text("\(tournament.rankTier.displayName) rank only · \(tournament.mode.difficultyLabel(tournament.difficulty))")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private var prizeSummary: some View {
+        HStack(spacing: 10) {
+            statTile("Entries", "\(standings.count)")
+            statTile("Paid", "Top \(preview.paidPlaces)")
+            statTile("Prize", preview.prize > 0 ? "\(preview.prize)" : "--")
+        }
+    }
+
+    private func statTile(_ label: String, _ value: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 9)
         .background(Color.white.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -342,11 +487,6 @@ private struct TournamentCard: View {
         }
     }
 
-    private func countdownText(_ seconds: Int) -> String {
-        let minutes = seconds / 60
-        let secs = seconds % 60
-        return String(format: "%02d:%02d", minutes, secs)
-    }
 }
 
 private struct StandingDisplayEntry: Identifiable {
