@@ -64,10 +64,24 @@ final class NotificationTokenService {
 
     func syncCurrentToken() async {
         do {
-            let token = try await Messaging.messaging().token()
+            let token = try await currentFCMToken()
             await saveFCMToken(token)
         } catch {
             print("Failed to fetch FCM token: \(error.localizedDescription)")
+        }
+    }
+
+    private func currentFCMToken() async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            Messaging.messaging().token { token, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let token {
+                    continuation.resume(returning: token)
+                } else {
+                    continuation.resume(throwing: NotificationTokenError.missingToken)
+                }
+            }
         }
     }
 
@@ -82,6 +96,14 @@ final class NotificationTokenService {
         } catch {
             print("Failed to save FCM token: \(error.localizedDescription)")
         }
+    }
+}
+
+private enum NotificationTokenError: LocalizedError {
+    case missingToken
+
+    var errorDescription: String? {
+        "Firebase did not return an FCM token."
     }
 }
 
