@@ -67,6 +67,7 @@ struct CoinBadgeView: View {
             CoinIconView(size: 16)
             Text("\(amount)")
                 .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
         }
     }
 }
@@ -130,7 +131,7 @@ struct RankDivisionProgressView: View {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                                .fill(Color.white.opacity(0.13))
+                                .fill(AppTheme.progressTrack)
                             RoundedRectangle(cornerRadius: height / 2, style: .continuous)
                                 .fill(tint)
                                 .frame(width: geo.size.width * segmentProgress(for: division))
