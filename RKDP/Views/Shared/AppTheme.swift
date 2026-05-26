@@ -5,14 +5,14 @@ enum AppTheme {
     static let iconBlue         = Color(hex: "5BCBE3")
     static let royalBlue        = Color(hex: "46B8D6")
     static let iconPurple       = Color(hex: "B78BE9")
-    static let crownGold        = Color(hex: "F8D77B")
+    static let crownGold        = Color(hex: "D49A18")
     static let hotPink          = Color(hex: "F24793")
-    static let teal             = Color(hex: "59C9DD")
-    static let lime             = Color(hex: "B7DE82")
+    static let teal             = Color(hex: "26AFC5")
+    static let lime             = Color(hex: "7BBE36")
     static let coral            = Color(hex: "F76378")
     static let cream            = Color(hex: "FFF6E7")
     static let plum             = Color(hex: "372A3C")
-    static let success          = Color(hex: "AEE67B")
+    static let success          = Color(hex: "45B84D")
     static let warning          = crownGold
     static let danger           = coral
 
@@ -30,20 +30,24 @@ enum AppTheme {
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
-    static let cardBackground   = Color.white.opacity(0.76)
-    static let cardBorder       = hotPink.opacity(0.24)
+    static let cardBackground   = Color.white.opacity(0.86)
+    static let cardBorder       = plum.opacity(0.18)
     static let textPrimary      = plum
-    static let textSecondary    = plum.opacity(0.68)
+    static let textSecondary    = plum.opacity(0.80)
+    static let textMuted        = plum.opacity(0.58)
     static let textOnColor      = Color.white
     static let softShadow       = plum.opacity(0.12)
     static let accent           = hotPink
     static let accentBright     = hotPink
+    static let selectedControlBackground = Color(hex: "FFF0F7")
+    static let disabledControlBackground = Color(hex: "F2ECF1")
+    static let progressTrack             = plum.opacity(0.16)
 
     // Each mode keeps its identity, tuned into the Puzzle Party logo palette.
     static func modeGradient(_ mode: GameMode) -> LinearGradient {
         switch mode {
         case .sudoku:
-            return LinearGradient(colors: [Color(hex: "A8EDF4"), Color.white],
+            return LinearGradient(colors: [teal, royalBlue],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .minesweeper:
             return LinearGradient(colors: [Color(hex: "FF8DA0"), hotPink, crownGold],
@@ -58,7 +62,7 @@ enum AppTheme {
             return LinearGradient(colors: [hotPink, Color(hex: "D96CE6")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .wordHunt:
-            return LinearGradient(colors: [teal, Color(hex: "87DDF4")],
+            return LinearGradient(colors: [teal, Color(hex: "4FC8E8")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .wordle:
             return LinearGradient(colors: [lime, teal],
@@ -85,7 +89,7 @@ enum AppTheme {
     // Per-mode accent colour (flat) for text/badges.
     static func modeAccent(_ mode: GameMode) -> Color {
         switch mode {
-        case .sudoku:      return iconBlue
+        case .sudoku:      return royalBlue
         case .minesweeper: return hotPink
         case .colorLink:   return teal
         case .gridlock:    return crownGold
