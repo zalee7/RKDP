@@ -57,8 +57,8 @@ struct ShopView: View {
                                 Text(section.title)
                                     .font(.subheadline.weight(selectedSection == section ? .bold : .regular))
                                     .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(selectedSection == section ? AppTheme.crownGold : AppTheme.cardBackground)
-                                    .foregroundStyle(selectedSection == section ? .white : AppTheme.textSecondary)
+                                    .background(selectedSection == section ? AppTheme.hotPink : AppTheme.cardBackground)
+                                    .foregroundStyle(selectedSection == section ? AppTheme.textOnColor : AppTheme.textSecondary)
                                     .clipShape(Capsule())
                             }
                         }
@@ -238,7 +238,7 @@ struct ShopView: View {
                 itemSection(title: "Owned", subtitle: "Equip anything you already have.", items: ownedItems)
             }
             if !availableItems.isEmpty {
-                itemSection(title: "Available", subtitle: "Unlock new cosmetics with coins.", items: availableItems)
+                itemSection(title: "Available", subtitle: "Today’s rotating picks.", items: availableItems)
             }
         }
         .padding(.horizontal)
@@ -249,7 +249,7 @@ struct ShopView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title.uppercased())
                     .font(.caption.bold())
-                    .foregroundStyle(title == "Owned" ? AppTheme.teal : AppTheme.crownGold)
+                    .foregroundStyle(title == "Owned" ? AppTheme.teal : AppTheme.hotPink)
                 Text(subtitle)
                     .font(.caption2)
                     .foregroundStyle(AppTheme.textSecondary)
@@ -266,7 +266,7 @@ struct ShopView: View {
             }
 
             if !items.isEmpty {
-                itemSection(title: "Today's Titles", subtitle: "Limited rotation titles available today.", items: items)
+                itemSection(title: "Today's Titles", subtitle: "Four rotating titles available today.", items: items)
             }
         }
         .padding(.vertical)
@@ -331,7 +331,7 @@ private struct CoinPackCard: View {
                     .font(.subheadline.bold())
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 9)
-                    .background(AppTheme.crownGold)
+                    .background(AppTheme.hotPink)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
@@ -427,8 +427,8 @@ struct ShopItemCard: View {
 
     var actionColor: Color {
         if isEquipped { return AppTheme.teal.opacity(0.72) }
-        if isOwned    { return AppTheme.crownGold }
-        return canAfford ? AppTheme.crownGold : AppTheme.cardBorder
+        if isOwned    { return AppTheme.hotPink }
+        return canAfford ? AppTheme.hotPink : AppTheme.cardBorder
     }
 
     var body: some View {
@@ -474,8 +474,8 @@ struct ShopItemCard: View {
                         Text("LIMITED")
                             .font(.system(size: 9, weight: .black))
                             .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(AppTheme.crownGold)
-                            .foregroundStyle(.white)
+                            .background(AppTheme.hotPink)
+                            .foregroundStyle(AppTheme.textOnColor)
                             .clipShape(Capsule())
                     }
                         if isEquipped {
@@ -483,14 +483,14 @@ struct ShopItemCard: View {
                                 .font(.system(size: 9, weight: .black))
                                 .padding(.horizontal, 5).padding(.vertical, 2)
                                 .background(AppTheme.teal)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(AppTheme.textOnColor)
                                 .clipShape(Capsule())
                         } else if isOwned {
                             Text("OWNED")
                                 .font(.system(size: 9, weight: .black))
                                 .padding(.horizontal, 5).padding(.vertical, 2)
                                 .background(AppTheme.royalBlue)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(AppTheme.textOnColor)
                                 .clipShape(Capsule())
                         }
                     }
@@ -509,14 +509,14 @@ struct ShopItemCard: View {
                         .padding(.vertical, 6)
                         .frame(minWidth: 76)
                         .background(actionColor)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.textOnColor)
                         .clipShape(Capsule())
                 } else {
                     HStack(spacing: 5) {
                         CoinIconView(size: 15)
                         Text(actionLabel)
                             .font(.caption.bold())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(canAfford ? AppTheme.textOnColor : AppTheme.textSecondary)
                     }
                     .padding(.horizontal, 11)
                     .padding(.vertical, 6)

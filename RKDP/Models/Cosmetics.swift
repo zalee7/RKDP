@@ -286,7 +286,10 @@ enum CosmeticRarity: String, CaseIterable {
     }
 
     var textColor: Color {
-        self == .free ? AppTheme.textPrimary : .white
+        switch self {
+        case .free, .common, .legendary: return AppTheme.textPrimary
+        case .rare, .epic: return AppTheme.textOnColor
+        }
     }
 }
 
@@ -503,18 +506,119 @@ struct OwnedCosmetics: Codable {
 // MARK: - Daily rotation
 
 struct DailyRotation {
-    static let dailySlots = 6
+    static let dailySlots = 4
 
-    // Deterministic daily shuffle using day-of-epoch as seed (LCG)
+    // Deterministic daily shuffle using day-of-epoch as seed (LCG).
     static func todaysTitles() -> [CosmeticItem] {
+        availableItems(for: .title, ownedIDs: [])
+    }
+
+    static func availableItems(for category: CosmeticCategory, ownedIDs: Set<String>) -> [CosmeticItem] {
         let day = Int(Date().timeIntervalSince1970 / 86400)
-        let pool = CosmeticCatalog.allTitles.filter { $0.price > 0 }   // free title never rotates out
-        return seededShuffle(pool, seed: day).prefix(dailySlots).map { $0 }
+        let pool = catalogItems(for: category).filter { item in
+            item.price > 0 && !ownedIDs.contains(item.id)
+        }
+        guard !pool.isEmpty else { return [] }
+
+        let premiumRoll = abs(seed(day: day, category: category, slot: 42)) % 100
+        let premiumRarity: CosmeticRarity = {
+            switch premiumRoll {
+            case 0..<60: return .rare
+            case 60..<85: return .epic
+            default: return .legendary
+            }
+        }()
+
+        var selected: [CosmeticItem] = []
+        appendRotatedSlot(.common, from: pool, into: &selected, day: day, category: category, slot: 0)
+        appendRotatedSlot(.common, from: pool, into: &selected, day: day, category: category, slot: 1)
+        appendRotatedSlot(.rare, from: pool, into: &selected, day: day, category: category, slot: 2)
+        appendRotatedSlot(premiumRarity, from: pool, into: &selected, day: day, category: category, slot: 3)
+
+        if selected.count < dailySlots {
+            let fallback = seededShuffle(pool, seed: seed(day: day, category: category, slot: 99))
+            for item in fallback where !selected.contains(where: { $0.id == item.id }) {
+                selected.append(item)
+                if selected.count == dailySlots { break }
+            }
+        }
+
+        return selected.sorted { lhs, rhs in
+            if lhs.rarity != rhs.rarity {
+                return rarityRank(lhs.rarity) < rarityRank(rhs.rarity)
+            }
+            if lhs.price != rhs.price { return lhs.price < rhs.price }
+            return lhs.name < rhs.name
+        }
     }
 
     static var nextRotationDate: Date {
         let day = Int(Date().timeIntervalSince1970 / 86400)
         return Date(timeIntervalSince1970: Double(day + 1) * 86400)
+    }
+
+    private static func appendRotatedSlot(
+        _ preferredRarity: CosmeticRarity,
+        from pool: [CosmeticItem],
+        into selected: inout [CosmeticItem],
+        day: Int,
+        category: CosmeticCategory,
+        slot: Int
+    ) {
+        let rarityOrder = nearbyRarities(for: preferredRarity)
+        for rarity in rarityOrder {
+            let candidates = pool.filter { item in
+                item.rarity == rarity && !selected.contains(where: { $0.id == item.id })
+            }
+            guard !candidates.isEmpty else { continue }
+            if let item = seededShuffle(candidates, seed: seed(day: day, category: category, slot: slot)).first {
+                selected.append(item)
+                return
+            }
+        }
+    }
+
+    private static func nearbyRarities(for rarity: CosmeticRarity) -> [CosmeticRarity] {
+        switch rarity {
+        case .free: return [.common, .rare, .epic, .legendary]
+        case .common: return [.common, .rare, .epic, .legendary]
+        case .rare: return [.rare, .epic, .common, .legendary]
+        case .epic: return [.epic, .legendary, .rare, .common]
+        case .legendary: return [.legendary, .epic, .rare, .common]
+        }
+    }
+
+    private static func rarityRank(_ rarity: CosmeticRarity) -> Int {
+        switch rarity {
+        case .free: return 0
+        case .common: return 1
+        case .rare: return 2
+        case .epic: return 3
+        case .legendary: return 4
+        }
+    }
+
+    private static func catalogItems(for category: CosmeticCategory) -> [CosmeticItem] {
+        switch category {
+        case .title: return CosmeticCatalog.allTitles
+        case .boardTheme: return CosmeticCatalog.boardThemes
+        case .tileTheme: return CosmeticCatalog.tileThemes
+        case .numberFont: return CosmeticCatalog.numberFonts
+        case .cellBorder: return CosmeticCatalog.cellBorders
+        case .avatarHead: return CosmeticCatalog.avatarHeads
+        case .avatarFace: return CosmeticCatalog.avatarFaces
+        case .avatarOutfit: return CosmeticCatalog.avatarOutfits
+        case .avatarAura: return CosmeticCatalog.avatarAuras
+        case .avatarPose: return CosmeticCatalog.avatarPoses
+        }
+    }
+
+    private static func seed(day: Int, category: CosmeticCategory, slot: Int) -> Int {
+        var value = day &* 1_103 &+ slot &* 97
+        for scalar in category.rawValue.unicodeScalars {
+            value = value &* 31 &+ Int(scalar.value)
+        }
+        return value
     }
 
     private static func seededShuffle<T>(_ array: [T], seed: Int) -> [T] {

@@ -117,10 +117,10 @@ struct ProfileView: View {
                                                     .font(.caption.bold())
                                                     .padding(.horizontal, 10)
                                                     .padding(.vertical, 8)
-                                                    .background(selectedOwnedCategory == category ? AppTheme.crownGold : Color.white.opacity(0.08))
-                                                    .foregroundStyle(selectedOwnedCategory == category ? .white : AppTheme.textSecondary)
+                                                    .background(selectedOwnedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
+                                                    .foregroundStyle(selectedOwnedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
                                                     .clipShape(Capsule())
-                                                    .overlay(Capsule().stroke(selectedOwnedCategory == category ? AppTheme.crownGold.opacity(0.75) : AppTheme.cardBorder, lineWidth: 1))
+                                                    .overlay(Capsule().stroke(selectedOwnedCategory == category ? AppTheme.hotPink.opacity(0.75) : AppTheme.cardBorder, lineWidth: 1))
                                                 }
                                                 .disabled(count == 0)
                                                 .opacity(count == 0 ? 0.45 : 1)
@@ -225,7 +225,7 @@ struct ProfileView: View {
                 if isLoadingRecentGames && recentGames.isEmpty {
                     HStack(spacing: 10) {
                         ProgressView()
-                            .tint(AppTheme.crownGold)
+                            .tint(AppTheme.hotPink)
                         Text("Loading recent matches...")
                             .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
@@ -342,8 +342,8 @@ private struct AvatarEditorView: View {
                                             .font(.caption.bold())
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 8)
-                                            .background(selectedCategory == category ? AppTheme.crownGold : Color.white.opacity(0.08))
-                                            .foregroundStyle(selectedCategory == category ? .white : AppTheme.textSecondary)
+                                            .background(selectedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
+                                            .foregroundStyle(selectedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
                                             .clipShape(Capsule())
                                     }
                                 }
@@ -398,7 +398,8 @@ private struct AvatarEditorView: View {
                     .font(.system(.subheadline, design: .monospaced).bold())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    .background(Color.black.opacity(0.22))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .background(Color.white.opacity(0.82))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(bodyHexError == nil ? AppTheme.cardBorder : AppTheme.danger, lineWidth: 1))
                 Button("Save") {
@@ -407,8 +408,8 @@ private struct AvatarEditorView: View {
                 .font(.caption.bold())
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(AppTheme.crownGold)
-                .foregroundStyle(.white)
+                .background(AppTheme.hotPink)
+                .foregroundStyle(AppTheme.textOnColor)
                 .clipShape(Capsule())
                 .disabled(shop.isSaving)
             }
@@ -426,7 +427,7 @@ private struct AvatarEditorView: View {
                         Circle()
                             .fill(Color(hex: hex))
                             .frame(width: 30, height: 30)
-                            .overlay(Circle().stroke(hex == shop.ownedCosmetics.customAvatarBodyHex ? AppTheme.crownGold : Color.white.opacity(0.55), lineWidth: hex == shop.ownedCosmetics.customAvatarBodyHex ? 2.5 : 1))
+                            .overlay(Circle().stroke(hex == shop.ownedCosmetics.customAvatarBodyHex ? AppTheme.hotPink : AppTheme.cardBorder, lineWidth: hex == shop.ownedCosmetics.customAvatarBodyHex ? 2.5 : 1))
                     }
                     .buttonStyle(.plain)
                 }
@@ -441,7 +442,7 @@ private struct AvatarEditorView: View {
     private var avatarItemsSection: some View {
         let allItems = CosmeticCatalog.all.filter { $0.category == selectedCategory }
         let ownedItems = allItems.filter { shop.isOwned($0) }
-        let availableItems = allItems.filter { !shop.isOwned($0) }
+        let availableItems = DailyRotation.availableItems(for: selectedCategory, ownedIDs: shop.ownedCosmetics.purchasedIDs)
 
         return VStack(alignment: .leading, spacing: 18) {
             if !ownedItems.isEmpty {
@@ -456,9 +457,9 @@ private struct AvatarEditorView: View {
             if !availableItems.isEmpty {
                 avatarItemGroup(
                     title: "Available",
-                    subtitle: "Buy new parts with coins.",
+                    subtitle: "Today’s rotating avatar parts.",
                     items: availableItems,
-                    tint: AppTheme.crownGold
+                    tint: AppTheme.hotPink
                 )
             }
         }

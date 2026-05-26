@@ -12,7 +12,7 @@ struct StickDuelerAvatarView: View {
         ZStack {
             auraView
             Circle()
-                .fill(AppTheme.brandGradient.opacity(0.72))
+                .fill(LinearGradient(colors: [Color(hex: "F24793"), Color(hex: "F76378")], startPoint: .topLeading, endPoint: .bottomTrailing).opacity(0.72))
                 .overlay(Circle().stroke(Color.white.opacity(0.30), lineWidth: max(1, size * 0.024)))
             mascot
         }
@@ -37,27 +37,27 @@ struct StickDuelerAvatarView: View {
     private var auraView: some View {
         switch style.aura {
         case "avatar_aura_teal":
-            Circle().fill(AppTheme.teal.opacity(0.25)).blur(radius: size * 0.12)
+            Circle().fill(Color(hex: "12C8A2").opacity(0.25)).blur(radius: size * 0.12)
         case "avatar_aura_pink":
-            Circle().fill(AppTheme.hotPink.opacity(0.28)).blur(radius: size * 0.12)
+            Circle().fill(Color(hex: "FF2F78").opacity(0.28)).blur(radius: size * 0.12)
         case "avatar_aura_crown":
-            Circle().fill(AppTheme.crownGold.opacity(0.26)).blur(radius: size * 0.14)
+            Circle().fill(Color(hex: "FFD36B").opacity(0.26)).blur(radius: size * 0.14)
         case "avatar_aura_storm":
-            Circle().stroke(AppTheme.royalBlue.opacity(0.85), lineWidth: max(2, size * 0.045)).rotationEffect(.degrees(-14))
-                .overlay(Circle().stroke(AppTheme.hotPink.opacity(0.75), lineWidth: max(1, size * 0.025)).scaleEffect(0.82))
+            Circle().stroke(Color(hex: "4D8DFF").opacity(0.85), lineWidth: max(2, size * 0.045)).rotationEffect(.degrees(-14))
+                .overlay(Circle().stroke(Color(hex: "FF2F78").opacity(0.75), lineWidth: max(1, size * 0.025)).scaleEffect(0.82))
         case "avatar_aura_lava":
             Circle().fill(Color(hex: "FF6B1A").opacity(0.25)).blur(radius: size * 0.10)
-                .overlay(Circle().stroke(AppTheme.hotPink.opacity(0.38), lineWidth: max(1, size * 0.03)).scaleEffect(0.86))
+                .overlay(Circle().stroke(Color(hex: "FF2F78").opacity(0.38), lineWidth: max(1, size * 0.03)).scaleEffect(0.86))
         case "avatar_aura_star":
-            Circle().fill(AppTheme.crownGold.opacity(0.18)).blur(radius: size * 0.10)
-                .overlay(Image(systemName: "sparkles").font(.system(size: size * 0.42, weight: .bold)).foregroundStyle(AppTheme.crownGold.opacity(0.55)))
+            Circle().fill(Color(hex: "FFD36B").opacity(0.18)).blur(radius: size * 0.10)
+                .overlay(Image(systemName: "sparkles").font(.system(size: size * 0.42, weight: .bold)).foregroundStyle(Color(hex: "FFD36B").opacity(0.55)))
         case "avatar_aura_pixel":
             RoundedRectangle(cornerRadius: size * 0.18).stroke(Color(hex: "7B42FF").opacity(0.75), lineWidth: max(2, size * 0.04)).rotationEffect(.degrees(8))
         case "avatar_aura_mint":
             Circle().fill(Color(hex: "23D18B").opacity(0.24)).blur(radius: size * 0.13)
         case "avatar_aura_royal":
-            Circle().stroke(AppTheme.crownGold.opacity(0.78), lineWidth: max(2, size * 0.045))
-                .overlay(Circle().stroke(AppTheme.hotPink.opacity(0.54), lineWidth: max(1, size * 0.025)).scaleEffect(0.76))
+            Circle().stroke(Color(hex: "FFD36B").opacity(0.78), lineWidth: max(2, size * 0.045))
+                .overlay(Circle().stroke(Color(hex: "FF2F78").opacity(0.54), lineWidth: max(1, size * 0.025)).scaleEffect(0.76))
         default:
             Circle().fill(Color.white.opacity(0.04))
         }
@@ -109,8 +109,8 @@ struct StickDuelerAvatarView: View {
             faceText("⌣", y: 56, size: 13)
         case "avatar_face_gem":
             HStack(spacing: 8 * scale) {
-                Diamond().fill(AppTheme.hotPink).frame(width: 7 * scale, height: 10 * scale)
-                Diamond().fill(AppTheme.hotPink).frame(width: 7 * scale, height: 10 * scale)
+                Diamond().fill(Color(hex: "FF2F78")).frame(width: 7 * scale, height: 10 * scale)
+                Diamond().fill(Color(hex: "FF2F78")).frame(width: 7 * scale, height: 10 * scale)
             }
             .offset(y: -5 * scale)
             faceText("⌣", y: 56, size: 13)
@@ -128,7 +128,7 @@ struct StickDuelerAvatarView: View {
                 Image(systemName: "star.fill").font(.system(size: max(6, 9 * scale), weight: .black))
                 Image(systemName: "star.fill").font(.system(size: max(6, 9 * scale), weight: .black))
             }
-            .foregroundStyle(AppTheme.crownGold)
+            .foregroundStyle(Color(hex: "FFD36B"))
             .offset(y: -5 * scale)
             faceText("⌣", y: 56, size: 13)
         case "avatar_face_oops":
@@ -140,8 +140,8 @@ struct StickDuelerAvatarView: View {
         case "avatar_face_blush":
             faceEyes(left: "•", right: "•", y: 44)
             HStack(spacing: 18 * scale) {
-                Circle().fill(AppTheme.hotPink.opacity(0.72)).frame(width: 5 * scale, height: 5 * scale)
-                Circle().fill(AppTheme.hotPink.opacity(0.72)).frame(width: 5 * scale, height: 5 * scale)
+                Circle().fill(Color(hex: "FF2F78").opacity(0.72)).frame(width: 5 * scale, height: 5 * scale)
+                Circle().fill(Color(hex: "FF2F78").opacity(0.72)).frame(width: 5 * scale, height: 5 * scale)
             }
             .offset(y: 4 * scale)
             faceText("⌣", y: 57, size: 13)
@@ -156,17 +156,17 @@ struct StickDuelerAvatarView: View {
             faceEyes(left: "^", right: "^", y: 44)
             Image(systemName: "party.popper.fill")
                 .font(.system(size: max(6, 10 * scale), weight: .bold))
-                .foregroundStyle(AppTheme.crownGold)
+                .foregroundStyle(Color(hex: "FFD36B"))
                 .offset(x: 17 * scale, y: -11 * scale)
             faceText("⌣", y: 57, size: 13)
         case "avatar_face_robot":
             RoundedRectangle(cornerRadius: 3 * scale)
-                .stroke(AppTheme.teal, lineWidth: max(1, lineWidth * 0.45))
+                .stroke(Color(hex: "12C8A2"), lineWidth: max(1, lineWidth * 0.45))
                 .frame(width: 31 * scale, height: 12 * scale)
                 .overlay(
                     HStack(spacing: 9 * scale) {
-                        Circle().fill(AppTheme.teal).frame(width: 4 * scale, height: 4 * scale)
-                        Circle().fill(AppTheme.teal).frame(width: 4 * scale, height: 4 * scale)
+                        Circle().fill(Color(hex: "12C8A2")).frame(width: 4 * scale, height: 4 * scale)
+                        Circle().fill(Color(hex: "12C8A2")).frame(width: 4 * scale, height: 4 * scale)
                     }
                 )
                 .offset(y: -5 * scale)
@@ -184,7 +184,7 @@ struct StickDuelerAvatarView: View {
                 Image(systemName: "crown.fill").font(.system(size: max(6, 9 * scale), weight: .black))
                 Image(systemName: "crown.fill").font(.system(size: max(6, 9 * scale), weight: .black))
             }
-            .foregroundStyle(AppTheme.crownGold)
+            .foregroundStyle(Color(hex: "FFD36B"))
             .offset(y: -5 * scale)
             faceText("⌣", y: 57, size: 13)
         case "avatar_face_masked":
@@ -204,7 +204,7 @@ struct StickDuelerAvatarView: View {
                 Image(systemName: "heart.fill").font(.system(size: max(6, 9 * scale), weight: .black))
                 Image(systemName: "heart.fill").font(.system(size: max(6, 9 * scale), weight: .black))
             }
-            .foregroundStyle(AppTheme.hotPink)
+            .foregroundStyle(Color(hex: "FF2F78"))
             .offset(y: -5 * scale)
             faceText("⌣", y: 57, size: 13)
         default:
@@ -218,52 +218,52 @@ struct StickDuelerAvatarView: View {
         switch style.head {
         case "avatar_head_crown":
             CrownShape()
-                .fill(AppTheme.crownGold)
+                .fill(Color(hex: "FFD36B"))
                 .frame(width: 35 * scale, height: 23 * scale)
                 .offset(y: -33 * scale)
-                .overlay(Diamond().fill(AppTheme.hotPink).frame(width: 6 * scale, height: 9 * scale).offset(y: -30 * scale))
+                .overlay(Diamond().fill(Color(hex: "FF2F78")).frame(width: 6 * scale, height: 9 * scale).offset(y: -30 * scale))
         case "avatar_head_headphones":
             Circle()
                 .trim(from: 0.54, to: 0.96)
-                .stroke(AppTheme.teal, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(Color(hex: "12C8A2"), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .frame(width: 48 * scale, height: 48 * scale)
                 .offset(y: -3 * scale)
             HStack(spacing: 37 * scale) {
-                Capsule().fill(AppTheme.teal).frame(width: 7 * scale, height: 18 * scale)
-                Capsule().fill(AppTheme.teal).frame(width: 7 * scale, height: 18 * scale)
+                Capsule().fill(Color(hex: "12C8A2")).frame(width: 7 * scale, height: 18 * scale)
+                Capsule().fill(Color(hex: "12C8A2")).frame(width: 7 * scale, height: 18 * scale)
             }
             .offset(y: 3 * scale)
         case "avatar_head_wizard":
             Triangle()
-                .fill(AppTheme.royalBlue)
+                .fill(Color(hex: "4D8DFF"))
                 .frame(width: 37 * scale, height: 35 * scale)
                 .offset(y: -38 * scale)
-                .overlay(Circle().fill(AppTheme.crownGold).frame(width: 6 * scale, height: 6 * scale).offset(y: -51 * scale))
+                .overlay(Circle().fill(Color(hex: "FFD36B")).frame(width: 6 * scale, height: 6 * scale).offset(y: -51 * scale))
         case "avatar_head_lightning":
             LightningShape()
-                .fill(AppTheme.crownGold)
+                .fill(Color(hex: "FFD36B"))
                 .frame(width: 27 * scale, height: 34 * scale)
                 .offset(x: 18 * scale, y: -27 * scale)
         case "avatar_head_halo":
             Ellipse()
-                .stroke(AppTheme.crownGold, lineWidth: lineWidth)
+                .stroke(Color(hex: "FFD36B"), lineWidth: lineWidth)
                 .frame(width: 39 * scale, height: 12 * scale)
                 .offset(y: -38 * scale)
         case "avatar_head_puzzle_crown":
             CrownShape()
-                .fill(LinearGradient(colors: [AppTheme.crownGold, AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LinearGradient(colors: [Color(hex: "FFD36B"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 38 * scale, height: 24 * scale)
                 .offset(y: -33 * scale)
         case "avatar_head_neon_visor":
             Capsule()
-                .fill(LinearGradient(colors: [AppTheme.hotPink, AppTheme.royalBlue], startPoint: .leading, endPoint: .trailing))
+                .fill(LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "4D8DFF")], startPoint: .leading, endPoint: .trailing))
                 .frame(width: 41 * scale, height: 11 * scale)
                 .overlay(Capsule().stroke(Color.white.opacity(0.72), lineWidth: max(1, lineWidth * 0.35)))
                 .offset(y: -12 * scale)
         case "avatar_head_star_clip":
             Image(systemName: "star.fill")
                 .font(.system(size: max(9, 20 * scale), weight: .black))
-                .foregroundStyle(AppTheme.crownGold)
+                .foregroundStyle(Color(hex: "FFD36B"))
                 .offset(x: 19 * scale, y: -25 * scale)
         case "avatar_head_lava_helmet":
             SemiCircleShape()
@@ -273,13 +273,13 @@ struct StickDuelerAvatarView: View {
                 .overlay(SemiCircleShape().stroke(Color.white.opacity(0.75), lineWidth: max(1, lineWidth * 0.35)).frame(width: 43 * scale, height: 25 * scale).offset(y: -25 * scale))
         case "avatar_head_pixel_cap":
             RoundedRectangle(cornerRadius: 3 * scale)
-                .fill(AppTheme.royalBlue)
+                .fill(Color(hex: "4D8DFF"))
                 .frame(width: 38 * scale, height: 15 * scale)
                 .offset(y: -28 * scale)
                 .overlay(Rectangle().fill(Color.white.opacity(0.45)).frame(width: 7 * scale, height: 15 * scale).offset(x: -6 * scale, y: -28 * scale))
         case "avatar_head_mini_crown":
             CrownShape()
-                .fill(AppTheme.crownGold)
+                .fill(Color(hex: "FFD36B"))
                 .frame(width: 25 * scale, height: 17 * scale)
                 .offset(y: -32 * scale)
         default:
@@ -320,35 +320,35 @@ struct StickDuelerAvatarView: View {
         switch style.outfit {
         case "avatar_outfit_cape":
             Triangle()
-                .fill(AppTheme.hotPink.opacity(0.72))
+                .fill(Color(hex: "FF2F78").opacity(0.72))
                 .frame(width: 56 * scale, height: 38 * scale)
                 .offset(y: 23 * scale)
                 .zIndex(-1)
         case "avatar_outfit_armor":
             ShieldShape()
-                .fill(AppTheme.royalBlue.opacity(0.88))
+                .fill(Color(hex: "4D8DFF").opacity(0.88))
                 .frame(width: 19 * scale, height: 23 * scale)
                 .offset(y: 17 * scale)
                 .overlay(ShieldShape().stroke(Color.white.opacity(0.82), lineWidth: max(1, lineWidth * 0.45)).frame(width: 19 * scale, height: 23 * scale).offset(y: 17 * scale))
         case "avatar_outfit_neon":
             RoundedRectangle(cornerRadius: 3 * scale)
-                .stroke(AppTheme.hotPink, lineWidth: max(1, lineWidth * 0.7))
+                .stroke(Color(hex: "FF2F78"), lineWidth: max(1, lineWidth * 0.7))
                 .frame(width: 30 * scale, height: 30 * scale)
                 .offset(y: 4 * scale)
-                .overlay(Rectangle().fill(AppTheme.teal).frame(width: 3 * scale, height: 28 * scale).offset(y: 4 * scale))
+                .overlay(Rectangle().fill(Color(hex: "12C8A2")).frame(width: 3 * scale, height: 28 * scale).offset(y: 4 * scale))
         case "avatar_outfit_royal":
             Diamond()
-                .fill(AppTheme.hotPink)
+                .fill(Color(hex: "FF2F78"))
                 .frame(width: 11 * scale, height: 15 * scale)
                 .offset(y: 12 * scale)
         case "avatar_outfit_lava":
             Capsule().fill(Color(hex: "FFD36B").opacity(0.8)).frame(width: 23 * scale, height: 6 * scale).offset(y: 17 * scale)
         case "avatar_outfit_galaxy":
-            Image(systemName: "sparkles").font(.system(size: max(7, 12 * scale), weight: .bold)).foregroundStyle(AppTheme.crownGold).offset(y: 12 * scale)
+            Image(systemName: "sparkles").font(.system(size: max(7, 12 * scale), weight: .bold)).foregroundStyle(Color(hex: "FFD36B")).offset(y: 12 * scale)
         case "avatar_outfit_candy":
             HStack(spacing: 4 * scale) {
                 Capsule().fill(Color.white.opacity(0.75)).frame(width: 5 * scale, height: 22 * scale)
-                Capsule().fill(AppTheme.hotPink.opacity(0.75)).frame(width: 5 * scale, height: 22 * scale)
+                Capsule().fill(Color(hex: "FF2F78").opacity(0.75)).frame(width: 5 * scale, height: 22 * scale)
             }.rotationEffect(.degrees(28)).offset(y: 10 * scale)
         case "avatar_outfit_obsidian":
             Diamond().stroke(Color.white.opacity(0.62), lineWidth: max(1, lineWidth * 0.35)).frame(width: 12 * scale, height: 16 * scale).offset(y: 12 * scale)
@@ -374,11 +374,11 @@ struct StickDuelerAvatarView: View {
 
     private var bodyColor: Color {
         switch style.outfit {
-        case "avatar_outfit_hoodie": return AppTheme.teal
-        case "avatar_outfit_cape": return AppTheme.hotPink
-        case "avatar_outfit_armor": return AppTheme.royalBlue
+        case "avatar_outfit_hoodie": return Color(hex: "12C8A2")
+        case "avatar_outfit_cape": return Color(hex: "FF2F78")
+        case "avatar_outfit_armor": return Color(hex: "4D8DFF")
         case "avatar_outfit_neon": return Color(hex: "7B42FF")
-        case "avatar_outfit_royal": return AppTheme.crownGold
+        case "avatar_outfit_royal": return Color(hex: "FFD36B")
         case "avatar_outfit_lava": return Color(hex: "FF6B1A")
         case "avatar_outfit_frost": return Color(hex: "71C8FF")
         case "avatar_outfit_galaxy": return Color(hex: "7B42FF")
@@ -417,7 +417,7 @@ struct StickDuelerAvatarView: View {
         case "avatar_outfit_frost": return Color(hex: "2D8EDB")
         case "avatar_outfit_galaxy": return Color(hex: "050510")
         case "avatar_outfit_mint": return Color(hex: "0C8C68")
-        case "avatar_outfit_candy": return AppTheme.hotPink
+        case "avatar_outfit_candy": return Color(hex: "FF2F78")
         case "avatar_outfit_obsidian": return Color(hex: "050510")
         default: return Color(hex: style.bodyHex).opacity(0.58)
         }
@@ -425,16 +425,16 @@ struct StickDuelerAvatarView: View {
 
     private var auraColor: Color {
         switch style.aura {
-        case "avatar_aura_teal": return AppTheme.teal
-        case "avatar_aura_pink": return AppTheme.hotPink
-        case "avatar_aura_crown": return AppTheme.crownGold
-        case "avatar_aura_storm": return AppTheme.royalBlue
+        case "avatar_aura_teal": return Color(hex: "12C8A2")
+        case "avatar_aura_pink": return Color(hex: "FF2F78")
+        case "avatar_aura_crown": return Color(hex: "FFD36B")
+        case "avatar_aura_storm": return Color(hex: "4D8DFF")
         case "avatar_aura_lava": return Color(hex: "FF6B1A")
-        case "avatar_aura_star": return AppTheme.crownGold
+        case "avatar_aura_star": return Color(hex: "FFD36B")
         case "avatar_aura_pixel": return Color(hex: "7B42FF")
         case "avatar_aura_mint": return Color(hex: "23D18B")
-        case "avatar_aura_royal": return AppTheme.crownGold
-        default: return AppTheme.accent
+        case "avatar_aura_royal": return Color(hex: "FFD36B")
+        default: return Color(hex: "FF2F78")
         }
     }
 

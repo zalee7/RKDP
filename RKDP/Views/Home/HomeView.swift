@@ -606,7 +606,7 @@ private struct LobbyTabSelector: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(selectedTab == tab ? AppTheme.crownGold : Color.white.opacity(0.08))
+                        .background(selectedTab == tab ? AppTheme.hotPink : Color.white.opacity(0.08))
                         .foregroundStyle(selectedTab == tab ? .white : AppTheme.textPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
@@ -1057,16 +1057,16 @@ struct GameModeCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.68), lineWidth: 1.35)
+                    .strokeBorder(AppTheme.cardBorder.opacity(0.9), lineWidth: 1.35)
             }
-            .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 7)
+            .shadow(color: AppTheme.softShadow, radius: 10, x: 0, y: 7)
         }
         .buttonStyle(.plain)
     }
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(Color.black.opacity(0.18))
+            .fill(Color.white.opacity(0.40))
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(AppTheme.cardBackground)
@@ -1124,10 +1124,10 @@ struct GameModeCardView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .background {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Color.white.opacity(0.08))
+                .fill(Color.white.opacity(0.58))
                 .overlay {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                        .strokeBorder(AppTheme.cardBorder.opacity(0.5), lineWidth: 1)
                 }
         }
     }
@@ -1575,7 +1575,7 @@ struct PartyRoomView: View {
 
             if vm.isWorking {
                 ProgressView()
-                    .tint(AppTheme.crownGold)
+                    .tint(AppTheme.hotPink)
                     .padding(20)
                     .background(AppTheme.cardBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))

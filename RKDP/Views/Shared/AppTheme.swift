@@ -1,22 +1,24 @@
 import SwiftUI
 
 enum AppTheme {
-    // Puzzle Party palette: dark candy base with logo-inspired party blocks.
+    // Puzzle Party palette: soft logo-inspired party blocks on a bright friendly base.
     static let iconBlue         = Color(hex: "5BCBE3")
     static let royalBlue        = Color(hex: "46B8D6")
-    static let iconPurple       = Color(hex: "8A4D84")
+    static let iconPurple       = Color(hex: "B78BE9")
     static let crownGold        = Color(hex: "F8D77B")
     static let hotPink          = Color(hex: "F24793")
     static let teal             = Color(hex: "59C9DD")
     static let lime             = Color(hex: "B7DE82")
     static let coral            = Color(hex: "F76378")
+    static let cream            = Color(hex: "FFF6E7")
+    static let plum             = Color(hex: "372A3C")
     static let success          = Color(hex: "AEE67B")
     static let warning          = crownGold
     static let danger           = coral
 
-    // Background: warm dark party base that keeps the logo colors readable.
+    // Background: soft pastel party base inspired by the Puzzle Party logo.
     static let backgroundGradient = LinearGradient(
-        colors: [Color(hex: "17131B"), Color(hex: "24182B"), Color(hex: "331C35")],
+        colors: [Color(hex: "FFF8EC"), Color(hex: "FCEBFA"), Color(hex: "E8F8F9")],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
@@ -24,14 +26,16 @@ enum AppTheme {
 
     // Brand: logo hot pink into coral with a candy-pop finish.
     static let brandGradient = LinearGradient(
-        colors: [Color.white, hotPink, coral],
+        colors: [hotPink, coral],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
-    static let cardBackground   = Color.white.opacity(0.16)
-    static let cardBorder       = Color.white.opacity(0.62)
-    static let textPrimary      = Color.white
-    static let textSecondary    = Color.white.opacity(0.84)
+    static let cardBackground   = Color.white.opacity(0.76)
+    static let cardBorder       = hotPink.opacity(0.24)
+    static let textPrimary      = plum
+    static let textSecondary    = plum.opacity(0.68)
+    static let textOnColor      = Color.white
+    static let softShadow       = plum.opacity(0.12)
     static let accent           = hotPink
     static let accentBright     = hotPink
 
@@ -39,10 +43,10 @@ enum AppTheme {
     static func modeGradient(_ mode: GameMode) -> LinearGradient {
         switch mode {
         case .sudoku:
-            return LinearGradient(colors: [teal, Color.white.opacity(0.78)],
+            return LinearGradient(colors: [Color(hex: "A8EDF4"), Color.white],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .minesweeper:
-            return LinearGradient(colors: [coral, hotPink, crownGold],
+            return LinearGradient(colors: [Color(hex: "FF8DA0"), hotPink, crownGold],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .colorLink:
             return LinearGradient(colors: [teal, hotPink, lime],
@@ -51,10 +55,10 @@ enum AppTheme {
             return LinearGradient(colors: [crownGold, teal],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .anagram:
-            return LinearGradient(colors: [hotPink, coral],
+            return LinearGradient(colors: [hotPink, Color(hex: "D96CE6")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .wordHunt:
-            return LinearGradient(colors: [teal, royalBlue],
+            return LinearGradient(colors: [teal, Color(hex: "87DDF4")],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         case .wordle:
             return LinearGradient(colors: [lime, teal],
@@ -98,49 +102,29 @@ private struct ArenaBackgroundView: View {
         ZStack {
             AppTheme.backgroundGradient
             RadialGradient(
-                colors: [AppTheme.teal.opacity(0.13), .clear],
+                colors: [AppTheme.teal.opacity(0.30), .clear],
                 center: .topLeading,
-                startRadius: 24,
-                endRadius: 420
+                startRadius: 20,
+                endRadius: 430
             )
             RadialGradient(
-                colors: [AppTheme.hotPink.opacity(0.20), .clear],
+                colors: [AppTheme.hotPink.opacity(0.22), .clear],
                 center: .bottomTrailing,
                 startRadius: 60,
                 endRadius: 540
             )
             RadialGradient(
-                colors: [AppTheme.lime.opacity(0.10), .clear],
+                colors: [AppTheme.lime.opacity(0.32), .clear],
                 center: .topTrailing,
                 startRadius: 40,
                 endRadius: 460
             )
-            Canvas { context, size in
-                let spacing: CGFloat = 34
-                var grid = Path()
-                for x in stride(from: CGFloat(0), through: size.width, by: spacing) {
-                    grid.move(to: CGPoint(x: x, y: 0))
-                    grid.addLine(to: CGPoint(x: x, y: size.height))
-                }
-                for y in stride(from: CGFloat(0), through: size.height, by: spacing) {
-                    grid.move(to: CGPoint(x: 0, y: y))
-                    grid.addLine(to: CGPoint(x: size.width, y: y))
-                }
-                context.stroke(grid, with: .color(Color.white.opacity(0.045)), lineWidth: 0.5)
-
-                let majorSpacing = spacing * 4
-                var majorGrid = Path()
-                for x in stride(from: CGFloat(0), through: size.width, by: majorSpacing) {
-                    majorGrid.move(to: CGPoint(x: x, y: 0))
-                    majorGrid.addLine(to: CGPoint(x: x, y: size.height))
-                }
-                for y in stride(from: CGFloat(0), through: size.height, by: majorSpacing) {
-                    majorGrid.move(to: CGPoint(x: 0, y: y))
-                    majorGrid.addLine(to: CGPoint(x: size.width, y: y))
-                }
-                context.stroke(majorGrid, with: .color(AppTheme.hotPink.opacity(0.065)), lineWidth: 0.8)
-            }
-            .blendMode(.screen)
+            RadialGradient(
+                colors: [AppTheme.crownGold.opacity(0.26), .clear],
+                center: .bottomLeading,
+                startRadius: 30,
+                endRadius: 430
+            )
         }
     }
 }

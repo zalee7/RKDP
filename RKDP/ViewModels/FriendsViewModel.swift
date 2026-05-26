@@ -25,11 +25,13 @@ final class FriendsViewModel: ObservableObject {
             store.listenForFriends(userID: user.id) { [weak self] friendships in
                 Task { @MainActor in
                     guard let self else { return }
-                    let summaries = friendships.compactMap { friendship in
+                    let summaries: [FriendSummary] = friendships.compactMap { (friendship: Friendship) -> FriendSummary? in
                         guard let friendID = friendship.friendID(for: user.id) else { return nil }
                         return FriendSummary(userID: friendID, username: friendship.friendUsername(for: user.id))
                     }
-                    .sorted { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+                    .sorted { (lhs: FriendSummary, rhs: FriendSummary) -> Bool in
+                        lhs.username.localizedCaseInsensitiveCompare(rhs.username) == .orderedAscending
+                    }
                     self.friends = summaries
                     await self.hydrateFriendAvatars(summaries)
                 }

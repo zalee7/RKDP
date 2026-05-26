@@ -167,8 +167,8 @@ private struct TournamentCard: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(buttonEnabled ? AppTheme.crownGold : AppTheme.cardBorder)
-                        .foregroundStyle(.white)
+                        .background(buttonEnabled ? AppTheme.hotPink : AppTheme.cardBorder)
+                        .foregroundStyle(buttonEnabled ? AppTheme.textOnColor : AppTheme.textSecondary)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .disabled(!buttonEnabled)
@@ -541,7 +541,7 @@ private struct TournamentGameView: View {
                         .font(.headline.bold())
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(AppTheme.crownGold)
+                        .background(AppTheme.hotPink)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }

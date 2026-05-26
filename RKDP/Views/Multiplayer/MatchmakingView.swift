@@ -313,7 +313,7 @@ struct MatchmakingView: View {
                     Text("Find Casual Match")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(AppTheme.crownGold)
+                        .background(AppTheme.hotPink)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
@@ -733,7 +733,7 @@ struct MatchmakingView: View {
                     .font(.headline.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(AppTheme.crownGold)
+                    .background(AppTheme.hotPink)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: AppTheme.crownGold.opacity(0.28), radius: 8, x: 0, y: 4)
@@ -756,7 +756,7 @@ struct MatchmakingView: View {
                         .font(.headline.bold())
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(AppTheme.crownGold)
+                        .background(AppTheme.hotPink)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
@@ -863,7 +863,7 @@ struct MatchmakingView: View {
                             Text("Accept")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(AppTheme.crownGold)
+                                .background(AppTheme.hotPink)
                                 .foregroundStyle(.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
@@ -878,7 +878,7 @@ struct MatchmakingView: View {
                     Label("Request Rematch", systemImage: "arrow.triangle.2.circlepath")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(AppTheme.crownGold)
+                        .background(AppTheme.hotPink)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
