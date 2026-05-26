@@ -45,6 +45,7 @@ struct FriendSummary: Identifiable, Equatable {
     var id: String { userID }
     var userID: String
     var username: String
+    var avatarStyle: AvatarStyle = .default
 }
 
 enum ExhibitionInviteStatus: String, Codable {

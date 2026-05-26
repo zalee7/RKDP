@@ -168,6 +168,23 @@ struct HangmanPuzzleData: Codable {
 }
 
 enum MultiplayerPuzzleDataFactory {
+    static func requiresStoredPuzzleData(for mode: GameMode) -> Bool {
+        switch mode {
+        case .wordle, .anagram, .wordHunt, .hangman:
+            return true
+        default:
+            return false
+        }
+    }
+
+    static func onlinePayload(mode: GameMode, difficulty: Difficulty, seed: Int, rounds: Int? = nil, context: String) -> String {
+        let payload = encoded(mode: mode, difficulty: difficulty, seed: seed, rounds: rounds)
+        if requiresStoredPuzzleData(for: mode), payload.isEmpty {
+            print("Puzzle data warning: missing \(mode.rawValue) payload for \(context)")
+        }
+        return payload
+    }
+
     static func encoded(mode: GameMode, difficulty: Difficulty, seed: Int, rounds: Int? = nil) -> String {
         switch mode {
         case .wordle:

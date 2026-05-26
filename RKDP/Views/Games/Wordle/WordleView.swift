@@ -395,6 +395,7 @@ struct WordleTileView: View {
     let revealed: Bool
     var revealDelay: Double = 0
     var fontStyle: NumberFontStyle = NumberFontStyle(design: .default, weight: .regular)
+    @Environment(\.boardCosmetics) private var cosmetics
 
     @State private var flipDegrees: Double = 0
 
@@ -419,16 +420,21 @@ struct WordleTileView: View {
 
     @ViewBuilder
     private func tileBackground(size: CGFloat) -> some View {
+        let tile = cosmetics.tileThemeStyle
         switch state {
         case .empty:
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                .fill(tile.inactiveFill.opacity(0.45))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(tile.border.opacity(0.55), lineWidth: 2))
         case .active:
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color.white.opacity(0.5), lineWidth: 2)
+                .fill(tile.inactiveFill.opacity(0.72))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(tile.accent.opacity(0.85), lineWidth: 2))
+                .shadow(color: tile.shadow, radius: 4)
         case .submitted(let result):
             RoundedRectangle(cornerRadius: 6)
                 .fill(submittedColor(result))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(tile.border.opacity(0.32), lineWidth: 1))
         }
     }
 

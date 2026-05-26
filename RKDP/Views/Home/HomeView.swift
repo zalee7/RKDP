@@ -185,6 +185,7 @@ private struct HomeGameCategorySection: View {
 private struct HomeModeList: View {
     let user: AppUser?
     let onSelect: (GameMode) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 10) {
@@ -193,6 +194,12 @@ private struct HomeModeList: View {
                     onSelect(mode)
                 }
                 .frame(height: 124)
+                .scrollTransition(.animated(.easeInOut(duration: 0.24)), axis: .vertical) { content, phase in
+                    content
+                        .opacity(reduceMotion || phase.isIdentity ? 1 : 0.76)
+                        .scaleEffect(reduceMotion || phase.isIdentity ? 1 : 0.965)
+                        .offset(y: reduceMotion || phase.isIdentity ? 0 : 10)
+                }
             }
         }
         .padding(.horizontal)
@@ -384,17 +391,6 @@ struct GameModeDetailView: View {
                                 ) {
                                     destination.append("casual")
                                 }
-
-                                OnlineActionCard(
-                                    title: "Party",
-                                    subtitle: "\(mode.difficultyLabel(selectedDifficulty)) · create or join with a code",
-                                    icon: "person.3.fill",
-                                    chips: partyChips,
-                                    style: .secondary,
-                                    disabled: user == nil
-                                ) {
-                                    destination.append("party")
-                                }
                             }
                         }
                         .padding(.horizontal)
@@ -461,8 +457,6 @@ struct GameModeDetailView: View {
                     MatchmakingView(user: user, mode: mode, difficulty: selectedDifficulty, entryKind: .casual) {
                         Task { await auth.refreshUser() }
                     }
-                } else if dest == "party", let user = auth.user {
-                    PartyRoomView(user: user, mode: mode, difficulty: selectedDifficulty)
                 }
             }
         }
@@ -488,15 +482,6 @@ struct GameModeDetailView: View {
             LobbyActionChip(text: "No rank", icon: "minus.circle.fill"),
             LobbyActionChip(text: "No wager", icon: "slash.circle"),
             LobbyActionChip(text: "+10 win", icon: "sparkles", usesCoinIcon: true)
-        ]
-    }
-
-    private var partyChips: [LobbyActionChip] {
-        [
-            LobbyActionChip(text: "Join code", icon: "number.circle.fill"),
-            LobbyActionChip(text: "Up to 8", icon: "person.3.sequence.fill"),
-            LobbyActionChip(text: "No rank", icon: "minus.circle.fill"),
-            LobbyActionChip(text: "Same puzzle", icon: "square.grid.3x3.fill")
         ]
     }
 
@@ -1164,20 +1149,20 @@ private struct AnimatedModeThumbnailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
 
+    private var active: Bool { !reduceMotion && isAnimating }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
                 .fill(AppTheme.modeGradient(mode))
 
             movingHighlight
-            modeMotionOverlay
 
-            Image(systemName: mode.icon)
-                .font(.system(size: size * 0.45, weight: .semibold))
-                .foregroundStyle(.white)
-                .offset(iconOffset)
-                .rotationEffect(iconRotation)
-                .scaleEffect(iconScale)
+            ZStack {
+                modeScene
+            }
+            .frame(width: size, height: size)
+            .padding(size * 0.08)
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
@@ -1185,8 +1170,8 @@ private struct AnimatedModeThumbnailView: View {
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
                 .stroke(Color.white.opacity(0.24), lineWidth: 1)
         )
-        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (isAnimating ? 9 : 6), x: 0, y: 3)
-        .scaleEffect(reduceMotion ? 1 : (isAnimating ? thumbnailScale : 1))
+        .shadow(color: AppTheme.modeShadow(mode), radius: reduceMotion ? 6 : (active ? 10 : 6), x: 0, y: 3)
+        .scaleEffect(reduceMotion ? 1 : (active ? thumbnailScale : 1))
         .animation(reduceMotion ? nil : .easeInOut(duration: duration).repeatForever(autoreverses: true), value: isAnimating)
         .onAppear {
             guard !reduceMotion else { return }
@@ -1204,92 +1189,217 @@ private struct AnimatedModeThumbnailView: View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.08 : 0.22), .clear],
+                    colors: [.clear, Color.white.opacity(reduceMotion ? 0.08 : 0.18), .clear],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
             .frame(width: size * 0.34, height: size * 1.45)
             .rotationEffect(.degrees(18))
-            .offset(x: reduceMotion ? 0 : (isAnimating ? size * 0.72 : -size * 0.72))
+            .offset(x: reduceMotion ? 0 : (active ? size * 0.72 : -size * 0.72))
             .blendMode(.screen)
-            .opacity(reduceMotion ? 0.25 : 0.7)
+            .opacity(reduceMotion ? 0.20 : 0.55)
     }
 
     @ViewBuilder
-    private var modeMotionOverlay: some View {
+    private var modeScene: some View {
         switch mode {
         case .colorLink:
-            Circle()
-                .stroke(Color.white.opacity(isAnimating ? 0.22 : 0.10), lineWidth: 2)
-                .frame(width: size * 0.55, height: size * 0.55)
-                .offset(x: isAnimating ? 4 : -3, y: isAnimating ? -2 : 3)
-        case .gridlock, .sudoku:
-            Image(systemName: "square.grid.3x3.fill")
-                .font(.system(size: size * 0.58, weight: .bold))
-                .foregroundStyle(Color.white.opacity(isAnimating ? 0.16 : 0.08))
-                .offset(x: isAnimating ? 3 : -2, y: isAnimating ? -2 : 2)
+            colorLinkScene
+        case .gridlock:
+            gridDuelScene
+        case .sudoku:
+            sudokuScene
         case .minesweeper:
-            Circle()
-                .fill(AppTheme.hotPink.opacity(isAnimating ? 0.22 : 0.08))
-                .frame(width: size * 0.72, height: size * 0.72)
-                .scaleEffect(isAnimating ? 1.06 : 0.92)
+            minesweeperScene
         case .wordle:
-            HStack(spacing: 2) {
-                ForEach(0..<3, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
-                        .frame(width: size * 0.15, height: size * 0.15)
-                }
-            }
-            .offset(y: isAnimating ? -12 : -9)
+            wordleScene
         case .hangman:
-            Circle()
-                .fill(Color(hex: "FF5A1F").opacity(isAnimating ? 0.18 : 0.08))
-                .blur(radius: 2)
-                .frame(width: size * 0.82, height: size * 0.82)
+            lavaRescueScene
         case .wordHunt:
-            Circle()
-                .stroke(Color.white.opacity(isAnimating ? 0.18 : 0.08), lineWidth: 2)
-                .frame(width: size * 0.62, height: size * 0.62)
-                .offset(x: isAnimating ? -3 : 3)
+            wordHuntScene
         case .anagram:
-            Text("Aa")
+            anagramScene
+        }
+    }
+
+    private var colorLinkScene: some View {
+        ZStack {
+            Path { path in
+                path.move(to: CGPoint(x: size * 0.20, y: size * 0.23))
+                path.addLine(to: CGPoint(x: size * 0.40, y: size * 0.44))
+                path.addLine(to: CGPoint(x: size * 0.62, y: size * 0.44))
+                path.addLine(to: CGPoint(x: size * 0.78, y: size * 0.67))
+            }
+            .trim(from: 0, to: active ? 1 : 0.25)
+            .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: max(2, size * 0.055), lineCap: .round, lineJoin: .round))
+            Circle().fill(AppTheme.hotPink).frame(width: size * 0.15, height: size * 0.15).position(x: size * 0.20, y: size * 0.23)
+            Circle().fill(AppTheme.hotPink).frame(width: size * 0.15, height: size * 0.15).position(x: size * 0.78, y: size * 0.67)
+            Circle().fill(AppTheme.teal).frame(width: size * 0.13, height: size * 0.13).position(x: size * 0.42, y: size * 0.72)
+            Circle().fill(AppTheme.teal).frame(width: size * 0.13, height: size * 0.13).position(x: size * 0.68, y: size * 0.24)
+        }
+    }
+
+    private var gridDuelScene: some View {
+        ZStack {
+            MiniTileGrid(rows: 3, columns: 3, spacing: 3) { index in
+                gridDuelColor(for: index)
+            }
+            .frame(width: size * 0.62, height: size * 0.62)
+            .rotation3DEffect(.degrees(active ? 9 : -9), axis: (x: 0.25, y: 1, z: 0))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(Color.white.opacity(0.55), lineWidth: 2)
+                    .frame(width: size * 0.72, height: size * 0.72)
+            )
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Color.white.opacity(0.34))
+                .frame(width: size * 0.62, height: 2)
+                .offset(y: active ? -size * 0.10 : size * 0.10)
+
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Color.white.opacity(0.28))
+                .frame(width: 2, height: size * 0.62)
+                .offset(x: active ? size * 0.10 : -size * 0.10)
+        }
+    }
+
+    private var sudokuScene: some View {
+        MiniTileGrid(rows: 3, columns: 3, spacing: 3) { index in
+            index == (active ? 4 : 2) ? Color.white.opacity(0.82) : Color.white.opacity(0.20)
+        }
+        .frame(width: size * 0.62, height: size * 0.62)
+        .overlay(
+            Text(active ? "6" : "7")
                 .font(.system(size: size * 0.28, weight: .black, design: .rounded))
-                .foregroundStyle(Color.white.opacity(isAnimating ? 0.20 : 0.08))
-                .offset(x: isAnimating ? 13 : 9, y: isAnimating ? -14 : -10)
+                .foregroundStyle(AppTheme.royalBlue)
+                .offset(x: active ? 0 : size * 0.16, y: active ? 0 : -size * 0.16)
+        )
+    }
+
+    private var minesweeperScene: some View {
+        ZStack {
+            MiniTileGrid(rows: 3, columns: 3, spacing: 3) { index in
+                if active {
+                    return [0, 1, 3, 4].contains(index) ? Color.white.opacity(0.62) : Color.white.opacity(0.22)
+                }
+                return index == 4 ? Color.white.opacity(0.48) : Color.white.opacity(0.22)
+            }
+            .frame(width: size * 0.62, height: size * 0.62)
+            Text("1")
+                .font(.system(size: size * 0.12, weight: .black, design: .rounded))
+                .foregroundStyle(AppTheme.royalBlue)
+                .position(minesweeperCellCenter(row: 0, column: 0))
+                .opacity(active ? 1 : 0.15)
+            Text("2")
+                .font(.system(size: size * 0.12, weight: .black, design: .rounded))
+                .foregroundStyle(AppTheme.success)
+                .position(minesweeperCellCenter(row: 1, column: 1))
+                .opacity(active ? 1 : 0.2)
+            Image(systemName: "burst.fill")
+                .font(.system(size: size * 0.24, weight: .black))
+                .foregroundStyle(active ? AppTheme.hotPink : AppTheme.crownGold)
+                .scaleEffect(active ? 1.16 : 0.72)
+                .position(minesweeperCellCenter(row: 2, column: 2))
         }
     }
 
-    private var iconOffset: CGSize {
-        guard !reduceMotion else { return .zero }
-        switch mode {
-        case .wordHunt:
-            return CGSize(width: isAnimating ? 1.7 : -1.7, height: 0)
-        case .anagram:
-            return CGSize(width: 0, height: isAnimating ? -1.3 : 1.3)
-        case .hangman, .minesweeper:
-            return CGSize(width: 0, height: isAnimating ? -1.1 : 1.1)
-        default:
-            return CGSize(width: 0, height: isAnimating ? -1.6 : 1.6)
+    private var wordleScene: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<5, id: \.self) { index in
+                Text(wordleLetters[index])
+                    .font(.system(size: size * 0.13, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: size * 0.13, height: size * 0.18)
+                    .background(wordleColor(index))
+                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                    .opacity(reduceMotion ? 1 : (active ? 1 : wordleTypingOpacity(index)))
+                    .scaleEffect(active ? 1 : 0.96)
+                    .rotation3DEffect(.degrees(active ? 0 : 16), axis: (x: 1, y: 0, z: 0))
+            }
         }
     }
 
-    private var iconRotation: Angle {
-        guard !reduceMotion else { return .zero }
-        switch mode {
-        case .anagram:
-            return .degrees(isAnimating ? 2 : -2)
-        case .wordHunt:
-            return .degrees(isAnimating ? -1.5 : 1.5)
-        default:
-            return .zero
+    private var lavaRescueScene: some View {
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.14))
+                .frame(width: size * 0.66, height: size * 0.66)
+            Rectangle()
+                .fill(LinearGradient(colors: [Color(hex: "FF5A1F"), AppTheme.hotPink], startPoint: .top, endPoint: .bottom))
+                .frame(width: size * 0.66, height: active ? size * 0.38 : size * 0.16)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Image(systemName: "flame.fill")
+                .font(.system(size: size * 0.18, weight: .black))
+                .foregroundStyle(AppTheme.crownGold)
+                .offset(x: size * 0.22, y: -size * 0.05)
         }
     }
 
-    private var iconScale: CGFloat {
-        guard !reduceMotion else { return 1 }
-        return isAnimating ? 1.035 : 0.995
+    private var wordHuntScene: some View {
+        ZStack {
+            MiniLetterGrid(letters: ["C", "A", "T", "R", "E", "A", "D", "O", "G"])
+                .frame(width: size * 0.66, height: size * 0.66)
+            Path { path in
+                path.move(to: CGPoint(x: size * 0.24, y: size * 0.24))
+                path.addLine(to: CGPoint(x: size * 0.40, y: size * 0.24))
+                path.addLine(to: CGPoint(x: size * 0.56, y: size * 0.24))
+            }
+            .trim(from: 0, to: active ? 1 : 0.25)
+            .stroke(AppTheme.crownGold, style: StrokeStyle(lineWidth: max(2, size * 0.05), lineCap: .round, lineJoin: .round))
+            Text(active ? "CAT" : "CA")
+                .font(.system(size: size * 0.12, weight: .black, design: .rounded))
+                .foregroundStyle(AppTheme.crownGold)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.black.opacity(0.28))
+                .clipShape(Capsule())
+                .offset(y: size * 0.36)
+        }
+    }
+
+    private var anagramScene: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(["A", "B", "C", "D"].enumerated()), id: \.offset) { item in
+                Text(item.element)
+                    .font(.system(size: size * 0.16, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: size * 0.16, height: size * 0.22)
+                    .background([AppTheme.hotPink, AppTheme.crownGold, AppTheme.teal, AppTheme.royalBlue][item.offset])
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .offset(y: active && item.offset.isMultiple(of: 2) ? -size * 0.07 : size * 0.03)
+                    .rotationEffect(.degrees(active ? Double(item.offset - 1) * 5 : 0))
+            }
+        }
+    }
+
+    private func wordleColor(_ index: Int) -> Color {
+        if reduceMotion { return Color(hex: "538D4E") }
+        if !active { return Color(hex: "3A3A3C") }
+        return [Color(hex: "538D4E"), Color(hex: "538D4E"), Color(hex: "538D4E"), Color(hex: "538D4E"), Color(hex: "538D4E")][index]
+    }
+
+    private var wordleLetters: [String] {
+        ["P", "A", "R", "T", "Y"]
+    }
+
+    private func wordleTypingOpacity(_ index: Int) -> Double {
+        [1.0, 0.86, 0.72, 0.58, 0.44][index]
+    }
+
+    private func gridDuelColor(for index: Int) -> Color {
+        [AppTheme.crownGold, AppTheme.teal, AppTheme.hotPink, AppTheme.royalBlue, AppTheme.teal, AppTheme.hotPink, AppTheme.royalBlue, AppTheme.crownGold, AppTheme.teal][index]
+    }
+
+    private func minesweeperCellCenter(row: Int, column: Int) -> CGPoint {
+        let gridSize = size * 0.62
+        let gridOrigin = (size - gridSize) / 2
+        let step = gridSize / 3
+        return CGPoint(
+            x: gridOrigin + CGFloat(column) * step + step / 2,
+            y: gridOrigin + CGFloat(row) * step + step / 2
+        )
     }
 
     private var thumbnailScale: CGFloat {
@@ -1301,19 +1411,70 @@ private struct AnimatedModeThumbnailView: View {
 
     private var duration: Double {
         switch mode {
-        case .colorLink: return 3.6
-        case .gridlock: return 3.2
+        case .colorLink: return 3.8
+        case .gridlock: return 3.4
         case .sudoku: return 4.2
-        case .minesweeper: return 2.9
-        case .wordle: return 3.4
-        case .hangman: return 3.0
-        case .wordHunt: return 3.8
-        case .anagram: return 4.0
+        case .minesweeper: return 3.0
+        case .wordle: return 3.6
+        case .hangman: return 3.2
+        case .wordHunt: return 4.0
+        case .anagram: return 3.7
         }
     }
 
     private var delay: Double {
         Double(GameMode.allCases.firstIndex(of: mode) ?? 0) * 0.18
+    }
+}
+
+private struct MiniTileGrid: View {
+    let rows: Int
+    let columns: Int
+    let spacing: CGFloat
+    let color: (Int) -> Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            let tileWidth = (geometry.size.width - CGFloat(columns - 1) * spacing) / CGFloat(columns)
+            let tileHeight = (geometry.size.height - CGFloat(rows - 1) * spacing) / CGFloat(rows)
+            VStack(spacing: spacing) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: spacing) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            let index = row * columns + column
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(color(index))
+                                .frame(width: tileWidth, height: tileHeight)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct MiniLetterGrid: View {
+    let letters: [String]
+
+    var body: some View {
+        MiniTileGrid(rows: 3, columns: 3, spacing: 3) { _ in
+            Color.white.opacity(0.18)
+        }
+        .overlay(
+            GeometryReader { geometry in
+                let stepX = geometry.size.width / 3
+                let stepY = geometry.size.height / 3
+                ForEach(0..<min(letters.count, 9), id: \.self) { index in
+                    Text(letters[index])
+                        .font(.system(size: geometry.size.width * 0.14, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .position(
+                            x: CGFloat(index % 3) * stepX + stepX / 2,
+                            y: CGFloat(index / 3) * stepY + stepY / 2
+                        )
+                }
+            }
+        )
     }
 }
 
@@ -1383,9 +1544,11 @@ struct PartyRoomView: View {
     let user: AppUser
     let mode: GameMode
     let difficulty: Difficulty
+    var autoCreate: Bool = false
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = PartyRoomViewModel()
+    @State private var didAutoCreate = false
 
     var body: some View {
         ZStack {
@@ -1431,6 +1594,11 @@ struct PartyRoomView: View {
         }
         .onDisappear {
             vm.stopListening()
+        }
+        .task {
+            guard autoCreate, !didAutoCreate, vm.room == nil else { return }
+            didAutoCreate = true
+            await vm.create(user: user, mode: mode, difficulty: difficulty)
         }
     }
 
@@ -1765,7 +1933,7 @@ private struct PartyStandingRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("#\(standing.placement)")
-                .font(.headline.black())
+                .font(.headline.weight(.black))
                 .foregroundStyle(standing.placement == 1 ? AppTheme.crownGold : AppTheme.textSecondary)
                 .frame(width: 38)
 
@@ -1808,51 +1976,51 @@ private final class PartyRoomViewModel: ObservableObject {
 
     func create(user: AppUser, mode: GameMode, difficulty: Difficulty) async {
         await run {
-            let created = try await store.createPartyRoom(host: user, mode: mode, difficulty: difficulty)
-            attach(to: created.code)
-            room = created
+            let created = try await self.store.createPartyRoom(host: user, mode: mode, difficulty: difficulty)
+            self.attach(to: created.code)
+            self.room = created
         }
     }
 
     func join(user: AppUser) async {
         await run {
-            let joined = try await store.joinPartyRoom(code: joinCode, user: user)
-            attach(to: joined.code)
-            room = joined
+            let joined = try await self.store.joinPartyRoom(code: self.joinCode, user: user)
+            self.attach(to: joined.code)
+            self.room = joined
         }
     }
 
     func start(userID: String) async {
         guard let room else { return }
         await run {
-            self.room = try await store.startPartyRoom(code: room.code, hostID: userID)
+            self.room = try await self.store.startPartyRoom(code: room.code, hostID: userID)
         }
     }
 
     func submit(_ result: MatchPlayerResult) async {
         guard let room, room.status == .inProgress else { return }
         do {
-            self.room = try await store.submitPartyResult(code: room.code, userID: result.userID, result: result)
+            self.room = try await self.store.submitPartyResult(code: room.code, userID: result.userID, result: result)
         } catch {
-            errorMessage = error.localizedDescription
+            self.errorMessage = error.localizedDescription
         }
     }
 
     func leave(userID: String) async {
         guard let room else { return }
         await run {
-            self.room = try await store.leavePartyRoom(code: room.code, userID: userID)
+            self.room = try await self.store.leavePartyRoom(code: room.code, userID: userID)
         }
     }
 
     func stopListening() {
-        listener?.remove()
-        listener = nil
+        self.listener?.remove()
+        self.listener = nil
     }
 
     private func attach(to code: String) {
-        stopListening()
-        listener = store.listenForPartyRoom(code: code) { [weak self] room in
+        self.stopListening()
+        self.listener = self.store.listenForPartyRoom(code: code) { [weak self] room in
             Task { @MainActor in
                 self?.room = room
             }
@@ -1860,12 +2028,12 @@ private final class PartyRoomViewModel: ObservableObject {
     }
 
     private func run(_ operation: @escaping () async throws -> Void) async {
-        isWorking = true
-        defer { isWorking = false }
+        self.isWorking = true
+        defer { self.isWorking = false }
         do {
             try await operation()
         } catch {
-            errorMessage = error.localizedDescription
+            self.errorMessage = error.localizedDescription
         }
     }
 }

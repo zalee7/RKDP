@@ -473,27 +473,27 @@ private struct GridCell: View {
     @Environment(\.boardCosmetics) var cosmetics
 
     var body: some View {
-        let theme = cosmetics.themeStyle
+        let tile = cosmetics.tileThemeStyle
         let fs = cosmetics.fontStyle
         ZStack {
             RoundedRectangle(cornerRadius: 12)
                 .fill(isActive
-                      ? theme.tileGradient
-                      : LinearGradient(colors: [AppTheme.cardBackground], startPoint: .leading, endPoint: .trailing))
+                      ? tile.fill
+                      : LinearGradient(colors: [tile.inactiveFill], startPoint: .leading, endPoint: .trailing))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(isActive ? theme.activeTraceColor : AppTheme.cardBorder, lineWidth: isActive ? 2 : 1)
+                        .stroke(isActive ? tile.accent : tile.border.opacity(0.6), lineWidth: isActive ? 2 : 1)
                 )
-                .shadow(color: isActive ? theme.activeTraceColor.opacity(0.5) : .clear, radius: 6)
+                .shadow(color: isActive ? tile.shadow : .clear, radius: 6)
 
             VStack(spacing: 1) {
                 Text(String(letter))
                     .font(.system(size: cellSize * 0.38, weight: .bold, design: fs.design))
-                    .foregroundStyle(AppTheme.textPrimary)
+                    .foregroundStyle(isActive ? tile.textColor : AppTheme.textPrimary)
                 if let idx = pathIndex {
                     Text("\(idx + 1)")
                         .font(.system(size: cellSize * 0.18, weight: .bold))
-                        .foregroundStyle(AppTheme.textPrimary.opacity(0.7))
+                        .foregroundStyle((isActive ? tile.textColor : AppTheme.textPrimary).opacity(0.7))
                 }
             }
         }

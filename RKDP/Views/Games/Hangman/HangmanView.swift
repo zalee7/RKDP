@@ -481,33 +481,20 @@ private struct PuzzleRescueMascot: View {
                 .fill(LinearGradient(colors: [AppTheme.hotPink, AppTheme.teal], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .overlay(PuzzlePieceShape().stroke(Color.white, lineWidth: 4))
                 .shadow(color: AppTheme.hotPink.opacity(0.35), radius: 12)
-                .opacity(max(0.35, 1 - Double(misses) / Double(max(1, maxMisses)) * 0.45))
-                .overlay(face)
-
-            if misses > 0, !isSolved {
-                ForEach(0..<min(misses, maxMisses), id: \.self) { index in
-                    CrackMark(index: index)
-                        .stroke(Color.white.opacity(0.85), lineWidth: 2)
-                }
-            }
+                .opacity(max(0.42, 1 - Double(misses) / Double(max(1, maxMisses)) * 0.36))
+                .overlay(neutralFace)
         }
     }
 
-    private var face: some View {
+    private var neutralFace: some View {
         VStack(spacing: 8) {
             HStack(spacing: 24) {
                 Circle().fill(Color.white).frame(width: 9, height: 9)
                 Circle().fill(Color.white).frame(width: 9, height: 9)
             }
-            if isSolved {
-                SmileShape()
-                    .stroke(Color.white, lineWidth: 3)
-                    .frame(width: 34, height: 16)
-            } else {
-                Capsule()
-                    .stroke(Color.white, lineWidth: 3)
-                    .frame(width: 32, height: misses >= maxMisses ? 6 : 14)
-            }
+            Capsule()
+                .fill(Color.white)
+                .frame(width: 30, height: 4)
         }
     }
 }
@@ -538,29 +525,7 @@ private struct PuzzlePieceShape: Shape {
     }
 }
 
-private struct CrackMark: Shape {
-    let index: Int
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let starts: [(CGFloat, CGFloat)] = [(0.35, 0.18), (0.62, 0.25), (0.28, 0.55), (0.70, 0.58), (0.48, 0.72), (0.52, 0.38)]
-        let start = starts[index % starts.count]
-        let x = rect.width * start.0
-        let y = rect.height * start.1
-        path.move(to: CGPoint(x: x, y: y))
-        path.addLine(to: CGPoint(x: x + 14, y: y + 12))
-        path.addLine(to: CGPoint(x: x + 6, y: y + 24))
-        return path
-    }
-}
 
-private struct SmileShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.2))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.2), control: CGPoint(x: rect.midX, y: rect.maxY))
-        return path
-    }
-}
 
 private extension String {
     func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }

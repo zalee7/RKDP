@@ -216,7 +216,7 @@ struct ProfileView: View {
     }
 
     private var nonAvatarCosmeticCategories: [CosmeticCategory] {
-        CosmeticCategory.allCases.filter { !$0.isAvatarCategory }
+        CosmeticCategory.allCases.filter { !$0.isAvatarCategory && !$0.isLegacyStoreCategory }
     }
 
     private var recentGamesSection: some View {
@@ -509,6 +509,7 @@ private struct AvatarEditorView: View {
         case .avatarOutfit: return "Body"
         case .avatarAura: return "Aura"
         case .avatarPose: return "Pose"
+        case .tileTheme: return "Tile"
         default: return category.rawValue
         }
     }

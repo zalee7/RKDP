@@ -7,7 +7,7 @@ private enum ShopSection: Hashable, CaseIterable {
     case category(CosmeticCategory)
 
     static var allCases: [ShopSection] {
-        let shopCategories = CosmeticCategory.allCases.filter { !$0.isAvatarCategory }
+        let shopCategories = CosmeticCategory.allCases.filter { !$0.isAvatarCategory && !$0.isLegacyStoreCategory }
         return [.coinPacks, .rankedPass] + shopCategories.map { .category($0) }
     }
 
@@ -422,7 +422,7 @@ struct ShopItemCard: View {
     var actionLabel: String {
         if isEquipped { return "Equipped" }
         if isOwned    { return "Equip" }
-        return "\(item.price) 🪙"
+        return "\(item.price)"
     }
 
     var actionColor: Color {
@@ -448,6 +448,9 @@ struct ShopItemCard: View {
                         )
                 } else if item.category == .boardTheme {
                     ShopThemePreview(themeID: item.id)
+                        .frame(height: 72)
+                } else if item.category == .tileTheme {
+                    ShopTileThemePreview(tileThemeID: item.id)
                         .frame(height: 72)
                 } else if item.category.isAvatarCategory {
                     AvatarPartPreview(item: item)
@@ -499,12 +502,28 @@ struct ShopItemCard: View {
             Text(item.description).font(.caption).foregroundStyle(AppTheme.textSecondary).lineLimit(2).multilineTextAlignment(.center)
 
             Button(action: onAction) {
-                Text(actionLabel)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 12).padding(.vertical, 6)
+                if isOwned || isEquipped {
+                    Text(actionLabel)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .frame(minWidth: 76)
+                        .background(actionColor)
+                        .foregroundStyle(.white)
+                        .clipShape(Capsule())
+                } else {
+                    HStack(spacing: 5) {
+                        CoinIconView(size: 15)
+                        Text(actionLabel)
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6)
+                    .frame(minWidth: 76)
                     .background(actionColor)
-                    .foregroundStyle(.white)
                     .clipShape(Capsule())
+                }
             }
             .disabled(isEquipped || (!isOwned && !canAfford))
         }
@@ -521,6 +540,7 @@ struct ShopItemCard: View {
         switch cat {
         case .title:        return "text.badge.star"
         case .boardTheme:   return "paintpalette.fill"
+        case .tileTheme:    return "square.grid.3x3.fill"
         case .numberFont:   return "textformat"
         case .cellBorder:   return "rectangle.inset.filled"
         case .avatarHead:   return "crown.fill"
@@ -689,6 +709,71 @@ private struct AvatarPartPreview: View {
                     .offset(y: -4)
                 Text("⌒")
                     .offset(y: 12)
+            case "avatar_face_blush":
+                Text("•  •")
+                    .offset(y: -4)
+                HStack(spacing: 24) {
+                    Circle().frame(width: 6, height: 6)
+                    Circle().frame(width: 6, height: 6)
+                }
+                .foregroundStyle(AppTheme.hotPink)
+                .offset(y: 5)
+                Text("⌣")
+                    .offset(y: 13)
+            case "avatar_face_pixel":
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 1).frame(width: 7, height: 7)
+                    RoundedRectangle(cornerRadius: 1).frame(width: 7, height: 7)
+                }
+                .offset(y: -5)
+                Capsule().frame(width: 16, height: 3).offset(y: 13)
+            case "avatar_face_party":
+                Text("^  ^")
+                    .offset(y: -4)
+                Image(systemName: "party.popper.fill")
+                    .foregroundStyle(AppTheme.crownGold)
+                    .offset(x: 18, y: -12)
+                Text("⌣")
+                    .offset(y: 13)
+            case "avatar_face_robot":
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(AppTheme.teal, lineWidth: 2)
+                    .frame(width: 34, height: 14)
+                    .overlay(HStack(spacing: 10) {
+                        Circle().fill(AppTheme.teal).frame(width: 4, height: 4)
+                        Circle().fill(AppTheme.teal).frame(width: 4, height: 4)
+                    })
+                    .offset(y: -5)
+                Capsule().frame(width: 14, height: 3).offset(y: 14)
+            case "avatar_face_lava":
+                HStack(spacing: 8) { Image(systemName: "flame.fill"); Image(systemName: "flame.fill") }
+                    .foregroundStyle(Color(hex: "FF6B1A"))
+                    .offset(y: -5)
+                Text("⌣")
+                    .offset(y: 13)
+            case "avatar_face_crown":
+                HStack(spacing: 8) { Image(systemName: "crown.fill"); Image(systemName: "crown.fill") }
+                    .foregroundStyle(AppTheme.crownGold)
+                    .offset(y: -5)
+                Text("⌣")
+                    .offset(y: 13)
+            case "avatar_face_masked":
+                Capsule()
+                    .fill(Color.black.opacity(0.82))
+                    .frame(width: 36, height: 14)
+                    .overlay(HStack(spacing: 12) {
+                        Circle().fill(.white).frame(width: 4, height: 4)
+                        Circle().fill(.white).frame(width: 4, height: 4)
+                    })
+                    .offset(y: -5)
+                Text("⌣")
+                    .offset(y: 13)
+            case "avatar_face_heart":
+                HStack(spacing: 8) { Image(systemName: "heart.fill"); Image(systemName: "heart.fill") }
+                    .foregroundStyle(AppTheme.hotPink)
+                    .offset(y: -5)
+                Text("⌣")
+                    .offset(y: 13)
             default:
                 Image(systemName: "face.smiling.fill")
                     .font(.system(size: 28, weight: .bold))
@@ -905,5 +990,33 @@ private struct ShopThemePreview: View {
                     .stroke(style.gridLineMinor, lineWidth: 1)
             )
             .frame(width: 16, height: 16)
+    }
+}
+
+private struct ShopTileThemePreview: View {
+    let tileThemeID: String
+
+    private var style: TileThemeStyle {
+        var cosmetics = OwnedCosmetics.default
+        cosmetics.equippedTileTheme = tileThemeID
+        return cosmetics.tileThemeStyle
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(style.inactiveFill)
+            .overlay(
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(18), spacing: 5), count: 3), spacing: 5) {
+                    ForEach(0..<9, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(index.isMultiple(of: 2) ? style.fill : LinearGradient(colors: [style.inactiveFill], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(style.border, lineWidth: 1))
+                            .frame(width: 18, height: 18)
+                    }
+                }
+                .padding(9)
+            )
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(style.border.opacity(0.8), lineWidth: 1.3))
+            .shadow(color: style.shadow, radius: 8, x: 0, y: 4)
     }
 }

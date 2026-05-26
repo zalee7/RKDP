@@ -25,10 +25,10 @@ struct LoginView: View {
                                 .font(.system(size: 38))
                                 .foregroundStyle(.white)
                         }
-                        Text("Grid Duel")
+                        Text("Puzzle Party")
                             .font(.system(size: 36, weight: .black))
                             .foregroundStyle(AppTheme.textPrimary)
-                        Text("Ranked Puzzle Arena")
+                        Text("Solo, Ranked, Casual")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.accentBright)
                     }

@@ -339,6 +339,7 @@ struct AnagramView: View {
 
     private var submitButton: some View {
         Button { vm.submit() } label: {
+            let tile = cosmetics.tileThemeStyle
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill").font(.headline)
                 Text("Enter").font(.headline.bold())
@@ -346,11 +347,11 @@ struct AnagramView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(vm.placed.count >= 3
-                        ? AnyShapeStyle(cosmetics.themeStyle.tileGradient)
+                        ? AnyShapeStyle(tile.fill)
                         : AnyShapeStyle(AppTheme.cardBackground))
-            .foregroundStyle(.white)
+            .foregroundStyle(vm.placed.count >= 3 ? tile.textColor : .white)
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(color: vm.placed.count >= 3 ? cosmetics.themeStyle.activeTraceColor.opacity(0.35) : .clear, radius: 8)
+            .shadow(color: vm.placed.count >= 3 ? tile.shadow : .clear, radius: 8)
         }
         .disabled(vm.placed.count < 3)
         .animation(.easeInOut(duration: 0.15), value: vm.placed.count)
@@ -525,13 +526,15 @@ private struct LetterTile: View {
 
     var body: some View {
         let fs = cosmetics.fontStyle
+        let tile = cosmetics.tileThemeStyle
         Text(String(letter))
             .font(.system(size: size * 0.42, weight: .bold, design: fs.design))
             .frame(width: size, height: size)
-            .background(cosmetics.themeStyle.tileGradient)
-            .foregroundStyle(.white)
+            .background(tile.fill)
+            .foregroundStyle(tile.textColor)
             .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
-            .shadow(color: .black.opacity(0.22), radius: 3, y: 2)
+            .overlay(RoundedRectangle(cornerRadius: size * 0.22).stroke(tile.border, lineWidth: 1))
+            .shadow(color: tile.shadow, radius: 4, y: 2)
     }
 }
 

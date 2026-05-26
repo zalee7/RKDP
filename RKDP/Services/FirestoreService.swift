@@ -538,7 +538,7 @@ final class FirestoreService {
             status: .waiting,
             players: refreshedPlayers,
             seed: seed,
-            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: oldSession.mode, difficulty: oldSession.difficulty, seed: seed),
+            puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: oldSession.mode, difficulty: oldSession.difficulty, seed: seed, context: "rematch"),
             createdAt: Date(),
             matchKind: oldSession.matchKind
         )
@@ -601,7 +601,7 @@ final class FirestoreService {
                 bot
             ],
             seed: seed,
-            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+            puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "online session"),
             createdAt: Date()
         )
         session.playerIDs = [user.id, bot.userID]
@@ -867,7 +867,7 @@ final class FirestoreService {
                 MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints, avatarStyle: opponentAvatarStyle)
             ],
             seed: seed,
-            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+            puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "online session"),
             createdAt: Date()
         )
         session.playerIDs = [hostUser.id, opponentID]
@@ -939,7 +939,7 @@ final class FirestoreService {
                 MatchPlayer(userID: opponentID, username: opponentUsername, wager: 0, rankTier: RankTier.tier(for: opponentRankPoints), rankPoints: opponentRankPoints, avatarStyle: opponentAvatarStyle)
             ],
             seed: seed,
-            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+            puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "online session"),
             createdAt: Date(),
             matchKind: .casual
         )
@@ -1181,7 +1181,7 @@ final class FirestoreService {
                     MatchPlayer(userID: friendUser.id, username: friendUser.username, wager: 0, rankTier: friendUser.rank(for: mode).displayTier, rankPoints: friendUser.rank(for: mode).points, avatarStyle: friendUser.cosmetics.avatarStyle)
                 ],
                 seed: seed,
-                puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+                puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "online session"),
                 createdAt: now,
                 matchKind: .asyncExhibition
             )
@@ -1221,7 +1221,7 @@ final class FirestoreService {
                 MatchPlayer(userID: currentUser.id, username: currentUser.username, wager: 0, rankTier: currentUser.rank(for: invite.mode).displayTier, rankPoints: currentUser.rank(for: invite.mode).points, avatarStyle: currentUser.cosmetics.avatarStyle)
             ],
             seed: seed,
-            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: invite.mode, difficulty: invite.difficulty, seed: seed),
+            puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: invite.mode, difficulty: invite.difficulty, seed: seed, context: "exhibition invite"),
             createdAt: Date(),
             matchKind: .exhibition
         )
@@ -1377,7 +1377,7 @@ final class FirestoreService {
                 players: [player],
                 playerIDs: [host.id],
                 seed: seed,
-                puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+                puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "online session"),
                 createdAt: now,
                 expiresAt: now.addingTimeInterval(1_800),
                 startedAt: nil,

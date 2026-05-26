@@ -18,6 +18,16 @@ struct NumberFontStyle {
     var weight: Font.Weight
 }
 
+struct TileThemeStyle {
+    var fill: LinearGradient
+    var inactiveFill: Color
+    var border: Color
+    var textColor: Color
+    var accent: Color
+    var shadow: Color
+    var cornerScale: CGFloat
+}
+
 extension OwnedCosmetics {
     var themeStyle: BoardThemeStyle {
         switch equippedBoardTheme {
@@ -142,6 +152,71 @@ extension OwnedCosmetics {
         default:             return NumberFontStyle(design: .default,    weight: .regular)
         }
     }
+
+    var tileThemeStyle: TileThemeStyle {
+        switch equippedTileTheme {
+        case "tile_neon_pop":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "1A1038").opacity(0.72),
+                border: Color(hex: "39D5FF").opacity(0.72),
+                textColor: .white,
+                accent: Color(hex: "39D5FF"),
+                shadow: Color(hex: "FF2F78").opacity(0.34),
+                cornerScale: 0.24
+            )
+        case "tile_crown_gold":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FFD02E"), Color(hex: "FF9E2C")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "2A1B05").opacity(0.72),
+                border: Color(hex: "FFF0A3").opacity(0.82),
+                textColor: Color(hex: "231200"),
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FFD02E").opacity(0.36),
+                cornerScale: 0.24
+            )
+        case "tile_mint_glass":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "12C8A2"), Color(hex: "39D5FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "072D36").opacity(0.70),
+                border: Color(hex: "8FFFE1").opacity(0.72),
+                textColor: .white,
+                accent: Color(hex: "12C8A2"),
+                shadow: Color(hex: "12C8A2").opacity(0.30),
+                cornerScale: 0.26
+            )
+        case "tile_lava_core":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FF5A1F"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "301006").opacity(0.72),
+                border: Color(hex: "FFD02E").opacity(0.76),
+                textColor: .white,
+                accent: Color(hex: "FF5A1F"),
+                shadow: Color(hex: "FF5A1F").opacity(0.34),
+                cornerScale: 0.22
+            )
+        case "tile_diamond":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "E8F7FF"), Color(hex: "78D7FF"), Color(hex: "B28CFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "102033").opacity(0.72),
+                border: Color.white.opacity(0.88),
+                textColor: Color(hex: "12203D"),
+                accent: Color(hex: "78D7FF"),
+                shadow: Color(hex: "78D7FF").opacity(0.38),
+                cornerScale: 0.18
+            )
+        default:
+            return TileThemeStyle(
+                fill: themeStyle.tileGradient,
+                inactiveFill: AppTheme.cardBackground,
+                border: Color.white.opacity(0.24),
+                textColor: .white,
+                accent: themeStyle.activeTraceColor,
+                shadow: Color.black.opacity(0.22),
+                cornerScale: 0.22
+            )
+        }
+    }
 }
 
 // MARK: - SwiftUI Environment
@@ -160,8 +235,9 @@ extension EnvironmentValues {
 // MARK: - Shop item types
 
 enum CosmeticCategory: String, Codable, CaseIterable {
-    case title        = "Titles"
-    case boardTheme   = "Game Theme"
+    case title        = "Name Titles"
+    case boardTheme   = "Board / Background Themes"
+    case tileTheme    = "Tile Themes"
     case numberFont   = "Number Style"
     case cellBorder   = "Cell Border"
     case avatarHead   = "Avatar Head"
@@ -175,6 +251,10 @@ enum CosmeticCategory: String, Codable, CaseIterable {
         case .avatarHead, .avatarFace, .avatarOutfit, .avatarAura, .avatarPose: return true
         default: return false
         }
+    }
+
+    var isLegacyStoreCategory: Bool {
+        self == .numberFont || self == .cellBorder
     }
 }
 
@@ -236,7 +316,7 @@ struct AvatarStyle: Codable, Equatable {
         face: "avatar_face_smile",
         outfit: "avatar_outfit_basic",
         aura: "avatar_aura_none",
-        pose: "avatar_pose_neutral",
+        pose: "avatar_pose_jump",
         bodyHex: defaultBodyHex
     )
 
@@ -278,6 +358,7 @@ struct OwnedCosmetics: Codable {
     var purchasedIDs: Set<String>
     var equippedTitle: String
     var equippedBoardTheme: String
+    var equippedTileTheme: String
     var equippedNumberFont: String
     var equippedCellBorder: String
     var equippedAvatarHead: String
@@ -288,14 +369,15 @@ struct OwnedCosmetics: Codable {
     var customAvatarBodyHex: String
 
     static let defaultPurchasedIDs: Set<String> = [
-        "title_puzzler", "theme_classic", "font_default", "border_default",
-        "avatar_head_none", "avatar_face_smile", "avatar_outfit_basic", "avatar_aura_none", "avatar_pose_neutral"
+        "title_puzzler", "theme_classic", "tile_classic", "font_default", "border_default",
+        "avatar_head_none", "avatar_face_smile", "avatar_outfit_basic", "avatar_aura_none", "avatar_pose_neutral", "avatar_pose_jump"
     ]
 
     static let `default` = OwnedCosmetics(
         purchasedIDs: defaultPurchasedIDs,
         equippedTitle: "title_puzzler",
         equippedBoardTheme: "theme_classic",
+        equippedTileTheme: "tile_classic",
         equippedNumberFont: "font_default",
         equippedCellBorder: "border_default",
         equippedAvatarHead: AvatarStyle.default.head,
@@ -318,7 +400,7 @@ struct OwnedCosmetics: Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case purchasedIDs, equippedTitle, equippedBoardTheme, equippedNumberFont, equippedCellBorder
+        case purchasedIDs, equippedTitle, equippedBoardTheme, equippedTileTheme, equippedNumberFont, equippedCellBorder
         case equippedAvatarHead, equippedAvatarFace, equippedAvatarOutfit, equippedAvatarAura, equippedAvatarPose, customAvatarBodyHex
     }
 
@@ -326,6 +408,7 @@ struct OwnedCosmetics: Codable {
         purchasedIDs: Set<String>,
         equippedTitle: String,
         equippedBoardTheme: String,
+        equippedTileTheme: String = "tile_classic",
         equippedNumberFont: String,
         equippedCellBorder: String,
         equippedAvatarHead: String,
@@ -338,6 +421,7 @@ struct OwnedCosmetics: Codable {
         self.purchasedIDs = purchasedIDs.union(Self.defaultPurchasedIDs)
         self.equippedTitle = equippedTitle
         self.equippedBoardTheme = equippedBoardTheme
+        self.equippedTileTheme = equippedTileTheme
         self.equippedNumberFont = equippedNumberFont
         self.equippedCellBorder = equippedCellBorder
         self.equippedAvatarHead = equippedAvatarHead
@@ -354,6 +438,7 @@ struct OwnedCosmetics: Codable {
         purchasedIDs = (try c.decodeIfPresent(Set<String>.self, forKey: .purchasedIDs) ?? defaults.purchasedIDs).union(Self.defaultPurchasedIDs)
         equippedTitle = try c.decodeIfPresent(String.self, forKey: .equippedTitle) ?? defaults.equippedTitle
         equippedBoardTheme = try c.decodeIfPresent(String.self, forKey: .equippedBoardTheme) ?? defaults.equippedBoardTheme
+        equippedTileTheme = try c.decodeIfPresent(String.self, forKey: .equippedTileTheme) ?? defaults.equippedTileTheme
         equippedNumberFont = try c.decodeIfPresent(String.self, forKey: .equippedNumberFont) ?? defaults.equippedNumberFont
         equippedCellBorder = try c.decodeIfPresent(String.self, forKey: .equippedCellBorder) ?? defaults.equippedCellBorder
         equippedAvatarHead = try c.decodeIfPresent(String.self, forKey: .equippedAvatarHead) ?? defaults.equippedAvatarHead
@@ -369,6 +454,7 @@ struct OwnedCosmetics: Codable {
         try c.encode(purchasedIDs, forKey: .purchasedIDs)
         try c.encode(equippedTitle, forKey: .equippedTitle)
         try c.encode(equippedBoardTheme, forKey: .equippedBoardTheme)
+        try c.encode(equippedTileTheme, forKey: .equippedTileTheme)
         try c.encode(equippedNumberFont, forKey: .equippedNumberFont)
         try c.encode(equippedCellBorder, forKey: .equippedCellBorder)
         try c.encode(equippedAvatarHead, forKey: .equippedAvatarHead)
@@ -401,6 +487,7 @@ struct OwnedCosmetics: Codable {
         switch item.category {
         case .title:        equippedTitle = item.id
         case .boardTheme:   equippedBoardTheme = item.id
+        case .tileTheme:    equippedTileTheme = item.id
         case .numberFont:   equippedNumberFont = item.id
         case .cellBorder:   equippedCellBorder = item.id
         case .avatarHead:   equippedAvatarHead = item.id
@@ -445,7 +532,7 @@ struct DailyRotation {
 // MARK: - Catalog
 
 struct CosmeticCatalog {
-    static let all: [CosmeticItem] = allTitles + boardThemes + numberFonts + cellBorders + avatarHeads + avatarFaces + avatarOutfits + avatarAuras + avatarPoses
+    static let all: [CosmeticItem] = allTitles + boardThemes + tileThemes + avatarHeads + avatarFaces + avatarOutfits + avatarAuras
 
     // Full title pool — only `dailySlots` of the paid ones appear in the shop each day
     static let allTitles: [CosmeticItem] = [
@@ -508,6 +595,15 @@ struct CosmeticCatalog {
         CosmeticItem(id: "theme_crown_gold", name: "Crown Gold",  category: .boardTheme, price: 2_500, previewImageName: "theme_crown_gold", description: "Icon-inspired crown gold with jewel pink."),
     ]
 
+    static let tileThemes: [CosmeticItem] = [
+        CosmeticItem(id: "tile_classic", name: "Classic Tiles", category: .tileTheme, price: 0, previewImageName: "tile_classic", description: "Clean default puzzle tiles."),
+        CosmeticItem(id: "tile_neon_pop", name: "Neon Pop", category: .tileTheme, price: 550, previewImageName: "tile_neon_pop", description: "Bright pink and purple arcade tiles."),
+        CosmeticItem(id: "tile_mint_glass", name: "Mint Glass", category: .tileTheme, price: 700, previewImageName: "tile_mint_glass", description: "Cool mint tiles with a glassy glow."),
+        CosmeticItem(id: "tile_lava_core", name: "Lava Core", category: .tileTheme, price: 1_250, previewImageName: "tile_lava_core", description: "Hot lava tiles for high-pressure games."),
+        CosmeticItem(id: "tile_crown_gold", name: "Crown Gold", category: .tileTheme, price: 1_900, previewImageName: "tile_crown_gold", description: "Gold tiles inspired by the Puzzle Party crown."),
+        CosmeticItem(id: "tile_diamond", name: "Diamond Shine", category: .tileTheme, price: 3_000, previewImageName: "tile_diamond", description: "Legendary bright tiles with a diamond sheen."),
+    ]
+
     static let numberFonts: [CosmeticItem] = [
         CosmeticItem(id: "font_default",    name: "Default",      category: .numberFont, price: 0,   previewImageName: "font_default",   description: "Clean system font."),
         CosmeticItem(id: "font_pixel",      name: "Pixel",        category: .numberFont, price: 250, previewImageName: "font_pixel",     description: "Retro pixel-art digits."),
@@ -548,7 +644,15 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_face_sleepy", name: "Sleepy", category: .avatarFace, price: 500, previewImageName: "", description: "Still solving, somehow."),
         CosmeticItem(id: "avatar_face_star", name: "Star Eyes", category: .avatarFace, price: 1_500, previewImageName: "", description: "Bright-eyed arcade energy."),
         CosmeticItem(id: "avatar_face_oops", name: "Oops", category: .avatarFace, price: 700, previewImageName: "", description: "For close calls and lucky saves."),
-        CosmeticItem(id: "avatar_face_smirk", name: "Champion Smirk", category: .avatarFace, price: 2_200, previewImageName: "", description: "A confident little flex.")
+        CosmeticItem(id: "avatar_face_smirk", name: "Champion Smirk", category: .avatarFace, price: 2_200, previewImageName: "", description: "A confident little flex."),
+        CosmeticItem(id: "avatar_face_blush", name: "Blush", category: .avatarFace, price: 650, previewImageName: "", description: "Soft cheeks for a friendly puzzle pal."),
+        CosmeticItem(id: "avatar_face_pixel", name: "Pixel Smile", category: .avatarFace, price: 900, previewImageName: "", description: "Retro arcade pixels with a tiny grin."),
+        CosmeticItem(id: "avatar_face_party", name: "Party Eyes", category: .avatarFace, price: 1_100, previewImageName: "", description: "Bright celebration eyes for social wins."),
+        CosmeticItem(id: "avatar_face_robot", name: "Robot Eyes", category: .avatarFace, price: 1_300, previewImageName: "", description: "Clean digital focus."),
+        CosmeticItem(id: "avatar_face_lava", name: "Lava Eyes", category: .avatarFace, price: 1_700, previewImageName: "", description: "Hot rescue-run intensity."),
+        CosmeticItem(id: "avatar_face_crown", name: "Crown Eyes", category: .avatarFace, price: 2_600, previewImageName: "", description: "Legendary golden eye shine."),
+        CosmeticItem(id: "avatar_face_masked", name: "Masked", category: .avatarFace, price: 1_400, previewImageName: "", description: "A mysterious puzzle-party mask."),
+        CosmeticItem(id: "avatar_face_heart", name: "Heart Eyes", category: .avatarFace, price: 1_900, previewImageName: "", description: "Cute heart-eyed party energy.")
     ]
 
     static let avatarOutfits: [CosmeticItem] = [

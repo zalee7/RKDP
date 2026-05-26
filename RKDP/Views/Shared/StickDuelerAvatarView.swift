@@ -137,6 +137,76 @@ struct StickDuelerAvatarView: View {
         case "avatar_face_smirk":
             faceEyes(left: "•", right: "•", y: 44)
             faceText("⌒", y: 56, size: 13)
+        case "avatar_face_blush":
+            faceEyes(left: "•", right: "•", y: 44)
+            HStack(spacing: 18 * scale) {
+                Circle().fill(AppTheme.hotPink.opacity(0.72)).frame(width: 5 * scale, height: 5 * scale)
+                Circle().fill(AppTheme.hotPink.opacity(0.72)).frame(width: 5 * scale, height: 5 * scale)
+            }
+            .offset(y: 4 * scale)
+            faceText("⌣", y: 57, size: 13)
+        case "avatar_face_pixel":
+            HStack(spacing: 8 * scale) {
+                RoundedRectangle(cornerRadius: 1 * scale).fill(.white).frame(width: 6 * scale, height: 6 * scale)
+                RoundedRectangle(cornerRadius: 1 * scale).fill(.white).frame(width: 6 * scale, height: 6 * scale)
+            }
+            .offset(y: -6 * scale)
+            mouthLine(width: 12, y: 56)
+        case "avatar_face_party":
+            faceEyes(left: "^", right: "^", y: 44)
+            Image(systemName: "party.popper.fill")
+                .font(.system(size: max(6, 10 * scale), weight: .bold))
+                .foregroundStyle(AppTheme.crownGold)
+                .offset(x: 17 * scale, y: -11 * scale)
+            faceText("⌣", y: 57, size: 13)
+        case "avatar_face_robot":
+            RoundedRectangle(cornerRadius: 3 * scale)
+                .stroke(AppTheme.teal, lineWidth: max(1, lineWidth * 0.45))
+                .frame(width: 31 * scale, height: 12 * scale)
+                .overlay(
+                    HStack(spacing: 9 * scale) {
+                        Circle().fill(AppTheme.teal).frame(width: 4 * scale, height: 4 * scale)
+                        Circle().fill(AppTheme.teal).frame(width: 4 * scale, height: 4 * scale)
+                    }
+                )
+                .offset(y: -5 * scale)
+            mouthLine(width: 10, y: 57)
+        case "avatar_face_lava":
+            HStack(spacing: 8 * scale) {
+                Image(systemName: "flame.fill").font(.system(size: max(6, 9 * scale), weight: .black))
+                Image(systemName: "flame.fill").font(.system(size: max(6, 9 * scale), weight: .black))
+            }
+            .foregroundStyle(Color(hex: "FF6B1A"))
+            .offset(y: -5 * scale)
+            faceText("⌣", y: 57, size: 13)
+        case "avatar_face_crown":
+            HStack(spacing: 8 * scale) {
+                Image(systemName: "crown.fill").font(.system(size: max(6, 9 * scale), weight: .black))
+                Image(systemName: "crown.fill").font(.system(size: max(6, 9 * scale), weight: .black))
+            }
+            .foregroundStyle(AppTheme.crownGold)
+            .offset(y: -5 * scale)
+            faceText("⌣", y: 57, size: 13)
+        case "avatar_face_masked":
+            Capsule()
+                .fill(Color.black.opacity(0.78))
+                .frame(width: 32 * scale, height: 12 * scale)
+                .overlay(
+                    HStack(spacing: 10 * scale) {
+                        Circle().fill(.white).frame(width: 3 * scale, height: 3 * scale)
+                        Circle().fill(.white).frame(width: 3 * scale, height: 3 * scale)
+                    }
+                )
+                .offset(y: -5 * scale)
+            faceText("⌣", y: 57, size: 13)
+        case "avatar_face_heart":
+            HStack(spacing: 7 * scale) {
+                Image(systemName: "heart.fill").font(.system(size: max(6, 9 * scale), weight: .black))
+                Image(systemName: "heart.fill").font(.system(size: max(6, 9 * scale), weight: .black))
+            }
+            .foregroundStyle(AppTheme.hotPink)
+            .offset(y: -5 * scale)
+            faceText("⌣", y: 57, size: 13)
         default:
             faceEyes(left: "•", right: "•")
             faceText("⌣", y: 56, size: 14)
@@ -288,50 +358,18 @@ struct StickDuelerAvatarView: View {
     }
 
     private var leftArmEnd: (x: CGFloat, y: CGFloat) {
-        switch style.pose {
-        case "avatar_pose_victory": return (25, 19)
-        case "avatar_pose_thinking": return (38, 42)
-        case "avatar_pose_ready": return (22, 59)
-        case "avatar_pose_flex": return (25, 38)
-        case "avatar_pose_point": return (19, 45)
-        case "avatar_pose_jump": return (27, 34)
-        case "avatar_pose_celebrate": return (23, 18)
-        case "avatar_pose_sneaky": return (30, 68)
-        case "avatar_pose_power": return (23, 33)
-        default: return (24, 62)
-        }
+        (27, 34)
     }
 
     private var rightArmEnd: (x: CGFloat, y: CGFloat) {
-        switch style.pose {
-        case "avatar_pose_victory": return (75, 19)
-        case "avatar_pose_thinking": return (76, 62)
-        case "avatar_pose_ready": return (78, 59)
-        case "avatar_pose_flex": return (75, 38)
-        case "avatar_pose_point": return (82, 43)
-        case "avatar_pose_jump": return (73, 34)
-        case "avatar_pose_celebrate": return (77, 18)
-        case "avatar_pose_sneaky": return (70, 68)
-        case "avatar_pose_power": return (77, 33)
-        default: return (76, 62)
-        }
+        (73, 34)
     }
 
     private var leftLegEnd: (x: CGFloat, y: CGFloat) {
-        switch style.pose {
-        case "avatar_pose_ready": return (36, 88)
-        case "avatar_pose_jump": return (35, 82)
-        case "avatar_pose_sneaky": return (34, 86)
-        default: return (40, 88)
-        }
+        (35, 82)
     }
     private var rightLegEnd: (x: CGFloat, y: CGFloat) {
-        switch style.pose {
-        case "avatar_pose_ready": return (64, 88)
-        case "avatar_pose_jump": return (65, 82)
-        case "avatar_pose_sneaky": return (66, 90)
-        default: return (60, 88)
-        }
+        (65, 82)
     }
 
     private var bodyColor: Color {

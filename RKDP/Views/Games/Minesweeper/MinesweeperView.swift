@@ -196,20 +196,25 @@ struct MinesweeperGridView: View {
 struct MinesweeperCellView: View {
     let cell: MinesweeperCell
     let size: CGFloat
+    @Environment(\.boardCosmetics) private var cosmetics
 
     private static let adjColors: [Color] = [
         .clear, .blue, .green, .red, .purple, .brown, .cyan, .black, .gray
     ]
 
     var body: some View {
+        let tile = cosmetics.tileThemeStyle
         ZStack {
             switch cell.state {
             case .hidden:
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(.systemGray4))
+                    .fill(tile.fill)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(tile.border.opacity(0.55), lineWidth: 1))
+                    .shadow(color: tile.shadow, radius: 2)
             case .flagged:
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(.systemGray4))
+                    .fill(tile.fill)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(tile.border.opacity(0.55), lineWidth: 1))
                 Text("🚩").font(.system(size: size * 0.55))
             case .exploded:
                 RoundedRectangle(cornerRadius: 4)
@@ -217,7 +222,8 @@ struct MinesweeperCellView: View {
                 Text("💥").font(.system(size: size * 0.55))
             case .revealed(let adj):
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(cell.hasMine ? Color.red.opacity(0.5) : Color(.systemGray6))
+                    .fill(cell.hasMine ? Color.red.opacity(0.5) : tile.inactiveFill.opacity(0.55))
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(tile.border.opacity(0.30), lineWidth: 1))
                 if cell.hasMine {
                     Text("💣").font(.system(size: size * 0.55))
                 } else if adj > 0 {

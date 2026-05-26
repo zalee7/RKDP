@@ -249,6 +249,7 @@ private struct ColorLinkCellView: View {
     let isEndpoint: Bool
     let isActive: Bool
     let cellSize: CGFloat
+    @Environment(\.boardCosmetics) private var cosmetics
 
     private var color: Color {
         guard let pairID else { return Color(.systemBackground) }
@@ -258,9 +259,10 @@ private struct ColorLinkCellView: View {
 
     var body: some View {
         ZStack {
+            let tile = cosmetics.tileThemeStyle
             Rectangle()
-                .fill(Color(.systemBackground))
-                .overlay(Rectangle().stroke(Color.secondary.opacity(0.16), lineWidth: 1))
+                .fill(tile.inactiveFill.opacity(0.32))
+                .overlay(Rectangle().stroke(tile.border.opacity(0.18), lineWidth: 1))
 
             if pairID != nil {
                 RoundedRectangle(cornerRadius: isEndpoint ? cellSize * 0.28 : cellSize * 0.16)
@@ -273,6 +275,7 @@ private struct ColorLinkCellView: View {
                         RoundedRectangle(cornerRadius: isEndpoint ? cellSize * 0.28 : cellSize * 0.16)
                             .stroke(isActive ? Color.white : Color.black.opacity(0.12), lineWidth: isActive ? 3 : 1)
                     )
+                    .shadow(color: isActive ? tile.shadow : .clear, radius: 5)
             }
         }
         .frame(width: cellSize, height: cellSize)

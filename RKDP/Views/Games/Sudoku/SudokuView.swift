@@ -203,14 +203,17 @@ struct SudokuCellView: View {
 
     private var bg: Color {
         let theme = cosmetics.themeStyle
+        let tile = cosmetics.tileThemeStyle
         if cell.isSelected    { return theme.selectedCell }
         if cell.isInvalid     { return theme.invalidCell }
         if cell.isHighlighted { return theme.highlightedCell }
+        if cell.value != 0 && !cell.isGiven { return tile.inactiveFill.opacity(0.58) }
         return theme.cellBackground
     }
 
     var body: some View {
         let fs = cosmetics.fontStyle
+        let tile = cosmetics.tileThemeStyle
         ZStack {
             bg
             if cell.value != 0 {
@@ -218,12 +221,16 @@ struct SudokuCellView: View {
                     .font(.system(size: cellSize * 0.55,
                                   weight: cell.isGiven ? .bold : fs.weight,
                                   design: fs.design))
-                    .foregroundStyle(cell.isInvalid ? .red : (cell.isGiven ? .primary : .blue))
+                    .foregroundStyle(cell.isInvalid ? .red : (cell.isGiven ? .primary : tile.accent))
             } else if !cell.notes.isEmpty {
                 noteGrid(fs: fs)
             }
         }
         .frame(width: cellSize, height: cellSize)
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(cell.value != 0 && !cell.isGiven ? tile.border.opacity(0.38) : Color.clear, lineWidth: 1)
+        )
     }
 
     private func noteGrid(fs: NumberFontStyle) -> some View {

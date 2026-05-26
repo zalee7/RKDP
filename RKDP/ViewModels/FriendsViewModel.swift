@@ -24,11 +24,14 @@ final class FriendsViewModel: ObservableObject {
         listeners = [
             store.listenForFriends(userID: user.id) { [weak self] friendships in
                 Task { @MainActor in
-                    self?.friends = friendships.compactMap { friendship in
+                    guard let self else { return }
+                    let summaries = friendships.compactMap { friendship in
                         guard let friendID = friendship.friendID(for: user.id) else { return nil }
                         return FriendSummary(userID: friendID, username: friendship.friendUsername(for: user.id))
                     }
                     .sorted { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+                    self.friends = summaries
+                    await self.hydrateFriendAvatars(summaries)
                 }
             },
             store.listenForIncomingFriendRequests(userID: user.id) { [weak self] requests in
@@ -111,6 +114,28 @@ final class FriendsViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func hydrateFriendAvatars(_ summaries: [FriendSummary]) async {
+        var hydrated: [FriendSummary] = []
+        for summary in summaries {
+            do {
+                let friendUser = try await store.fetchUser(id: summary.userID)
+                hydrated.append(FriendSummary(
+                    userID: summary.userID,
+                    username: friendUser.username,
+                    avatarStyle: friendUser.cosmetics.avatarStyle
+                ))
+            } catch {
+                hydrated.append(summary)
+            }
+        }
+        hydrated.sort { $0.username.localizedCaseInsensitiveCompare($1.username) == .orderedAscending }
+
+        let currentIDs = Set(friends.map(\.userID))
+        let hydratedIDs = Set(hydrated.map(\.userID))
+        guard currentIDs == hydratedIDs else { return }
+        friends = hydrated
     }
 
     func acceptInvite(_ invite: ExhibitionInvite, currentUser: AppUser) async {

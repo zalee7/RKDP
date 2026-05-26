@@ -27,7 +27,7 @@ struct DailyTournament: Identifiable, Codable, Equatable, Hashable {
             rankTier: tier,
             entryFee: Wager.tournamentEntryFee(for: tier),
             seed: seed,
-            puzzleData: MultiplayerPuzzleDataFactory.encoded(mode: mode, difficulty: difficulty, seed: seed),
+            puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "tournament"),
             createdAt: startOfUTCHour(for: date),
             closesAt: nextUTCHour(after: date)
         )

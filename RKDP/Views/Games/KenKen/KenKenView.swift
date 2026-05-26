@@ -308,6 +308,7 @@ private struct GridDuelTile: View {
     let colorIndex: Int
     let colorCount: Int
     var compact = false
+    @Environment(\.boardCosmetics) private var cosmetics
 
     private var tileColor: Color {
         let palette: [Color] = [
@@ -322,10 +323,11 @@ private struct GridDuelTile: View {
     }
 
     var body: some View {
+        let tile = cosmetics.tileThemeStyle
         RoundedRectangle(cornerRadius: compact ? 4 : 10)
             .fill(tileColor.gradient)
-            .overlay(RoundedRectangle(cornerRadius: compact ? 4 : 10).stroke(Color.white.opacity(compact ? 0.55 : 0.82), lineWidth: compact ? 1 : 2))
-            .shadow(color: tileColor.opacity(compact ? 0.10 : 0.22), radius: compact ? 2 : 5)
+            .overlay(RoundedRectangle(cornerRadius: compact ? 4 : 10).stroke(tile.border.opacity(compact ? 0.55 : 0.82), lineWidth: compact ? 1 : 2))
+            .shadow(color: tile.shadow.opacity(compact ? 0.45 : 0.9), radius: compact ? 2 : 5)
             .padding(compact ? 1 : 3)
     }
 }

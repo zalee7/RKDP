@@ -34,7 +34,7 @@ final class ShopViewModel: ObservableObject {
     }
 
     var ownedItems: [CosmeticItem] {
-        sortedForOwnership(CosmeticCatalog.all.filter { isOwned($0) && !$0.category.isAvatarCategory })
+        sortedForOwnership(CosmeticCatalog.all.filter { isOwned($0) && !$0.category.isAvatarCategory && !$0.category.isLegacyStoreCategory })
     }
 
     private func sortedForOwnership(_ items: [CosmeticItem]) -> [CosmeticItem] {
@@ -123,6 +123,7 @@ final class ShopViewModel: ObservableObject {
         switch item.category {
         case .title:        return ownedCosmetics.equippedTitle == item.id
         case .boardTheme:   return ownedCosmetics.equippedBoardTheme == item.id
+        case .tileTheme:    return ownedCosmetics.equippedTileTheme == item.id
         case .numberFont:   return ownedCosmetics.equippedNumberFont == item.id
         case .cellBorder:   return ownedCosmetics.equippedCellBorder == item.id
         case .avatarHead:   return ownedCosmetics.equippedAvatarHead == item.id

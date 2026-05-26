@@ -5,6 +5,8 @@ struct FriendsView: View {
     @EnvironmentObject var auth: AuthViewModel
     @StateObject private var vm = FriendsViewModel()
     @State private var inviteFriend: FriendSummary?
+    @State private var showPartySetup = false
+    @State private var partyLaunch: PartyLaunch?
 
     var body: some View {
         NavigationStack {
@@ -13,6 +15,7 @@ struct FriendsView: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         header
+                        partySection
                         searchCard
                         if let error = vm.errorMessage {
                             Text(error)
@@ -38,6 +41,11 @@ struct FriendsView: View {
                     Task { await vm.sendInvite(from: user, to: friend, mode: mode, difficulty: difficulty, inviteType: inviteType) }
                 }
             }
+            .sheet(isPresented: $showPartySetup) {
+                PartySetupSheet { mode, difficulty in
+                    partyLaunch = PartyLaunch(mode: mode, difficulty: difficulty, autoCreate: true)
+                }
+            }
             .fullScreenCover(item: $vm.activeExhibitionSession, onDismiss: {
                 Task { await vm.closeActiveExhibitionInvite() }
                 vm.activeExhibitionSession = nil
@@ -46,6 +54,16 @@ struct FriendsView: View {
                     MatchmakingView(exhibitionSession: session, user: user) {
                         Task { await auth.refreshUser() }
                     }
+                }
+            }
+            .fullScreenCover(item: $partyLaunch) { launch in
+                NavigationStack {
+                    PartyRoomView(
+                        user: user,
+                        mode: launch.mode,
+                        difficulty: launch.difficulty,
+                        autoCreate: launch.autoCreate
+                    )
                 }
             }
         }
@@ -110,6 +128,46 @@ struct FriendsView: View {
         }
     }
 
+    private var partySection: some View {
+        sectionCard(title: "Party Mode") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Host up to 8 players with a join code. Everyone gets the same puzzle, with no rank or coins at stake.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Button {
+                        showPartySetup = true
+                    } label: {
+                        Label("Create Party", systemImage: "plus.circle.fill")
+                            .font(.caption.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(AppTheme.brandGradient)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        partyLaunch = PartyLaunch(mode: .colorLink, difficulty: .expert, autoCreate: false)
+                    } label: {
+                        Label("Join Code", systemImage: "number.circle.fill")
+                            .font(.caption.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.white.opacity(0.10))
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     private var invitesSection: some View {
         sectionCard(title: "Exhibition Invites") {
             if vm.incomingInvites.isEmpty && vm.outgoingInvites.isEmpty {
@@ -145,7 +203,7 @@ struct FriendsView: View {
             }
             ForEach(vm.friends) { friend in
                 HStack(spacing: 12) {
-                    avatar(username: friend.username)
+                    avatar(friend)
                     Text(friend.username)
                         .font(.headline)
                         .foregroundStyle(AppTheme.textPrimary)
@@ -246,6 +304,10 @@ struct FriendsView: View {
         StickDuelerAvatarView(style: .default, size: 44, initials: String(username.prefix(1)))
     }
 
+    private func avatar(_ friend: FriendSummary) -> some View {
+        StickDuelerAvatarView(style: friend.avatarStyle, size: 44, initials: String(friend.username.prefix(1)))
+    }
+
     private func emptyText(_ text: String) -> some View {
         Text(text)
             .font(.caption)
@@ -256,6 +318,135 @@ struct FriendsView: View {
     private func remainingText(_ invite: ExhibitionInvite) -> String {
         let seconds = max(0, Int(invite.expiresAt.timeIntervalSinceNow))
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+}
+
+private struct PartyLaunch: Identifiable {
+    let id = UUID()
+    let mode: GameMode
+    let difficulty: Difficulty
+    let autoCreate: Bool
+}
+
+private struct PartySetupSheet: View {
+    let onCreate: (GameMode, Difficulty) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var mode: GameMode = .colorLink
+    @State private var difficulty: Difficulty = .expert
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 18) {
+                        VStack(spacing: 8) {
+                            Text("Create Party")
+                                .font(.title.bold())
+                                .foregroundStyle(AppTheme.textPrimary)
+                            Text("Pick a shared puzzle. Friends can join with the room code.")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.top, 18)
+
+                        pickerSection(title: "Mode") {
+                            ForEach(GameMode.allCases) { candidate in
+                                setupRow(
+                                    title: candidate.displayName,
+                                    subtitle: candidate.description,
+                                    icon: candidate.icon,
+                                    selected: mode == candidate
+                                ) {
+                                    mode = candidate
+                                    difficulty = candidate.defaultDifficulty
+                                }
+                            }
+                        }
+
+                        pickerSection(title: mode == .anagram || mode == .hangman ? "Word Length" : "Difficulty") {
+                            ForEach(Difficulty.allCases, id: \.self) { candidate in
+                                setupRow(
+                                    title: mode.difficultyLabel(candidate),
+                                    subtitle: candidate.displayName,
+                                    icon: "slider.horizontal.3",
+                                    selected: difficulty == candidate
+                                ) {
+                                    difficulty = candidate
+                                }
+                            }
+                        }
+
+                        Button {
+                            onCreate(mode, difficulty)
+                            dismiss()
+                        } label: {
+                            Label("Create Room", systemImage: "person.3.fill")
+                                .font(.headline.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(AppTheme.brandGradient)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Party Setup")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.accentBright)
+                }
+            }
+        }
+    }
+
+    private func pickerSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline.bold())
+                .foregroundStyle(AppTheme.accentBright)
+            content()
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+    }
+
+    private func setupRow(title: String, subtitle: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selected ? AppTheme.brandGradient : LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 42, height: 42)
+                    .overlay(Image(systemName: icon).foregroundStyle(.white))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(AppTheme.teal)
+                }
+            }
+            .padding(10)
+            .background(selected ? AppTheme.crownGold.opacity(0.10) : Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -273,6 +464,7 @@ private struct InviteFriendSheet: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         VStack(spacing: 8) {
+                            StickDuelerAvatarView(style: friend.avatarStyle, size: 64, initials: String(friend.username.prefix(1)))
                             Text("Invite \(friend.username)")
                                 .font(.title.bold())
                                 .foregroundStyle(AppTheme.textPrimary)
