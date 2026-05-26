@@ -45,6 +45,7 @@ final class AuthViewModel: ObservableObject {
             let newUser = AppUser.makeNew(id: firebaseUser.uid, username: username, email: email)
             try await store.createUser(newUser)
             user = newUser
+            await NotificationTokenService.shared.syncCurrentToken()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -63,6 +64,7 @@ final class AuthViewModel: ObservableObject {
             loadedUser = await syncRankedPurchases(for: loadedUser)
             loadedUser = await applyPendingRankedOutcomes(for: loadedUser)
             user = loadedUser
+            await NotificationTokenService.shared.syncCurrentToken()
         } catch {
             // Doc missing — create a minimal profile so login never hard-fails
             let fallbackUsername = firebaseUser.displayName
@@ -75,6 +77,7 @@ final class AuthViewModel: ObservableObject {
             )
             try? await store.createUser(newUser)
             user = await syncRankedPurchases(for: newUser)
+            await NotificationTokenService.shared.syncCurrentToken()
         }
     }
 
