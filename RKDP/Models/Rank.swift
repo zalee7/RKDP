@@ -23,12 +23,12 @@ enum RankTier: Int, Codable, CaseIterable, Comparable {
 
     var color: Color {
         switch self {
-        case .bronze:   return Color(red: 0.8, green: 0.5, blue: 0.2)
-        case .silver:   return Color(red: 0.75, green: 0.75, blue: 0.75)
-        case .gold:     return Color(red: 1.0, green: 0.84, blue: 0.0)
-        case .platinum: return Color(red: 0.6, green: 0.9, blue: 0.9)
-        case .diamond:  return Color(red: 0.4, green: 0.7, blue: 1.0)
-        case .master:   return Color(red: 0.7, green: 0.2, blue: 0.9)
+        case .bronze:   return Color(red: 0.70, green: 0.38, blue: 0.14)
+        case .silver:   return Color(red: 0.45, green: 0.48, blue: 0.52)
+        case .gold:     return Color(red: 0.78, green: 0.53, blue: 0.02)
+        case .platinum: return Color(red: 0.10, green: 0.58, blue: 0.62)
+        case .diamond:  return Color(red: 0.12, green: 0.42, blue: 0.84)
+        case .master:   return Color(red: 0.58, green: 0.16, blue: 0.78)
         }
     }
 
