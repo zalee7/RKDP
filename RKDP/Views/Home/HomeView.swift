@@ -66,25 +66,31 @@ struct HomeView: View {
 
     @ViewBuilder
     private func userHeader(user: AppUser) -> some View {
-        HStack(spacing: 12) {
-            StickDuelerAvatarView(style: user.cosmetics.avatarStyle, size: 58)
+        Button {
+            showProfile = true
+        } label: {
+            HStack(spacing: 12) {
+                StickDuelerAvatarView(style: user.cosmetics.avatarStyle, size: 58)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(user.username)
-                    .font(.headline.bold())
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
-                CoinBadgeView(amount: user.coins)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(user.username)
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+                    CoinBadgeView(amount: user.coins)
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 320, alignment: .center)
+            .background(AppTheme.cardBackground.opacity(0.82))
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(AppTheme.cardBorder.opacity(0.9), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: 320, alignment: .center)
-        .background(AppTheme.cardBackground.opacity(0.82))
-        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(AppTheme.cardBorder.opacity(0.9), lineWidth: 1))
-        .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open profile for \(user.username)")
         .frame(maxWidth: .infinity)
         .padding(.horizontal)
     }

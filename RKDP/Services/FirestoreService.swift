@@ -433,16 +433,36 @@ final class FirestoreService {
     }
 
     func fetchRecentFinishedSessions(for userID: String, limit: Int = 20) async throws -> [GameSession] {
+        let fetchLimit = max(limit * 4, 80)
         let snapshot = try await db.collection("sessions")
             .whereField("playerIDs", arrayContains: userID)
-            .whereField("status", isEqualTo: SessionStatus.finished.rawValue)
-            .order(by: "finishedAt", descending: true)
-            .limit(to: limit)
+            .limit(to: fetchLimit)
             .getDocuments()
 
-        return try snapshot.documents
-            .map { try $0.data(as: GameSession.self) }
-            .filter { $0.matchKind == .ranked || $0.matchKind == .casual || $0.isExhibition }
+        return snapshot.documents
+            .compactMap { document -> GameSession? in
+                do {
+                    return try document.data(as: GameSession.self)
+                } catch {
+                    #if DEBUG
+                    print("Skipping malformed recent session \(document.documentID): \(error)")
+                    #endif
+                    return nil
+                }
+            }
+            .filter { session in
+                session.status == .finished &&
+                (session.matchKind == .ranked || session.matchKind == .casual || session.isExhibition)
+            }
+            .sorted { lhs, rhs in
+                recentSortDate(lhs) > recentSortDate(rhs)
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private func recentSortDate(_ session: GameSession) -> Date {
+        session.finishedAt ?? session.startedAt ?? session.createdAt
     }
 
     func listenForSession(id: String, onChange: @escaping (GameSession) -> Void) -> ListenerRegistration {
