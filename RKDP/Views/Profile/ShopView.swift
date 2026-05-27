@@ -466,11 +466,9 @@ struct ShopItemCard: View {
                         )
                 }
 
-                // Badges
-                VStack(alignment: .trailing, spacing: 4) {
-                    RarityBadgeView(rarity: item.rarity)
-                    HStack(spacing: 4) {
-                        if isLimited && !isOwned {
+                // Ownership badges
+                HStack(spacing: 4) {
+                    if isLimited && !isOwned {
                         Text("LIMITED")
                             .font(.system(size: 9, weight: .black))
                             .padding(.horizontal, 5).padding(.vertical, 2)
@@ -478,7 +476,7 @@ struct ShopItemCard: View {
                             .foregroundStyle(AppTheme.textOnColor)
                             .clipShape(Capsule())
                     }
-                        if isEquipped {
+                    if isEquipped {
                             Text("EQUIPPED")
                                 .font(.system(size: 9, weight: .black))
                                 .padding(.horizontal, 5).padding(.vertical, 2)
@@ -493,7 +491,6 @@ struct ShopItemCard: View {
                                 .foregroundStyle(AppTheme.textOnColor)
                                 .clipShape(Capsule())
                         }
-                    }
                 }
                 .padding(6)
             }
@@ -534,6 +531,10 @@ struct ShopItemCard: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(isLimited && !isOwned ? AppTheme.crownGold.opacity(0.65) : AppTheme.cardBorder, lineWidth: 1.5)
         )
+        .overlay(alignment: .bottomLeading) {
+            RarityBadgeView(rarity: item.rarity)
+                .padding(8)
+        }
     }
 
     private func iconForCategory(_ cat: CosmeticCategory) -> String {

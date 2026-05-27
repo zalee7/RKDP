@@ -1087,21 +1087,13 @@ struct GameModeCardView: View {
         if let user {
             let info = user.rank(for: mode)
             VStack(alignment: .trailing, spacing: 7) {
-                modeStatPill(label: "W/L") {
-                    RecordTextView(
-                        wins: info.wins,
-                        losses: info.losses,
-                        font: .system(size: 13, weight: .black)
-                    )
-                }
-
                 modeStatPill(label: "Best") {
                     Text(bestText(info))
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(AppTheme.accentBright.opacity(0.95))
                 }
             }
-            .frame(width: 88, alignment: .trailing)
+            .frame(width: 84, alignment: .trailing)
         }
     }
 
@@ -1642,7 +1634,7 @@ struct PartyRoomView: View {
                         .font(.headline.bold())
                         .foregroundStyle(AppTheme.textPrimary)
 
-                    TextField("ABC123", text: $vm.joinCode)
+                    TextField("", text: $vm.joinCode, prompt: Text("ABC123").foregroundStyle(AppTheme.textMuted))
                         .font(.system(size: 24, weight: .black, design: .rounded))
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
@@ -1650,6 +1642,7 @@ struct PartyRoomView: View {
                         .padding()
                         .background(AppTheme.controlBackground)
                         .foregroundStyle(AppTheme.textPrimary)
+                        .tint(AppTheme.accentBright)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.controlBorder, lineWidth: 1.25))
 

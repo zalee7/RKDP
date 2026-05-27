@@ -115,7 +115,7 @@ struct FriendsView: View {
     private var searchCard: some View {
         sectionCard(title: "Find Players") {
             HStack(spacing: 10) {
-                TextField("Exact username", text: $vm.searchText)
+                TextField("", text: $vm.searchText, prompt: Text("Exact username").foregroundStyle(AppTheme.textMuted))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
@@ -125,6 +125,7 @@ struct FriendsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.controlBorder, lineWidth: 1.25))
                     .foregroundStyle(AppTheme.textPrimary)
+                    .tint(AppTheme.accentBright)
                 Button {
                     Task { await vm.search(currentUserID: user.id) }
                 } label: {
@@ -238,7 +239,7 @@ struct FriendsView: View {
                         Text(friend.username)
                             .font(.headline)
                             .foregroundStyle(AppTheme.textPrimary)
-                        Text(vm.friendProfiles[friend.userID].map(friendStatsLine) ?? "Tap for profile")
+                        Text("Tap for profile")
                             .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
                             .lineLimit(1)

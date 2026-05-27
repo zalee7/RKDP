@@ -392,16 +392,17 @@ private struct AvatarEditorView: View {
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
             HStack(spacing: 8) {
-                TextField("FF2F78", text: $bodyHexInput)
+                TextField("", text: $bodyHexInput, prompt: Text("FF2F78").foregroundStyle(AppTheme.textMuted))
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .font(.system(.subheadline, design: .monospaced).bold())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .foregroundStyle(AppTheme.textPrimary)
-                    .background(Color.white.opacity(0.82))
+                    .tint(AppTheme.accentBright)
+                    .background(AppTheme.controlBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(bodyHexError == nil ? AppTheme.cardBorder : AppTheme.danger, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(bodyHexError == nil ? AppTheme.controlBorder : AppTheme.danger, lineWidth: 1.25))
                 Button("Save") {
                     Task { await saveBodyHex() }
                 }

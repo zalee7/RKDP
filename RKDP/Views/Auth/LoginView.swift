@@ -81,17 +81,24 @@ struct StyledTextField: View {
     var body: some View {
         Group {
             if isSecure {
-                SecureField(placeholder, text: $text)
+                SecureField("", text: $text, prompt: prompt)
             } else {
-                TextField(placeholder, text: $text)
+                TextField("", text: $text, prompt: prompt)
                     .keyboardType(keyboardType)
-                    .autocapitalization(.none)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
         }
         .padding()
-        .background(Color.white.opacity(0.09))
-        .foregroundStyle(.white)
+        .background(AppTheme.controlBackground)
+        .foregroundStyle(AppTheme.textPrimary)
+        .tint(AppTheme.accentBright)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.controlBorder, lineWidth: 1.25))
+        .shadow(color: AppTheme.softShadow.opacity(0.35), radius: 6, x: 0, y: 3)
+    }
+
+    private var prompt: Text {
+        Text(placeholder).foregroundStyle(AppTheme.textMuted)
     }
 }

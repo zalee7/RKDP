@@ -18,7 +18,7 @@ enum AppTheme {
 
     // Background: soft pastel party base inspired by the Puzzle Party logo.
     static let backgroundGradient = LinearGradient(
-        colors: [Color(hex: "FFF8EC"), Color(hex: "FCEBFA"), Color(hex: "E8F8F9")],
+        colors: [Color(hex: "FFF9F1"), Color(hex: "FFF1F7"), Color(hex: "EEF9FC")],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
 
@@ -105,34 +105,114 @@ enum AppTheme {
 }
 
 private struct ArenaBackgroundView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animatePieces = false
+
     var body: some View {
         ZStack {
             AppTheme.backgroundGradient
             RadialGradient(
-                colors: [AppTheme.teal.opacity(0.30), .clear],
-                center: .topLeading,
-                startRadius: 20,
-                endRadius: 430
-            )
-            RadialGradient(
-                colors: [AppTheme.hotPink.opacity(0.22), .clear],
-                center: .bottomTrailing,
-                startRadius: 60,
-                endRadius: 540
-            )
-            RadialGradient(
-                colors: [AppTheme.lime.opacity(0.32), .clear],
+                colors: [AppTheme.hotPink.opacity(0.16), .clear],
                 center: .topTrailing,
                 startRadius: 40,
-                endRadius: 460
+                endRadius: 520
             )
             RadialGradient(
-                colors: [AppTheme.crownGold.opacity(0.26), .clear],
-                center: .bottomLeading,
+                colors: [AppTheme.teal.opacity(0.15), .clear],
+                center: .topLeading,
                 startRadius: 30,
-                endRadius: 430
+                endRadius: 500
             )
+            RadialGradient(
+                colors: [AppTheme.crownGold.opacity(0.13), .clear],
+                center: .bottomLeading,
+                startRadius: 60,
+                endRadius: 520
+            )
+
+            ForEach(PastelPuzzlePiece.all) { piece in
+                PuzzlePieceBackgroundShape()
+                    .fill(piece.color.opacity(piece.opacity))
+                    .frame(width: piece.size, height: piece.size)
+                    .rotationEffect(.degrees(piece.rotation + motion(piece.rotationDrift)))
+                    .offset(x: piece.offset.width + motion(piece.drift.width),
+                            y: piece.offset.height + motion(piece.drift.height))
+                    .blur(radius: piece.blur)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: piece.duration).repeatForever(autoreverses: true).delay(piece.delay), value: animatePieces)
+            }
         }
+        .onAppear { animatePieces = !reduceMotion }
+        .onChange(of: reduceMotion) { _, isReduced in
+            animatePieces = !isReduced
+        }
+    }
+
+    private func motion(_ value: CGFloat) -> CGFloat {
+        guard !reduceMotion else { return 0 }
+        return animatePieces ? value : -value
+    }
+}
+
+private struct PastelPuzzlePiece: Identifiable {
+    let id: Int
+    let color: Color
+    let size: CGFloat
+    let offset: CGSize
+    let drift: CGSize
+    let rotation: CGFloat
+    let rotationDrift: CGFloat
+    let opacity: Double
+    let blur: CGFloat
+    let duration: Double
+    let delay: Double
+
+    static let all: [PastelPuzzlePiece] = [
+        .init(id: 0, color: AppTheme.hotPink, size: 170, offset: CGSize(width: -155, height: -315), drift: CGSize(width: 18, height: 14), rotation: -14, rotationDrift: 5, opacity: 0.095, blur: 0.8, duration: 7.5, delay: 0.0),
+        .init(id: 1, color: AppTheme.teal, size: 145, offset: CGSize(width: 168, height: -250), drift: CGSize(width: -14, height: 16), rotation: 18, rotationDrift: -4, opacity: 0.085, blur: 0.9, duration: 8.4, delay: 0.4),
+        .init(id: 2, color: AppTheme.coral, size: 205, offset: CGSize(width: 170, height: 18), drift: CGSize(width: 16, height: -12), rotation: 10, rotationDrift: 4, opacity: 0.070, blur: 1.0, duration: 9.2, delay: 0.8),
+        .init(id: 3, color: AppTheme.crownGold, size: 155, offset: CGSize(width: -190, height: 160), drift: CGSize(width: 14, height: -18), rotation: 24, rotationDrift: -5, opacity: 0.090, blur: 0.8, duration: 8.8, delay: 1.1),
+        .init(id: 4, color: AppTheme.iconBlue, size: 190, offset: CGSize(width: -82, height: 345), drift: CGSize(width: -12, height: 16), rotation: -28, rotationDrift: 6, opacity: 0.075, blur: 1.1, duration: 10.0, delay: 0.2),
+        .init(id: 5, color: AppTheme.hotPink, size: 128, offset: CGSize(width: 210, height: 355), drift: CGSize(width: -18, height: -10), rotation: 34, rotationDrift: -6, opacity: 0.070, blur: 0.9, duration: 8.0, delay: 1.5)
+    ]
+}
+
+private struct PuzzlePieceBackgroundShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let x = rect.minX
+        let y = rect.minY
+        var path = Path()
+        path.move(to: CGPoint(x: x + w * 0.18, y: y + h * 0.12))
+        path.addLine(to: CGPoint(x: x + w * 0.40, y: y + h * 0.12))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.60, y: y + h * 0.12),
+            control1: CGPoint(x: x + w * 0.40, y: y - h * 0.08),
+            control2: CGPoint(x: x + w * 0.60, y: y - h * 0.08)
+        )
+        path.addLine(to: CGPoint(x: x + w * 0.82, y: y + h * 0.12))
+        path.addLine(to: CGPoint(x: x + w * 0.82, y: y + h * 0.40))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.82, y: y + h * 0.60),
+            control1: CGPoint(x: x + w * 1.04, y: y + h * 0.40),
+            control2: CGPoint(x: x + w * 1.04, y: y + h * 0.60)
+        )
+        path.addLine(to: CGPoint(x: x + w * 0.82, y: y + h * 0.88))
+        path.addLine(to: CGPoint(x: x + w * 0.58, y: y + h * 0.88))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.42, y: y + h * 0.88),
+            control1: CGPoint(x: x + w * 0.57, y: y + h * 1.06),
+            control2: CGPoint(x: x + w * 0.43, y: y + h * 1.06)
+        )
+        path.addLine(to: CGPoint(x: x + w * 0.18, y: y + h * 0.88))
+        path.addLine(to: CGPoint(x: x + w * 0.18, y: y + h * 0.60))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.18, y: y + h * 0.40),
+            control1: CGPoint(x: x - w * 0.04, y: y + h * 0.60),
+            control2: CGPoint(x: x - w * 0.04, y: y + h * 0.40)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
