@@ -37,12 +37,30 @@ struct WordleView: View {
         self.onChangeDifficulty = onChangeDifficulty
         self.onTryRanked = onTryRanked
         self.onHome = onHome
+        let targetWords = Self.resolvedTargetWords(
+            puzzleData: puzzleData,
+            seed: seed,
+            rounds: rounds,
+            isOnline: sessionID != nil
+        )
         _vm = StateObject(wrappedValue: WordleViewModel(
             difficulty: difficulty,
             seed: seed,
             totalRounds: rounds,
-            targetWords: MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.targets
+            targetWords: targetWords
         ))
+    }
+
+    private static func resolvedTargetWords(puzzleData: String?, seed: Int?, rounds: Int, isOnline: Bool) -> [String]? {
+        let decoded = MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.targets ?? []
+        guard isOnline else { return decoded.isEmpty ? nil : decoded }
+        let baseSeed = seed ?? 0
+        let generated = (0..<rounds).map { WordleGame.targetWord(seed: baseSeed, round: $0) }
+        let targets = Array((decoded + generated).prefix(rounds))
+        if decoded.count < rounds {
+            print("Puzzle data warning: repaired Wordle targets from shared seed")
+        }
+        return targets
     }
 
     var body: some View {
@@ -399,6 +417,18 @@ struct WordleTileView: View {
 
     @State private var flipDegrees: Double = 0
 
+    private static func resolvedTargetWords(puzzleData: String?, seed: Int?, rounds: Int, isOnline: Bool) -> [String]? {
+        let decoded = MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.targets ?? []
+        guard isOnline else { return decoded.isEmpty ? nil : decoded }
+        let baseSeed = seed ?? 0
+        let generated = (0..<rounds).map { WordleGame.targetWord(seed: baseSeed, round: $0) }
+        let targets = Array((decoded + generated).prefix(rounds))
+        if decoded.count < rounds {
+            print("Puzzle data warning: repaired Wordle targets from shared seed")
+        }
+        return targets
+    }
+
     var body: some View {
         GeometryReader { geo in
             let size = min(geo.size.width, geo.size.height)
@@ -471,6 +501,18 @@ private struct KeyButton: View {
     let action: () -> Void
 
     private var isWide: Bool { key == "ENTER" || key == "⌫" }
+
+    private static func resolvedTargetWords(puzzleData: String?, seed: Int?, rounds: Int, isOnline: Bool) -> [String]? {
+        let decoded = MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.targets ?? []
+        guard isOnline else { return decoded.isEmpty ? nil : decoded }
+        let baseSeed = seed ?? 0
+        let generated = (0..<rounds).map { WordleGame.targetWord(seed: baseSeed, round: $0) }
+        let targets = Array((decoded + generated).prefix(rounds))
+        if decoded.count < rounds {
+            print("Puzzle data warning: repaired Wordle targets from shared seed")
+        }
+        return targets
+    }
 
     var body: some View {
         Button(action: action) {

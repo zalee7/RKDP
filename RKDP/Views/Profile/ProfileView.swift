@@ -9,7 +9,9 @@ struct ProfileView: View {
     @State private var isGrantingTesterAccess = false
     @State private var selectedOwnedCategory: CosmeticCategory = .title
     @State private var showAvatarEditor = false
+    @State private var showGameCustomizer = false
     @State private var recentGames: [GameSession] = []
+    @State private var onlineStatGames: [GameSession] = []
     @State private var isLoadingRecentGames = false
     @State private var recentGamesError: String?
     @State private var selectedRecentGame: GameSession?
@@ -32,15 +34,28 @@ struct ProfileView: View {
                         VStack(spacing: 12) {
                             StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 96)
 
-                            Button { showAvatarEditor = true } label: {
-                                Label("Customize Avatar", systemImage: "sparkles")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(AppTheme.hotPink.opacity(0.18))
-                                    .foregroundStyle(AppTheme.hotPink)
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(AppTheme.hotPink.opacity(0.45), lineWidth: 1))
+                            HStack(spacing: 10) {
+                                Button { showAvatarEditor = true } label: {
+                                    Label("Customize Profile", systemImage: "sparkles")
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(AppTheme.hotPink.opacity(0.18))
+                                        .foregroundStyle(AppTheme.hotPink)
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(AppTheme.hotPink.opacity(0.45), lineWidth: 1))
+                                }
+
+                                Button { showGameCustomizer = true } label: {
+                                    Label("Game Customization", systemImage: "paintpalette.fill")
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(AppTheme.teal.opacity(0.18))
+                                        .foregroundStyle(AppTheme.teal)
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().stroke(AppTheme.teal.opacity(0.45), lineWidth: 1))
+                                }
                             }
 
                             Text(user.username).font(.title2.bold()).foregroundStyle(AppTheme.textPrimary)
@@ -75,8 +90,6 @@ struct ProfileView: View {
                         }
                         .padding(.top, 24)
 
-                        recentGamesSection
-
                         // Per-mode ranks
                         sectionCard(title: "Rankings") {
                             VStack(spacing: 10) {
@@ -89,83 +102,10 @@ struct ProfileView: View {
                             }
                         }
 
+                        recentGamesSection
 
-                        // Owned cosmetics
-                        sectionCard(title: "Owned Cosmetics") {
-                            let ownedItems = shop.ownedItems
-                            let categoryItems = ownedItems.filter { $0.category == selectedOwnedCategory }
-                            if ownedItems.isEmpty {
-                                Text("Bought cosmetics will appear here for quick equipping.")
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.textSecondary)
-                            } else {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 8) {
-                                            ForEach(nonAvatarCosmeticCategories, id: \.self) { category in
-                                                let count = ownedItems.filter { $0.category == category }.count
-                                                Button { selectedOwnedCategory = category } label: {
-                                                    HStack(spacing: 5) {
-                                                        Text(category.rawValue)
-                                                        Text("\(count)")
-                                                            .font(.caption2.bold())
-                                                            .padding(.horizontal, 5)
-                                                            .padding(.vertical, 2)
-                                                            .background(Color.white.opacity(selectedOwnedCategory == category ? 0.22 : 0.10))
-                                                            .clipShape(Capsule())
-                                                    }
-                                                    .font(.caption.bold())
-                                                    .padding(.horizontal, 10)
-                                                    .padding(.vertical, 8)
-                                                    .background(selectedOwnedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
-                                                    .foregroundStyle(selectedOwnedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
-                                                    .clipShape(Capsule())
-                                                    .overlay(Capsule().stroke(selectedOwnedCategory == category ? AppTheme.hotPink.opacity(0.75) : AppTheme.cardBorder, lineWidth: 1))
-                                                }
-                                                .disabled(count == 0)
-                                                .opacity(count == 0 ? 0.45 : 1)
-                                            }
-                                        }
-                                    }
-
-                                    if categoryItems.isEmpty {
-                                        Text("No owned \(selectedOwnedCategory.rawValue.lowercased()) yet.")
-                                            .font(.caption)
-                                            .foregroundStyle(AppTheme.textSecondary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .padding(.vertical, 8)
-                                    } else {
-                                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                                            ForEach(categoryItems) { item in
-                                                ShopItemCard(
-                                                    item: item,
-                                                    isOwned: true,
-                                                    isEquipped: shop.isEquipped(item),
-                                                    canAfford: true,
-                                                    isLimited: false
-                                                ) {
-                                                    Task {
-                                                        if await shop.equip(item) {
-                                                            await auth.refreshUser()
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Career stats
-                        sectionCard(title: "Career Stats") {
-                            let totalWins   = user.ranks.values.reduce(0) { $0 + $1.wins }
-                            let totalLosses = user.ranks.values.reduce(0) { $0 + $1.losses }
-                            VStack(spacing: 8) {
-                                StatRow(label: "Total Wins",   value: "\(totalWins)")
-                                StatRow(label: "Total Losses", value: "\(totalLosses)")
-                                StatRow(label: "Total Points", value: "\(user.totalRankPoints)")
-                            }
+                        sectionCard(title: "Online Stats") {
+                            RecentOnlineStatsView(sessions: onlineStatGames, currentUserID: user.id, totalRankPoints: user.totalRankPoints)
                         }
 
                         // Sign out
@@ -199,6 +139,11 @@ struct ProfileView: View {
                     await auth.refreshUser()
                 }
             }
+            .sheet(isPresented: $showGameCustomizer) {
+                GameCustomizationView(shop: shop) {
+                    await auth.refreshUser()
+                }
+            }
             .sheet(item: $selectedRecentGame) { session in
                 MatchBreakdownView(
                     session: session,
@@ -213,10 +158,6 @@ struct ProfileView: View {
                 await loadRecentGames()
             }
         }
-    }
-
-    private var nonAvatarCosmeticCategories: [CosmeticCategory] {
-        CosmeticCategory.allCases.filter { !$0.isAvatarCategory && !$0.isLegacyStoreCategory }
     }
 
     private var recentGamesSection: some View {
@@ -278,7 +219,10 @@ struct ProfileView: View {
         isLoadingRecentGames = true
         recentGamesError = nil
         do {
-            recentGames = try await FirestoreService.shared.fetchRecentFinishedSessions(for: user.id, limit: 20)
+            async let recent = FirestoreService.shared.fetchRecentFinishedSessions(for: user.id, limit: 20)
+            async let cumulative = FirestoreService.shared.fetchFinishedOnlineSessions(for: user.id)
+            recentGames = try await recent
+            onlineStatGames = try await cumulative
         } catch {
             recentGamesError = "Could not load recent games right now."
         }
@@ -309,7 +253,7 @@ private struct AvatarEditorView: View {
     @State private var bodyHexInput: String
     @State private var bodyHexError: String?
 
-    private let categories: [CosmeticCategory] = [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura]
+    private let categories: [CosmeticCategory] = [.title, .avatarHead, .avatarFace, .avatarOutfit, .avatarAura]
 
     init(shop: ShopViewModel, onChanged: @escaping () async -> Void) {
         self.shop = shop
@@ -325,10 +269,10 @@ private struct AvatarEditorView: View {
                     VStack(spacing: 18) {
                         StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 150)
                             .padding(.top, 18)
-                        Text("Puzzle Pal")
+                        Text("Puzzle Profile")
                             .font(.title2.bold())
                             .foregroundStyle(AppTheme.textPrimary)
-                        Text("Avatar parts are cosmetic only and never affect ranked play.")
+                        Text("Equip owned avatar parts and name titles here. Buy new cosmetics in the Shop.")
                             .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
                             .multilineTextAlignment(.center)
@@ -362,11 +306,11 @@ private struct AvatarEditorView: View {
                     }
                 }
             }
-            .navigationTitle("Customize Avatar")
+            .navigationTitle("Customize Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .alert(
-                "Avatar update failed",
+                "Profile update failed",
                 isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
             ) {
                 Button("OK") { shop.errorMessage = nil }
@@ -443,24 +387,14 @@ private struct AvatarEditorView: View {
     private var avatarItemsSection: some View {
         let allItems = CosmeticCatalog.all.filter { $0.category == selectedCategory }
         let ownedItems = allItems.filter { shop.isOwned($0) }
-        let availableItems = DailyRotation.availableItems(for: selectedCategory, ownedIDs: shop.ownedCosmetics.purchasedIDs)
 
         return VStack(alignment: .leading, spacing: 18) {
             if !ownedItems.isEmpty {
                 avatarItemGroup(
                     title: "Owned",
-                    subtitle: "Equip the parts you already unlocked.",
+                    subtitle: selectedCategory == .title ? "Equip your saved name title." : "Equip the parts you already unlocked.",
                     items: ownedItems,
                     tint: AppTheme.teal
-                )
-            }
-
-            if !availableItems.isEmpty {
-                avatarItemGroup(
-                    title: "Available",
-                    subtitle: "Today’s rotating avatar parts.",
-                    items: availableItems,
-                    tint: AppTheme.hotPink
                 )
             }
         }
@@ -487,8 +421,7 @@ private struct AvatarEditorView: View {
                         isLimited: false
                     ) {
                         Task {
-                            let changed = shop.isOwned(item) ? await shop.equip(item) : await shop.purchase(item)
-                            if changed { await onChanged() }
+                            if await shop.equip(item) { await onChanged() }
                         }
                     }
                 }
@@ -506,6 +439,7 @@ private struct AvatarEditorView: View {
 
     private func label(for category: CosmeticCategory) -> String {
         switch category {
+        case .title: return "Title"
         case .avatarHead: return "Head"
         case .avatarFace: return "Face"
         case .avatarOutfit: return "Body"
@@ -525,6 +459,119 @@ private struct AvatarEditorView: View {
         bodyHexInput = normalized
         if await shop.setCustomAvatarBodyHex(normalized) {
             await onChanged()
+        }
+    }
+}
+
+private struct GameCustomizationView: View {
+    @ObservedObject var shop: ShopViewModel
+    var onChanged: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedCategory: CosmeticCategory = .boardTheme
+
+    private let categories: [CosmeticCategory] = [.boardTheme, .tileTheme]
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text("Tune how boards and tiles look across your games.")
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 18)
+                            .padding(.horizontal)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categories, id: \.self) { category in
+                                    Button { selectedCategory = category } label: {
+                                        Text(label(for: category))
+                                            .font(.caption.bold())
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(selectedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
+                                            .foregroundStyle(selectedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        ownedGameItems
+                            .padding(.horizontal)
+                            .padding(.bottom, 24)
+                    }
+                }
+            }
+            .navigationTitle("Game Customization")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .alert(
+                "Customization failed",
+                isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
+            ) {
+                Button("OK") { shop.errorMessage = nil }
+            } message: {
+                Text(shop.errorMessage ?? "")
+            }
+        }
+    }
+
+    private var ownedGameItems: some View {
+        let items = CosmeticCatalog.all
+            .filter { $0.category == selectedCategory && shop.isOwned($0) }
+            .sorted { lhs, rhs in
+                if shop.isEquipped(lhs) != shop.isEquipped(rhs) { return shop.isEquipped(lhs) }
+                if lhs.rarity != rhs.rarity { return lhs.rarity.rawValue < rhs.rarity.rawValue }
+                return lhs.name < rhs.name
+            }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Owned \(label(for: selectedCategory))")
+                .font(.headline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+
+            if items.isEmpty {
+                Text("Owned game cosmetics will appear here after you unlock them in the Shop.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(items) { item in
+                        ShopItemCard(
+                            item: item,
+                            isOwned: true,
+                            isEquipped: shop.isEquipped(item),
+                            canAfford: true,
+                            isLimited: false
+                        ) {
+                            Task {
+                                if await shop.equip(item) {
+                                    await onChanged()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func label(for category: CosmeticCategory) -> String {
+        switch category {
+        case .boardTheme: return "Board / Background Themes"
+        case .tileTheme: return "Tile Themes"
+        default: return category.rawValue
         }
     }
 }
@@ -549,12 +596,11 @@ struct ModeRankRow: View {
                 RankDivisionProgressView(info: info, height: 4, spacing: 3)
                     .frame(width: 112)
                 Text(info.nextRankStepText).font(.caption).foregroundStyle(AppTheme.textSecondary)
-                if let best = info.bestScore {
-                    Text("Best \(best) pts").font(.system(size: 10)).foregroundStyle(AppTheme.accentBright)
-                } else if let best = info.bestTime {
-                    Text("Best \(best / 60):\(String(format: "%02d", best % 60))")
-                        .font(.system(size: 10)).foregroundStyle(AppTheme.accentBright)
-                }
+                Text("Solo \(info.soloBest?.displayText(for: mode) ?? "--") · Online \(info.onlineBest?.displayText(for: mode) ?? "--")")
+                    .font(.system(size: 10))
+                    .foregroundStyle(AppTheme.accentBright)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
             }
         }
     }
@@ -571,6 +617,86 @@ struct StatRow: View {
             Text(value).bold().foregroundStyle(AppTheme.textPrimary)
         }
         .font(.subheadline)
+    }
+}
+
+private struct RecentOnlineStatsView: View {
+    let sessions: [GameSession]
+    let currentUserID: String
+    let totalRankPoints: Int
+
+    private var ranked: RecentTypeRecord { record(for: { $0.matchKind == .ranked }) }
+    private var casual: RecentTypeRecord { record(for: { $0.matchKind == .casual }) }
+    private var friends: RecentTypeRecord { record(for: { $0.isExhibition }) }
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statTile("Ranked", ranked.display, "trophy.fill", AppTheme.crownGold)
+            statTile("Casual", casual.display, "shuffle.circle.fill", AppTheme.teal)
+            statTile("Friends", friends.display, "person.2.fill", AppTheme.hotPink)
+            statTile("Best Type", bestTypeText, "star.fill", AppTheme.accentBright)
+            statTile("Total Points", "\(totalRankPoints)", "sparkles", AppTheme.crownGold)
+        }
+        Text("Stats include all completed online matches.")
+            .font(.caption2)
+            .foregroundStyle(AppTheme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statTile(_ title: String, _ value: String, _ icon: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: icon)
+                .font(.caption.bold())
+                .foregroundStyle(color)
+            Text(title)
+                .font(.caption2.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(value)
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.controlBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.controlBorder, lineWidth: 1))
+    }
+
+    private var bestTypeText: String {
+        let values = [
+            ("Ranked", ranked.wins),
+            ("Casual", casual.wins),
+            ("Friends", friends.wins)
+        ]
+        guard let best = values.max(by: { $0.1 < $1.1 }), best.1 > 0 else {
+            return "No games yet"
+        }
+        return best.0
+    }
+
+    private func record(for predicate: (GameSession) -> Bool) -> RecentTypeRecord {
+        sessions.filter(predicate).reduce(into: RecentTypeRecord()) { partial, session in
+            switch session.result(for: currentUserID) ?? .draw {
+            case .win:
+                partial.wins += 1
+            case .loss, .abandoned:
+                partial.losses += 1
+            case .draw:
+                partial.draws += 1
+            }
+        }
+    }
+}
+
+private struct RecentTypeRecord {
+    var wins = 0
+    var losses = 0
+    var draws = 0
+
+    var display: String {
+        "\(wins)-\(losses)-\(draws)"
     }
 }
 

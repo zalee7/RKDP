@@ -135,10 +135,10 @@ struct SoloResultOverlay: View {
                 .font(.headline.bold())
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(filled ? AnyShapeStyle(AppTheme.modeGradient(result.mode)) : AnyShapeStyle(AppTheme.cardBackground))
-                .foregroundStyle(.white)
+                .background(filled ? AnyShapeStyle(AppTheme.modeGradient(result.mode)) : AnyShapeStyle(AppTheme.controlBackground))
+                .foregroundStyle(filled ? AppTheme.textOnColor : AppTheme.textPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.cardBorder, lineWidth: filled ? 0 : 1))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(filled ? Color.clear : AppTheme.controlBorder, lineWidth: filled ? 0 : 1.5))
         }
     }
 }

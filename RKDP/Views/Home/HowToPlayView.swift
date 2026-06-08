@@ -7,11 +7,8 @@ struct HowToPlayView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.07, green: 0.07, blue: 0.18), Color(red: 0.12, green: 0.08, blue: 0.22)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                AppTheme.arenaBackground
+                    .ignoresSafeArea()
 
                 TabView(selection: $selectedTab) {
                     ForEach(GameMode.allCases.indices, id: \.self) { index in
@@ -27,7 +24,7 @@ struct HowToPlayView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }.foregroundStyle(.white)
+                    Button("Done") { dismiss() }.foregroundStyle(AppTheme.accentBright)
                 }
             }
         }
@@ -40,13 +37,13 @@ struct HowToPlayView: View {
                 // Icon header
                 VStack(spacing: 10) {
                     RoundedRectangle(cornerRadius: 20)
-                        .fill(mode.accentColor.gradient)
+                        .fill(AppTheme.modeGradient(mode))
                         .frame(width: 80, height: 80)
-                        .overlay(Image(systemName: mode.icon).font(.system(size: 36)).foregroundStyle(.white))
-                        .shadow(color: mode.accentColor.opacity(0.5), radius: 12)
+                        .overlay(Image(systemName: mode.icon).font(.system(size: 36)).foregroundStyle(AppTheme.textPrimary))
+                        .shadow(color: AppTheme.modeShadow(mode), radius: 12)
                     Text(mode.displayName)
                         .font(.title.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.textPrimary)
                 }
                 .padding(.top, 20)
 
@@ -56,22 +53,23 @@ struct HowToPlayView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(section.title)
                                 .font(.headline)
-                                .foregroundStyle(mode.accentColor)
+                                .foregroundStyle(AppTheme.modeAccent(mode))
                             ForEach(section.bullets, id: \.self) { bullet in
                                 HStack(alignment: .top, spacing: 10) {
                                     Circle()
-                                        .fill(mode.accentColor)
+                                        .fill(AppTheme.modeAccent(mode))
                                         .frame(width: 6, height: 6)
                                         .padding(.top, 6)
                                     Text(bullet)
                                         .font(.subheadline)
-                                        .foregroundStyle(.white.opacity(0.85))
+                                        .foregroundStyle(AppTheme.textSecondary)
                                 }
                             }
                         }
                         .padding()
-                        .background(Color.white.opacity(0.07))
+                        .background(AppTheme.cardBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.cardBorder, lineWidth: 1))
                     }
                 }
                 .padding(.horizontal)
@@ -80,16 +78,17 @@ struct HowToPlayView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Difficulties")
                         .font(.headline)
-                        .foregroundStyle(mode.accentColor)
+                        .foregroundStyle(AppTheme.modeAccent(mode))
                     ForEach(Difficulty.allCases, id: \.self) { d in
                         HStack {
-                            Text(mode.difficultyLabel(d)).font(.subheadline.bold()).foregroundStyle(.white)
+                            Text(mode.difficultyLabel(d)).font(.subheadline.bold()).foregroundStyle(AppTheme.textPrimary)
                             Spacer()
-                            Text("\(String(format: "%.1f", mode.pointMultiplier(for: d)))x ranked points").font(.caption).foregroundStyle(.white.opacity(0.6))
+                            Text("\(String(format: "%.1f", mode.pointMultiplier(for: d)))x ranked points").font(.caption).foregroundStyle(AppTheme.textMuted)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.white.opacity(0.07))
+                        .background(AppTheme.controlBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.controlBorder, lineWidth: 1))
                     }
                 }
                 .padding(.horizontal)
@@ -199,7 +198,7 @@ struct HowToPlayView: View {
         case .wordHunt:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Find as many hidden words as you can in the letter grid.",
+                    "Find as many valid words as you can in the letter grid.",
                     "Difficulty changes only the board size: 4×4, 5×5, 6×6, or 7×7.",
                     "Words must be 3 or more letters and traced through adjacent tiles.",
                     "Tiles can only be used once per word; diagonal connections count, but traced paths cannot be undone by dragging backward.",
@@ -231,9 +230,9 @@ struct HowToPlayView: View {
                     "Wrong letters raise the lava meter and appear in the wrong letters row.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players get the same category, starter letter, and target word.",
-                    "Ranked Lava Rescue has a 1:30 timer; solo Lava Rescue is untimed.",
-                    "Solved beats unsolved. Ties use fewer wrong letters, then faster time.",
+                    "Both players get the same three categories, starter letters, and target words.",
+                    "Online Lava Rescue is best-of-3: first to rescue 2 words wins.",
+                    "If nobody clinches, solved rounds win; wrong letters and time break ties.",
                 ]),
             ]
         case .wordle:
@@ -268,14 +267,14 @@ struct RankGuideView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "trophy.fill")
                         .font(.system(size: 48))
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(AppTheme.crownGold)
                         .padding(.top, 24)
                     Text("Rank System")
                         .font(.title.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.textPrimary)
                     Text("Each game mode has its own independent rank.\nWin matches to climb divisions, then promote tiers. Ranked coin wagers are fixed by tier.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
@@ -290,7 +289,7 @@ struct RankGuideView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("How Ranked Works")
                         .font(.headline)
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(AppTheme.crownGold)
 
                     infoRow(icon: "checkmark.circle.fill", color: .green,  text: "Win: +30 pts (×difficulty multiplier)")
                     infoRow(icon: "xmark.circle.fill",    color: .red,    text: "Loss: −15 pts (×difficulty multiplier)")
@@ -302,8 +301,9 @@ struct RankGuideView: View {
                     infoRow(icon: "clock.fill",           color: .purple, text: "Difficulty and opponent division set rank points; time is a tie-breaker in some modes")
                 }
                 .padding()
-                .background(Color.white.opacity(0.07))
+                .background(AppTheme.cardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppTheme.cardBorder, lineWidth: 1))
                 .padding(.horizontal)
                 .padding(.bottom, 40)
             }
@@ -314,14 +314,14 @@ struct RankGuideView: View {
     private func infoRow(icon: String, color: Color, text: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon).foregroundStyle(color)
-            Text(text).font(.subheadline).foregroundStyle(.white.opacity(0.85))
+            Text(text).font(.subheadline).foregroundStyle(AppTheme.textSecondary)
         }
     }
 
     private func coinInfoRow(text: String) -> some View {
         HStack(spacing: 10) {
             CoinIconView(size: 19)
-            Text(text).font(.subheadline).foregroundStyle(.white.opacity(0.85))
+            Text(text).font(.subheadline).foregroundStyle(AppTheme.textSecondary)
         }
     }
 }
@@ -346,22 +346,29 @@ struct RankTierRow: View {
             RankIconView(tier: tier, division: .one, size: 34)
                 .frame(width: 36)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(tier.displayName)
                         .font(.headline)
                         .foregroundStyle(tier.color)
                     Text(tierRangeText)
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(AppTheme.textMuted)
                 }
-                RankDivisionProgressView(info: sampleInfo, height: 4, spacing: 4, showLabels: true)
-                    .frame(width: 132)
-                Text(RankDivision.progression.map { tier.divisionRangeLabel(for: $0) }.joined(separator: "  ·  "))
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.58))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                VStack(spacing: 4) {
+                    RankDivisionProgressView(info: sampleInfo, height: 4, spacing: 4, showLabels: true)
+                    HStack(spacing: 0) {
+                        ForEach(RankDivision.progression, id: \.self) { division in
+                            Text(tier.divisionRangeLabel(for: division))
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(AppTheme.textMuted)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.68)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                    }
+                }
+                .frame(width: 156)
             }
 
             Spacer()
@@ -371,14 +378,14 @@ struct RankTierRow: View {
                     CoinIconView(size: 16)
                     Text("\(amount)")
                         .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.82))
+                        .foregroundStyle(AppTheme.textPrimary)
                 }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(tier.color.opacity(0.12))
+        .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(tier.color.opacity(0.3), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(tier.color.opacity(0.45), lineWidth: 1))
     }
 }

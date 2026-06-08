@@ -17,8 +17,8 @@ final class ShopViewModel: ObservableObject {
     }
 
     func items(for category: CosmeticCategory) -> [CosmeticItem] {
-        guard !category.isAvatarCategory else { return [] }
-        let items = DailyRotation.availableItems(for: category, ownedIDs: ownedCosmetics.purchasedIDs)
+        guard !category.isLegacyStoreCategory, category != .avatarPose else { return [] }
+        let items = DailyRotation.availableItems(for: category, ownedIDs: [])
         return items.sorted { lhs, rhs in
             if lhs.price != rhs.price { return lhs.price < rhs.price }
             return lhs.name < rhs.name
@@ -107,8 +107,10 @@ final class ShopViewModel: ObservableObject {
     }
 
     func isInTodaysRotation(_ item: CosmeticItem) -> Bool {
-        guard item.category == .title, item.price > 0 else { return false }
-        return DailyRotation.todaysTitles().contains { $0.id == item.id }
+        guard item.price > 0,
+              !item.category.isLegacyStoreCategory,
+              item.category != .avatarPose else { return false }
+        return DailyRotation.availableItems(for: item.category, ownedIDs: []).contains { $0.id == item.id }
     }
 
     func isEquipped(_ item: CosmeticItem) -> Bool {

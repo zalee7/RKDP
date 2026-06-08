@@ -13,11 +13,13 @@ final class FriendsViewModel: ObservableObject {
     @Published var friendProfiles: [String: AppUser] = [:]
     @Published var errorMessage: String?
     @Published var activeExhibitionSession: GameSession?
+    @Published var inviteSessions: [String: GameSession] = [:]
     private var activeExhibitionInviteID: String?
     private var activeExhibitionInviteType: ExhibitionInviteType = .playNow
 
     private let store = FirestoreService.shared
     private var listeners: [ListenerRegistration] = []
+    private var inviteSessionListeners: [String: ListenerRegistration] = [:]
     private var handledSessionIDs: Set<String> = []
 
     func start(user: AppUser) {
@@ -44,12 +46,18 @@ final class FriendsViewModel: ObservableObject {
                 Task { @MainActor in self?.outgoingRequests = requests.sorted { $0.createdAt > $1.createdAt } }
             },
             store.listenForIncomingExhibitionInvites(userID: user.id) { [weak self] invites in
-                Task { @MainActor in self?.incomingInvites = invites.sorted { $0.createdAt > $1.createdAt } }
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.incomingInvites = invites.sorted { $0.createdAt > $1.createdAt }
+                    self.syncInviteSessionListeners()
+                }
             },
             store.listenForOutgoingExhibitionInvites(userID: user.id) { [weak self] invites in
                 Task { @MainActor in
-                    self?.outgoingInvites = invites.sorted { $0.createdAt > $1.createdAt }
-                    await self?.openAcceptedInviteIfNeeded(invites)
+                    guard let self else { return }
+                    self.outgoingInvites = invites.sorted { $0.createdAt > $1.createdAt }
+                    self.syncInviteSessionListeners()
+                    await self.openAcceptedInviteIfNeeded(invites)
                 }
             }
         ]
@@ -58,6 +66,9 @@ final class FriendsViewModel: ObservableObject {
     func stop() {
         listeners.forEach { $0.remove() }
         listeners = []
+        inviteSessionListeners.values.forEach { $0.remove() }
+        inviteSessionListeners = [:]
+        inviteSessions = [:]
         friendProfiles = [:]
     }
 
@@ -162,9 +173,15 @@ final class FriendsViewModel: ObservableObject {
         do {
             let session = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
             handledSessionIDs.insert(session.id)
-            activeExhibitionInviteID = invite.id
-            activeExhibitionInviteType = invite.kind
-            activeExhibitionSession = session
+            if invite.isPlayLater {
+                activeExhibitionInviteID = nil
+                activeExhibitionInviteType = .playNow
+                activeExhibitionSession = nil
+            } else {
+                activeExhibitionInviteID = invite.id
+                activeExhibitionInviteType = invite.kind
+                activeExhibitionSession = session
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -184,7 +201,11 @@ final class FriendsViewModel: ObservableObject {
         do {
             let session: GameSession
             if invite.isPlayLater, let sessionID = invite.sessionID {
-                session = try await store.fetchSession(id: sessionID)
+                if let cachedSession = inviteSessions[sessionID] {
+                    session = cachedSession
+                } else {
+                    session = try await store.fetchSession(id: sessionID)
+                }
                 if invite.toID == currentUser.id && invite.status == .pending {
                     _ = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
                 }
@@ -214,8 +235,29 @@ final class FriendsViewModel: ObservableObject {
         }
     }
 
+    private func syncInviteSessionListeners() {
+        let sessionIDs = Set((incomingInvites + outgoingInvites).compactMap { invite -> String? in
+            guard invite.isPlayLater else { return nil }
+            return invite.sessionID
+        })
+
+        for (sessionID, listener) in inviteSessionListeners where !sessionIDs.contains(sessionID) {
+            listener.remove()
+            inviteSessionListeners[sessionID] = nil
+            inviteSessions[sessionID] = nil
+        }
+
+        for sessionID in sessionIDs where inviteSessionListeners[sessionID] == nil {
+            inviteSessionListeners[sessionID] = store.listenForSession(id: sessionID) { [weak self] session in
+                Task { @MainActor in
+                    self?.inviteSessions[sessionID] = session
+                }
+            }
+        }
+    }
+
     private func openAcceptedInviteIfNeeded(_ invites: [ExhibitionInvite]) async {
-        guard let invite = invites.first(where: { $0.status == .accepted && $0.sessionID != nil && !$0.isExpired }),
+        guard let invite = invites.first(where: { $0.kind == .playNow && $0.status == .accepted && $0.sessionID != nil && !$0.isExpired }),
               let sessionID = invite.sessionID,
               !handledSessionIDs.contains(sessionID) else { return }
         do {

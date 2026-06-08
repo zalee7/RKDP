@@ -27,6 +27,7 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var rematchErrorMessage: String?
     @Published var isStartingRematch = false
     @Published var dismissedRematchInviteSessionID: String?
+    @Published var readySessionIDs: Set<String> = []
     private var countdownTask: Task<Void, Never>?
     private var botFallbackTask: Task<Void, Never>?
     private var botResultTask: Task<Void, Never>?
@@ -86,6 +87,7 @@ final class MultiplayerViewModel: ObservableObject {
         rewardSnapshot = nil
         casualRewardMessage = nil
         clearRematchState()
+        readySessionIDs = []
 
         self.user = user
         self.mode = mode
@@ -163,6 +165,7 @@ final class MultiplayerViewModel: ObservableObject {
         rewardSnapshot = nil
         casualRewardMessage = nil
         clearRematchState()
+        readySessionIDs = []
 
         self.user = user
         self.mode = mode
@@ -220,12 +223,13 @@ final class MultiplayerViewModel: ObservableObject {
         gameTimer?.invalidate()
         removeRealtimeObservers()
         clearRematchState()
+        readySessionIDs = []
 
         self.user = user
         self.mode = session.mode
         self.difficulty = session.difficulty
         self.selectedWager = nil
-        playerResults = [:]
+        playerResults = session.playerResults ?? [:]
         opponentUser = nil
         elapsedSeconds = 0
         matchCountdown = 5
@@ -238,13 +242,24 @@ final class MultiplayerViewModel: ObservableObject {
         if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
             opponentUser = try? await store.fetchUser(id: opponentID)
         }
+        if session.status == .finished {
+            gameTimer?.invalidate()
+            rewardSnapshot = nil
+            rewardErrorMessage = nil
+            casualRewardMessage = nil
+            state = .finished(session: session)
+            finishedSessionID = session.id
+            return
+        }
         if session.isAsyncExhibition {
             state = .inMatch(session: session)
             listenForResults(session: session)
             listenForSessionStatus(sessionID: session.id)
         } else {
             state = .matchFound(session: session)
-            startMatchCountdown(session: session)
+            if !session.isLiveExhibition {
+                startMatchCountdown(session: session)
+            }
         }
     }
 
@@ -344,6 +359,11 @@ final class MultiplayerViewModel: ObservableObject {
                     self.rewardSnapshot = nil
                     self.rewardErrorMessage = nil
                     self.casualRewardMessage = nil
+                    if session.isExhibition, let user = self.user {
+                        if let updated = try? await self.store.recordOnlineBestIfNeeded(session: session, for: user.id) {
+                            self.user = updated
+                        }
+                    }
                 }
                 self.state = .finished(session: session)
                 self.finishedSessionID = session.id
@@ -368,6 +388,9 @@ final class MultiplayerViewModel: ObservableObject {
         do {
             try await rtdb.submitResult(sessionID: session.id, result: result)
             playerResults[result.userID] = result
+            if session.isAsyncExhibition {
+                try? await store.saveAsyncExhibitionResult(sessionID: session.id, result: result)
+            }
         } catch {
             state = .error(error.localizedDescription)
         }
@@ -680,7 +703,9 @@ final class MultiplayerViewModel: ObservableObject {
             listenForSessionStatus(sessionID: session.id)
         } else {
             state = .matchFound(session: session)
-            startMatchCountdown(session: session)
+            if !session.isLiveExhibition {
+                startMatchCountdown(session: session)
+            }
         }
     }
 
@@ -879,6 +904,7 @@ final class MultiplayerViewModel: ObservableObject {
         rewardSnapshot = nil
         casualRewardMessage = nil
         clearRematchState()
+        readySessionIDs = []
         isForfeiting = false
     }
 
@@ -913,8 +939,10 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func confirmReady(session: GameSession) async {
+        guard let userID = user?.id, !userID.isEmpty else { return }
         do {
-            try await rtdb.markReady(sessionID: session.id, userID: user?.id ?? "")
+            try await rtdb.markReady(sessionID: session.id, userID: userID)
+            readySessionIDs.insert(session.id)
             if let bot = session.botPlayer {
                 try await rtdb.markReady(sessionID: session.id, userID: bot.userID)
             }
@@ -941,19 +969,38 @@ struct MatchResolution {
 
 enum MatchResolver {
     static func canResolve(session: GameSession, results: [String: MatchPlayerResult]) -> Bool {
+        if session.isParty {
+            return results.count >= session.players.count
+        }
+        if session.isAsyncExhibition {
+            return session.players.allSatisfy { player in
+                guard let result = results[player.userID] else { return false }
+                return isFinalResult(result)
+            }
+        }
         if session.mode == .wordle {
             if hasClinchedWordleResult(results) { return true }
             return results.count >= session.players.count && results.values.allSatisfy(\.isFinalWordleResult)
         }
         if session.mode == .hangman {
+            if hasClinchedHangmanResult(results) { return true }
             return results.count >= session.players.count && results.values.allSatisfy { isFinalHangmanResult($0) }
+        }
+        if hasClinchedTargetResult(session: session, results: results) {
+            return true
         }
         return results.count >= session.players.count
     }
 
     static func resolve(session: GameSession, results: [String: MatchPlayerResult]) -> MatchResolution {
         let ordered = session.players.compactMap { results[$0.userID] }
-        if session.mode == .wordle, ordered.count == 1, let resolution = resolveClinchedWordle(ordered[0]) {
+        if !session.isParty, !session.isAsyncExhibition, session.mode == .wordle, ordered.count == 1, let resolution = resolveClinchedWordle(ordered[0]) {
+            return resolution
+        }
+        if !session.isParty, !session.isAsyncExhibition, session.mode == .hangman, ordered.count == 1, let resolution = resolveClinchedHangman(ordered[0]) {
+            return resolution
+        }
+        if !session.isParty, !session.isAsyncExhibition, ordered.count == 1, let resolution = resolveClinchedTarget(session: session, result: ordered[0]) {
             return resolution
         }
         guard ordered.count == session.players.count, ordered.count == 2 else {
@@ -979,6 +1026,17 @@ enum MatchResolver {
             return compareColorLink(a, b)
         case .minesweeper:
             return compareMinesweeper(a, b)
+        }
+    }
+
+    private static func isFinalResult(_ result: MatchPlayerResult) -> Bool {
+        switch result.mode {
+        case .wordle:
+            return result.isFinalWordleResult
+        case .hangman:
+            return isFinalHangmanResult(result)
+        default:
+            return true
         }
     }
 
@@ -1019,22 +1077,54 @@ enum MatchResolver {
         return MatchResolution(winnerID: nil, reason: "Same score and word count")
     }
 
+    private static func hasClinchedHangmanResult(_ results: [String: MatchPlayerResult]) -> Bool {
+        results.values.contains { $0.mode == .hangman && $0.solvedRounds >= 2 }
+    }
+
+    private static func hasClinchedTargetResult(session: GameSession, results: [String: MatchPlayerResult]) -> Bool {
+        results.values.contains { resolveClinchedTarget(session: session, result: $0) != nil }
+    }
+
+    private static func resolveClinchedTarget(session: GameSession, result: MatchPlayerResult) -> MatchResolution? {
+        guard result.completed else { return nil }
+        switch session.mode {
+        case .sudoku:
+            return MatchResolution(winnerID: result.userID, reason: "Completed the puzzle")
+        case .gridlock:
+            return MatchResolution(winnerID: result.userID, reason: "Matched the Grid Duel target")
+        case .colorLink:
+            return MatchResolution(winnerID: result.userID, reason: "Filled the Color Link board")
+        case .minesweeper:
+            return MatchResolution(winnerID: result.userID, reason: "Cleared the minefield")
+        case .wordle, .hangman, .anagram, .wordHunt:
+            return nil
+        }
+    }
+
+    private static func resolveClinchedHangman(_ result: MatchPlayerResult) -> MatchResolution? {
+        guard result.solvedRounds >= 2 else { return nil }
+        return MatchResolution(winnerID: result.userID, reason: "Won \(result.solvedRounds) Lava Rescue rounds")
+    }
+
     static func isFinalHangmanResult(_ result: MatchPlayerResult) -> Bool {
+        if result.solvedRounds >= 2 { return true }
+        if let totalRounds = Int(result.summary["totalRounds"] ?? ""), result.wordleRoundCount >= totalRounds { return true }
         if let final = result.summary["final"] { return final == "true" }
         return result.completed || result.status != "In progress"
     }
 
     private static func compareHangman(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+        if a.solvedRounds != b.solvedRounds {
+            let winner = a.solvedRounds > b.solvedRounds ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Won \(winner.solvedRounds) Lava Rescue rounds")
+        }
         if a.completed != b.completed {
             let winner = a.completed ? a : b
             return MatchResolution(winnerID: winner.userID, reason: "Rescued the puzzle")
         }
-        if a.completed && b.completed {
-            if a.wrongGuessCount != b.wrongGuessCount {
-                let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
-                return MatchResolution(winnerID: winner.userID, reason: "Rescued with fewer wrong letters")
-            }
-            return compareElapsed(a, b, fallback: "Same Lava Rescue result")
+        if a.wrongGuessCount != b.wrongGuessCount {
+            let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Had fewer wrong letters")
         }
         if a.revealedLetterCount != b.revealedLetterCount {
             let winner = a.revealedLetterCount > b.revealedLetterCount ? a : b

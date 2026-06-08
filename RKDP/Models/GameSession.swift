@@ -174,7 +174,7 @@ struct MatchPlayerResult: Codable, Equatable {
     var wordleRoundCount: Int { Int(summary["roundCount"] ?? "0") ?? 0 }
     var isFinalWordleResult: Bool {
         guard mode == .wordle else { return true }
-        return summary["isFinal"] == "true" || solvedRounds >= 2 || failedRounds >= 2 || wordleRoundCount >= 3
+        return summary["isFinal"] == "true" || solvedRounds >= 2 || failedRounds >= 2
     }
     var hitMine: Bool { summary["hitMine"] == "true" }
     var moveCount: Int { Int(summary["moves"] ?? "0") ?? 0 }

@@ -78,7 +78,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .anagram:     return "Timer ends; score, word count, then longest word decide"
         case .wordHunt:    return "Timer ends; score, word count, then longest word decide"
         case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"
-        case .hangman:     return "Rescue the shared word; wrong letters then time break ties"
+        case .hangman:     return "Best of 3 shared rescue words; first to 2 rounds wins"
         }
     }
 
@@ -188,8 +188,10 @@ extension GameMode {
             return Difficulty.allCases
         case .sudoku, .minesweeper:
             return [.medium]
-        case .colorLink, .gridlock:
+        case .colorLink:
             return [.expert]
+        case .gridlock:
+            return [.easy, .medium]
         }
     }
 
@@ -198,14 +200,7 @@ extension GameMode {
     }
 
     var casualDifficulties: [Difficulty] {
-        switch self {
-        case .anagram, .wordHunt, .wordle, .hangman:
-            return Difficulty.allCases
-        case .sudoku, .minesweeper:
-            return [.medium]
-        case .colorLink, .gridlock:
-            return [.expert]
-        }
+        rankedDifficulties
     }
 
     func casualLockReason(for difficulty: Difficulty) -> String? {

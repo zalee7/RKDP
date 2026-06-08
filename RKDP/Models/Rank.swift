@@ -133,6 +133,83 @@ enum RankDivision: Int, Codable, CaseIterable {
     }
 }
 
+struct BestStat: Codable, Equatable {
+    var time: Int? = nil
+    var score: Int? = nil
+    var moves: Int? = nil
+    var progress: Double? = nil
+    var guesses: Int? = nil
+
+    static func from(solo result: SoloGameResult) -> BestStat {
+        BestStat(
+            time: result.completed ? result.elapsedSeconds : nil,
+            score: result.score,
+            moves: result.moves,
+            progress: result.progress,
+            guesses: result.completed ? result.guesses : nil
+        )
+    }
+
+    static func from(match result: MatchPlayerResult, mode: GameMode) -> BestStat {
+        BestStat(
+            time: result.completed ? result.elapsedSeconds : nil,
+            score: mode.isScoreBased ? result.score : nil,
+            moves: result.moveCount > 0 ? result.moveCount : nil,
+            progress: result.progress > 0 ? result.progress : nil,
+            guesses: mode.isWordle ? result.totalGuesses : nil
+        )
+    }
+
+    static func updated(_ current: BestStat?, with candidate: BestStat) -> BestStat {
+        guard var best = current else { return candidate }
+        if let value = candidate.time {
+            best.time = min(best.time ?? Int.max, value)
+        }
+        if let value = candidate.score {
+            best.score = max(best.score ?? 0, value)
+        }
+        if let value = candidate.moves {
+            best.moves = min(best.moves ?? Int.max, value)
+        }
+        if let value = candidate.progress {
+            best.progress = max(best.progress ?? 0, value)
+        }
+        if let value = candidate.guesses, value > 0 {
+            best.guesses = min(best.guesses ?? Int.max, value)
+        }
+        return best
+    }
+
+    func displayText(for mode: GameMode) -> String {
+        switch mode {
+        case .gridlock:
+            if let moves { return "\(moves) moves" }
+            if let progress { return "\(Int((progress * 100).rounded()))%" }
+            if let time { return formattedTime(time) }
+        case .wordle:
+            if let guesses { return "\(guesses) guesses" }
+            if let time { return formattedTime(time) }
+        case .hangman:
+            if let time { return formattedTime(time) }
+        case .anagram, .wordHunt:
+            if let score { return "\(score) pts" }
+        case .colorLink:
+            if let progress { return "\(Int((progress * 100).rounded()))%" }
+            if let time { return formattedTime(time) }
+        case .minesweeper:
+            if let time { return formattedTime(time) }
+            if let progress { return "\(Int((progress * 100).rounded()))%" }
+        case .sudoku:
+            if let time { return formattedTime(time) }
+        }
+        return "--"
+    }
+
+    private func formattedTime(_ seconds: Int) -> String {
+        "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+}
+
 struct RankInfo: Codable {
     var points: Int
     var tier: RankTier
@@ -143,6 +220,8 @@ struct RankInfo: Codable {
     var bestMoves: Int? = nil
     var bestProgress: Double? = nil
     var bestGuesses: Int? = nil
+    var soloBest: BestStat? = nil
+    var onlineBest: BestStat? = nil
 
     var winRate: Double {
         guard wins + losses > 0 else { return 0 }

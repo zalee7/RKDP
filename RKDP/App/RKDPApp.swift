@@ -53,6 +53,59 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         completionHandler([.banner, .sound, .badge])
     }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let type = userInfo["type"] as? String,
+           type == "party_invite",
+           let code = userInfo["roomCode"] as? String {
+            PartyJoinLink.storePending(code)
+            NotificationCenter.default.post(name: .partyJoinRequested, object: nil)
+        }
+        completionHandler()
+    }
+}
+
+extension Notification.Name {
+    static let partyJoinRequested = Notification.Name("PartyJoinRequested")
+}
+
+enum PartyJoinLink {
+    static let pendingCodeKey = "pendingPartyJoinCode"
+
+    static func code(from url: URL) -> String? {
+        guard url.scheme?.lowercased() == "puzzleparty" else { return nil }
+        var pieces: [String] = []
+        if let host = url.host, !host.isEmpty { pieces.append(host) }
+        pieces.append(contentsOf: url.pathComponents.filter { $0 != "/" })
+
+        if pieces.first?.lowercased() == "join", pieces.count > 1 {
+            return normalizedCode(pieces[1])
+        }
+        return pieces.last.flatMap(normalizedCode)
+    }
+
+    static func storePending(_ code: String) {
+        guard let normalized = normalizedCode(code) else { return }
+        UserDefaults.standard.set(normalized, forKey: pendingCodeKey)
+    }
+
+    static func consumePending() -> String? {
+        guard let code = UserDefaults.standard.string(forKey: pendingCodeKey) else { return nil }
+        UserDefaults.standard.removeObject(forKey: pendingCodeKey)
+        return normalizedCode(code)
+    }
+
+    private static func normalizedCode(_ raw: String) -> String? {
+        let code = raw
+            .uppercased()
+            .filter { $0.isLetter || $0.isNumber }
+        return code.isEmpty ? nil : code
+    }
 }
 
 final class NotificationTokenService {
@@ -86,13 +139,17 @@ final class NotificationTokenService {
     }
 
     func saveFCMToken(_ token: String) async {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("Skipping FCM token save because no user is signed in yet.")
+            return
+        }
 
         do {
             try await db.collection("users").document(uid).setData([
                 "fcmTokens": FieldValue.arrayUnion([token]),
                 "fcmTokenUpdatedAt": FieldValue.serverTimestamp()
             ], merge: true)
+            print("Saved FCM token for user \(uid): \(token.prefix(12))...")
         } catch {
             print("Failed to save FCM token: \(error.localizedDescription)")
         }

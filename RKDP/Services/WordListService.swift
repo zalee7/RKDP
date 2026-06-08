@@ -158,6 +158,12 @@ struct WordHuntPuzzleData: Codable {
     let gridRows: [String]
 }
 
+struct HangmanRoundPuzzleData: Codable {
+    let targetWord: String
+    let category: String
+    let starterLetter: String
+}
+
 struct HangmanPuzzleData: Codable {
     let wordBankVersion: String
     let targetWord: String
@@ -165,6 +171,7 @@ struct HangmanPuzzleData: Codable {
     let maxWrongGuesses: Int
     let category: String?
     let starterLetter: String?
+    let rounds: [HangmanRoundPuzzleData]?
 }
 
 enum MultiplayerPuzzleDataFactory {
@@ -211,14 +218,25 @@ enum MultiplayerPuzzleDataFactory {
             )
             return encode(data)
         case .hangman:
-            let puzzle = HangmanGame.puzzle(difficulty: difficulty, seed: seed)
+            let targetCount = rounds ?? 3
+            let puzzles = (0..<targetCount).map { index in
+                HangmanGame.puzzle(difficulty: difficulty, seed: seed &+ (index * 7_919))
+            }
+            let first = puzzles.first ?? HangmanGame.puzzle(difficulty: difficulty, seed: seed)
             let data = HangmanPuzzleData(
                 wordBankVersion: WordListService.wordBankVersion,
-                targetWord: puzzle.word,
+                targetWord: first.word,
                 difficulty: difficulty.rawValue,
                 maxWrongGuesses: 6,
-                category: puzzle.category,
-                starterLetter: String(puzzle.starterLetter)
+                category: first.category,
+                starterLetter: String(first.starterLetter),
+                rounds: puzzles.map {
+                    HangmanRoundPuzzleData(
+                        targetWord: $0.word,
+                        category: $0.category,
+                        starterLetter: String($0.starterLetter)
+                    )
+                }
             )
             return encode(data)
         default:

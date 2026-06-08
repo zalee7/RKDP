@@ -104,7 +104,7 @@ struct HangmanView: View {
                 Text("Lava Rescue")
                     .font(.headline.bold())
                     .foregroundStyle(AppTheme.textPrimary)
-                Text(GameMode.hangman.difficultyLabel(vm.difficulty))
+                Text("\(GameMode.hangman.difficultyLabel(vm.difficulty)) · \(vm.roundDisplayText)")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.modeAccent(.hangman))
             }
@@ -312,37 +312,7 @@ struct HangmanView: View {
             didReportFinalMatchResult = true
             vm.stop()
         }
-        onMatchResult(MatchPlayerResult(
-            userID: userID,
-            mode: .hangman,
-            completed: vm.game.isSolved,
-            elapsedSeconds: vm.elapsedSeconds,
-            score: vm.game.revealedUniqueCount,
-            progress: vm.game.progress,
-            status: final ? finalStatus : "In progress",
-            summary: [
-                "targetWord": vm.game.targetWord,
-                "category": vm.game.category,
-                "starterLetter": String(vm.game.starterLetter),
-                "correctLetters": sortedLetters(vm.game.correctLetters).joined(),
-                "wrongLetters": sortedLetters(vm.game.wrongLetters).joined(),
-                "wrongGuessCount": "\(vm.game.wrongGuessCount)",
-                "revealedPattern": vm.game.revealedPattern,
-                "revealedLetterCount": "\(vm.game.revealedUniqueCount)",
-                "maxWrongGuesses": "\(vm.game.maxWrongGuesses)",
-                "lavaLevel": "\(vm.game.wrongGuessCount)",
-                "solved": vm.game.isSolved ? "true" : "false",
-                "final": final ? "true" : "false"
-            ],
-            details: [
-                "Category: \(vm.game.category)",
-                "Word: \(vm.game.targetWord)",
-                "Pattern: \(displayPattern(vm.game.revealedPattern))",
-                "Starter: \(vm.game.starterLetter)",
-                "Correct: \(sortedLetters(vm.game.correctLetters).joined(separator: ", ").ifEmpty("None"))",
-                "Wrong: \(sortedLetters(vm.game.wrongLetters).joined(separator: ", ").ifEmpty("None"))"
-            ]
-        ))
+        onMatchResult(vm.matchResult(userID: userID, final: final))
     }
 
     private var finalStatus: String {

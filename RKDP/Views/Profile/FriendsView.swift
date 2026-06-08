@@ -299,29 +299,31 @@ struct FriendsView: View {
     }
 
     private func inviteRow(_ invite: ExhibitionInvite, incoming: Bool) -> some View {
-        HStack(spacing: 12) {
+        let asyncState = playLaterState(for: invite)
+        return HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 12)
                 .fill(AppTheme.modeGradient(invite.mode))
                 .frame(width: 42, height: 42)
                 .overlay(Image(systemName: invite.mode.icon).foregroundStyle(.white))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(incoming ? "From \(invite.fromUsername)" : "To \(invite.toUsername)")
                     .font(.headline)
                     .foregroundStyle(AppTheme.textPrimary)
-                Text("\(invite.mode.displayName) · \(invite.mode.difficultyLabel(invite.difficulty)) · \(invite.isPlayLater ? "Play Later" : "Play Now") · expires in \(remainingText(invite))")
+                Text("\(invite.mode.displayName) · \(invite.mode.difficultyLabel(invite.difficulty)) · expires in \(remainingText(invite))")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
+                Text(statusText(for: invite, asyncState: asyncState, incoming: incoming))
+                    .font(.caption.bold())
+                    .foregroundStyle(statusColor(for: invite, asyncState: asyncState))
             }
             Spacer()
-            if incoming {
+            if invite.isPlayLater {
+                playLaterAction(invite, state: asyncState, incoming: incoming)
+            } else if incoming {
                 Button("Decline") { Task { await vm.declineInvite(invite, currentUserID: user.id) } }
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textSecondary)
-                Button(invite.isPlayLater ? "Play" : "Accept") { Task { await vm.playInvite(invite, currentUser: user) } }
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.teal)
-            } else if invite.isPlayLater {
-                Button("Play") { Task { await vm.playInvite(invite, currentUser: user) } }
+                Button("Accept") { Task { await vm.playInvite(invite, currentUser: user) } }
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.teal)
             } else {
@@ -330,6 +332,86 @@ struct FriendsView: View {
                     .foregroundStyle(invite.status == .accepted ? AppTheme.teal : AppTheme.crownGold)
             }
         }
+    }
+
+    @ViewBuilder
+    private func playLaterAction(_ invite: ExhibitionInvite, state: PlayLaterInviteState, incoming: Bool) -> some View {
+        switch state {
+        case .waitingOnFriend:
+            Text("Waiting")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+        case .completed:
+            Button("View Result") { Task { await vm.playInvite(invite, currentUser: user) } }
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.teal)
+        case .yourTurn:
+            if incoming && invite.status == .pending {
+                Button("Decline") { Task { await vm.declineInvite(invite, currentUserID: user.id) } }
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Button("Play Turn") { Task { await vm.playInvite(invite, currentUser: user) } }
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.hotPink)
+        }
+    }
+
+    private enum PlayLaterInviteState {
+        case yourTurn
+        case waitingOnFriend
+        case completed
+    }
+
+    private func playLaterState(for invite: ExhibitionInvite) -> PlayLaterInviteState {
+        guard let sessionID = invite.sessionID,
+              let session = vm.inviteSessions[sessionID],
+              let results = session.playerResults else {
+            return .yourTurn
+        }
+
+        let myResult = results[user.id]
+        let opponentID = invite.fromID == user.id ? invite.toID : invite.fromID
+        let opponentResult = results[opponentID]
+
+        if session.status == .finished || (myResult != nil && opponentResult != nil) {
+            return .completed
+        }
+        if myResult != nil {
+            return .waitingOnFriend
+        }
+        return .yourTurn
+    }
+
+    private func statusText(for invite: ExhibitionInvite, asyncState: PlayLaterInviteState, incoming: Bool) -> String {
+        if invite.isPlayLater {
+            switch asyncState {
+            case .yourTurn:
+                return "Play Later · Your Turn"
+            case .waitingOnFriend:
+                return "Play Later · Submitted · waiting on friend"
+            case .completed:
+                return "Completed · View Result"
+            }
+        }
+        if incoming {
+            return invite.status == .accepted ? "Play Now · Ready Up" : "Play Now · Waiting"
+        }
+        return invite.status == .accepted ? "Play Now · Ready Up" : "Play Now · Waiting"
+    }
+
+    private func statusColor(for invite: ExhibitionInvite, asyncState: PlayLaterInviteState) -> Color {
+        if invite.isPlayLater {
+            switch asyncState {
+            case .yourTurn:
+                return AppTheme.hotPink
+            case .waitingOnFriend:
+                return AppTheme.textSecondary
+            case .completed:
+                return AppTheme.teal
+            }
+        }
+        return invite.status == .accepted ? AppTheme.teal : AppTheme.crownGold
     }
 
     private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -612,10 +694,18 @@ private struct PartySetupSheet: View {
     private func setupRow(title: String, subtitle: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(selected ? AppTheme.brandGradient : LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(selected ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(AppTheme.controlBackground))
                     .frame(width: 42, height: 42)
-                    .overlay(Image(systemName: icon).foregroundStyle(.white))
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.headline.bold())
+                            .foregroundStyle(selected ? AppTheme.textOnColor : AppTheme.accentBright)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(selected ? Color.white.opacity(0.55) : AppTheme.controlBorder, lineWidth: 1)
+                    )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.headline)
@@ -632,8 +722,12 @@ private struct PartySetupSheet: View {
                 }
             }
             .padding(10)
-            .background(selected ? AppTheme.crownGold.opacity(0.10) : Color.white.opacity(0.04))
+            .background(selected ? AppTheme.selectedControlBackground : AppTheme.controlBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(selected ? AppTheme.accentBright.opacity(0.55) : AppTheme.controlBorder, lineWidth: selected ? 1.5 : 1)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -696,10 +790,13 @@ private struct InviteFriendSheet: View {
                                             .font(.caption.bold())
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 12)
-                                            .background(difficulty == candidate ? AnyShapeStyle(AppTheme.modeGradient(mode)) : AnyShapeStyle(AppTheme.cardBackground))
-                                            .foregroundStyle(.white)
+                                            .background(difficulty == candidate ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(AppTheme.controlBackground))
+                                            .foregroundStyle(difficulty == candidate ? AppTheme.textOnColor : AppTheme.textPrimary)
                                             .clipShape(RoundedRectangle(cornerRadius: 12))
-                                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(difficulty == candidate ? AppTheme.accentBright.opacity(0.6) : AppTheme.controlBorder, lineWidth: difficulty == candidate ? 1.5 : 1)
+                                            )
                                     }
                                 }
                             }
@@ -754,10 +851,15 @@ private struct InviteFriendSheet: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .frame(width: 34, height: 34)
-                    .background(selected ? AnyShapeStyle(AppTheme.modeGradient(mode)) : AnyShapeStyle(Color.white.opacity(0.12)))
-                    .foregroundStyle(.white)
+                    .font(.subheadline.bold())
+                    .frame(width: 38, height: 38)
+                    .background(selected ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(AppTheme.controlBackground))
+                    .foregroundStyle(selected ? AppTheme.textOnColor : AppTheme.accentBright)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(selected ? Color.white.opacity(0.55) : AppTheme.controlBorder, lineWidth: 1)
+                    )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.bold()).foregroundStyle(AppTheme.textPrimary)
                     Text(subtitle).font(.caption).foregroundStyle(AppTheme.textSecondary).lineLimit(1)
@@ -766,8 +868,12 @@ private struct InviteFriendSheet: View {
                 if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(AppTheme.teal) }
             }
             .padding(10)
-            .background(selected ? AppTheme.teal.opacity(0.14) : Color.white.opacity(0.06))
+            .background(selected ? AppTheme.selectedControlBackground : AppTheme.controlBackground)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(selected ? AppTheme.accentBright.opacity(0.55) : AppTheme.controlBorder, lineWidth: selected ? 1.5 : 1)
+            )
         }
     }
 }

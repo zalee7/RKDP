@@ -388,6 +388,11 @@ final class FirestoreService {
                     }
                     let granted = user.coinWallet.recordCasualReward(requestedReward)
                     user.coins += granted
+                    if let result = session.playerResults?[userID] {
+                        var rankInfo = user.ranks[session.mode] ?? .empty
+                        rankInfo.onlineBest = BestStat.updated(rankInfo.onlineBest, with: .from(match: result, mode: session.mode))
+                        user.ranks[session.mode] = rankInfo
+                    }
                     user.appliedCasualOutcomes[session.id] = true
 
                     let encodedUser = try Firestore.Encoder().encode(user)
@@ -401,6 +406,46 @@ final class FirestoreService {
                     continuation.resume(throwing: error)
                 } else if let outcome = result as? AppliedCasualOutcome {
                     continuation.resume(returning: outcome)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+    func recordOnlineBestIfNeeded(session: GameSession, for userID: String) async throws -> AppUser {
+        guard session.status == .finished,
+              let result = session.playerResults?[userID],
+              session.players.contains(where: { $0.userID == userID }) else {
+            return try await fetchUser(id: userID)
+        }
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    var rankInfo = user.ranks[session.mode] ?? .empty
+                    rankInfo.onlineBest = BestStat.updated(rankInfo.onlineBest, with: .from(match: result, mode: session.mode))
+                    user.ranks[session.mode] = rankInfo
+
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
                 } else {
                     continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
                 }
@@ -434,10 +479,22 @@ final class FirestoreService {
 
     func fetchRecentFinishedSessions(for userID: String, limit: Int = 20) async throws -> [GameSession] {
         let fetchLimit = max(limit * 4, 80)
-        let snapshot = try await db.collection("sessions")
+        return try await fetchFinishedOnlineSessions(for: userID, fetchLimit: fetchLimit)
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    func fetchFinishedOnlineSessions(for userID: String) async throws -> [GameSession] {
+        try await fetchFinishedOnlineSessions(for: userID, fetchLimit: nil)
+    }
+
+    private func fetchFinishedOnlineSessions(for userID: String, fetchLimit: Int?) async throws -> [GameSession] {
+        var query: Query = db.collection("sessions")
             .whereField("playerIDs", arrayContains: userID)
-            .limit(to: fetchLimit)
-            .getDocuments()
+        if let fetchLimit {
+            query = query.limit(to: fetchLimit)
+        }
+        let snapshot = try await query.getDocuments()
 
         return snapshot.documents
             .compactMap { document -> GameSession? in
@@ -445,7 +502,7 @@ final class FirestoreService {
                     return try document.data(as: GameSession.self)
                 } catch {
                     #if DEBUG
-                    print("Skipping malformed recent session \(document.documentID): \(error)")
+                    print("Skipping malformed online session \(document.documentID): \(error)")
                     #endif
                     return nil
                 }
@@ -457,8 +514,6 @@ final class FirestoreService {
             .sorted { lhs, rhs in
                 recentSortDate(lhs) > recentSortDate(rhs)
             }
-            .prefix(limit)
-            .map { $0 }
     }
 
     private func recentSortDate(_ session: GameSession) -> Date {
@@ -1091,13 +1146,21 @@ final class FirestoreService {
         guard user.id != target.id else { throw FirestoreServiceError.invalidFriendAction }
         let requestID = friendshipID(user.id, target.id)
         let requestRef = db.collection("friendRequests").document(requestID)
+        let friendshipRef = db.collection("friendships").document(requestID)
+
+        let friendshipSnapshot = try await friendshipRef.getDocument()
+        if friendshipSnapshot.exists {
+            throw FirestoreServiceError.friendshipAlreadyExists
+        }
 
         if let existing = try? await requestRef.getDocument(as: FriendRequest.self) {
             switch existing.status {
             case .pending:
                 throw FirestoreServiceError.friendRequestAlreadyPending
             case .accepted:
-                throw FirestoreServiceError.friendshipAlreadyExists
+                // Accepted request records can outlive the friendship after unfriend.
+                // If the friendship document is gone, reuse this request slot.
+                break
             case .declined, .canceled:
                 break
             }
@@ -1177,7 +1240,17 @@ final class FirestoreService {
         }
 
         try await friendshipRef.delete()
+        try await cancelFriendRequestRecord(between: currentUserID, and: friendID)
         try await cancelPendingExhibitionInvites(between: currentUserID, and: friendID)
+    }
+
+    private func cancelFriendRequestRecord(between firstUserID: String, and secondUserID: String) async throws {
+        let requestRef = db.collection("friendRequests").document(friendshipID(firstUserID, secondUserID))
+        let snapshot = try await requestRef.getDocument()
+        guard snapshot.exists else { return }
+        try await requestRef.setData([
+            "status": FriendRequestStatus.canceled.rawValue
+        ], merge: true)
     }
 
     private func cancelPendingExhibitionInvites(between firstUserID: String, and secondUserID: String) async throws {
@@ -1210,7 +1283,7 @@ final class FirestoreService {
         let seed = Int.random(in: 0..<Int.max)
         let inviteID = UUID().uuidString
         let sessionID = inviteType == .playLater ? "async_exhibition_\(inviteID)_\(UUID().uuidString.prefix(8))" : nil
-        var invite = ExhibitionInvite(
+        let invite = ExhibitionInvite(
             id: inviteID,
             fromID: user.id,
             fromUsername: user.username,
@@ -1403,6 +1476,13 @@ final class FirestoreService {
             }
     }
 
+    func saveAsyncExhibitionResult(sessionID: String, result: MatchPlayerResult) async throws {
+        let encoded = try Firestore.Encoder().encode(result)
+        try await db.collection("sessions")
+            .document(sessionID)
+            .setData(["playerResults.\(result.userID)": encoded], merge: true)
+    }
+
     // MARK: - Party Rooms
 
     func createPartyRoom(host: AppUser, mode: GameMode, difficulty: Difficulty) async throws -> PartyRoom {
@@ -1440,6 +1520,7 @@ final class FirestoreService {
                 finishedAt: nil,
                 winnerID: nil,
                 winnerReason: nil,
+                readyPlayerIDs: [],
                 maxPlayers: 8
             )
             try ref.setData(from: room)
@@ -1447,6 +1528,35 @@ final class FirestoreService {
         }
 
         throw FirestoreServiceError.invalidFriendAction
+    }
+
+    func createPartyInvite(room: PartyRoom, from user: AppUser, to friend: FriendSummary) async throws {
+        guard room.status == .lobby,
+              room.containsPlayer(user.id),
+              Date() < room.expiresAt else {
+            throw FirestoreServiceError.partyRoomAlreadyStarted
+        }
+        guard friend.userID != user.id else { throw FirestoreServiceError.invalidFriendAction }
+
+        let friendshipDoc = try await db.collection("friendships")
+            .document(friendshipID(user.id, friend.userID))
+            .getDocument()
+        guard friendshipDoc.exists else { throw FirestoreServiceError.notFriends }
+
+        let now = Date()
+        let invite = PartyInvite(
+            id: UUID().uuidString,
+            roomCode: room.code,
+            fromID: user.id,
+            fromUsername: user.username,
+            toID: friend.userID,
+            toUsername: friend.username,
+            mode: room.mode,
+            difficulty: room.difficulty,
+            createdAt: now,
+            expiresAt: room.expiresAt
+        )
+        try db.collection("partyInvites").document(invite.id).setData(from: invite)
     }
 
     func joinPartyRoom(code rawCode: String, user: AppUser) async throws -> PartyRoom {
@@ -1488,6 +1598,7 @@ final class FirestoreService {
                     )
                     room.players.append(player)
                     room.playerIDs = room.players.map(\.userID)
+                    room.readyPlayerIDs = (room.readyPlayerIDs ?? []).filter { $0 != user.id }
                     let encoded = try Firestore.Encoder().encode(room)
                     transaction.setData(encoded, forDocument: roomRef, merge: true)
                     return room
@@ -1521,6 +1632,7 @@ final class FirestoreService {
                     guard room.status == .lobby else { return fail(FirestoreServiceError.partyRoomAlreadyStarted) }
                     guard Date() < room.expiresAt else { return fail(FirestoreServiceError.partyRoomExpired) }
                     guard room.players.count >= 2 else { return fail(FirestoreServiceError.invalidFriendAction) }
+                    guard room.allPlayersReady else { return fail(FirestoreServiceError.invalidFriendAction) }
                     room.status = .inProgress
                     room.startedAt = Date()
                     let encoded = try Firestore.Encoder().encode(room)
@@ -1541,6 +1653,21 @@ final class FirestoreService {
         }
     }
 
+    func setPartyReady(code: String, userID: String, isReady: Bool) async throws -> PartyRoom {
+        try await mutatePartyRoom(code: code) { room in
+            guard room.status == .lobby, room.containsPlayer(userID) else {
+                throw FirestoreServiceError.invalidFriendAction
+            }
+            var readyIDs = Set(room.readyPlayerIDs ?? [])
+            if isReady {
+                readyIDs.insert(userID)
+            } else {
+                readyIDs.remove(userID)
+            }
+            room.readyPlayerIDs = Array(readyIDs)
+        }
+    }
+
     func submitPartyResult(code: String, userID: String, result: MatchPlayerResult) async throws -> PartyRoom {
         try await mutatePartyRoom(code: code) { room in
             guard let index = room.players.firstIndex(where: { $0.userID == userID }) else {
@@ -1554,6 +1681,7 @@ final class FirestoreService {
 
     func leavePartyRoom(code: String, userID: String) async throws -> PartyRoom {
         try await mutatePartyRoom(code: code) { room in
+            room.readyPlayerIDs = (room.readyPlayerIDs ?? []).filter { $0 != userID }
             switch room.status {
             case .lobby:
                 if room.hostID == userID {

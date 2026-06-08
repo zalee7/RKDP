@@ -445,6 +445,8 @@ struct MatchmakingView: View {
         let opponent = session.players.first { $0.userID != user.id }
         let oppUser  = vm.opponentUser
         let isBotOpponent = opponent?.isBot == true
+        let needsManualReady = session.isLiveExhibition && !isBotOpponent
+        let didReady = vm.readySessionIDs.contains(session.id)
 
         return VStack(spacing: 24) {
             Spacer()
@@ -505,25 +507,59 @@ struct MatchmakingView: View {
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.cardBorder, lineWidth: 1))
             .padding(.horizontal)
 
-            // Countdown ring
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.12), lineWidth: 6)
-                    .frame(width: 80, height: 80)
-                Circle()
-                    .trim(from: 0, to: CGFloat(vm.matchCountdown) / 5.0)
-                    .stroke(mode.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .frame(width: 80, height: 80)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: vm.matchCountdown)
-                Text("\(vm.matchCountdown)")
-                    .font(.title.bold())
-                    .foregroundStyle(AppTheme.textPrimary)
-            }
+            if needsManualReady {
+                VStack(spacing: 12) {
+                    Image(systemName: didReady ? "checkmark.circle.fill" : "hand.tap.fill")
+                        .font(.system(size: 38, weight: .bold))
+                        .foregroundStyle(didReady ? AppTheme.teal : AppTheme.hotPink)
+                    Text(didReady ? "Ready · waiting for friend" : "Ready Up")
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("Both players need to tap Ready before the live match starts.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
 
-            Text(isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isCasual ? "No rank, no wager · starts automatically…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…")))
-                .font(.caption)
-                .foregroundStyle(AppTheme.textSecondary)
+                    Button {
+                        Task { await vm.confirmReady(session: session) }
+                    } label: {
+                        Label(didReady ? "Waiting" : "Ready", systemImage: didReady ? "hourglass" : "checkmark.circle.fill")
+                            .font(.headline.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(didReady ? AnyShapeStyle(AppTheme.controlBackground) : AnyShapeStyle(AppTheme.brandGradient))
+                            .foregroundStyle(didReady ? AppTheme.textSecondary : .white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(didReady ? AppTheme.controlBorder : Color.clear, lineWidth: 1))
+                    }
+                    .disabled(didReady)
+                    .buttonStyle(.plain)
+                }
+                .padding()
+                .background(AppTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                .padding(.horizontal)
+            } else {
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.12), lineWidth: 6)
+                        .frame(width: 80, height: 80)
+                    Circle()
+                        .trim(from: 0, to: CGFloat(vm.matchCountdown) / 5.0)
+                        .stroke(mode.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .frame(width: 80, height: 80)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 1), value: vm.matchCountdown)
+                    Text("\(vm.matchCountdown)")
+                        .font(.title.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                }
+
+                Text(isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isCasual ? "No rank, no wager · starts automatically…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…")))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
 
             Button {
                 Task { await vm.abortMatchFound(session: session) }
@@ -599,7 +635,25 @@ struct MatchmakingView: View {
                             .font(.headline.bold())
                         Text(session.isAsyncExhibition ? "Saved. Waiting for your friend…" : "Waiting for opponent…")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.textSecondary)
+                        if session.isAsyncExhibition {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Label("Back to Friends", systemImage: "chevron.left")
+                                    .font(.caption.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(AppTheme.controlBackground)
+                                    .foregroundStyle(AppTheme.textPrimary)
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(AppTheme.controlBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     .padding(20)
                     .background(.regularMaterial)
@@ -891,18 +945,18 @@ struct MatchmakingView: View {
 
     private func performanceColumn(label: String, result: MatchPlayerResult?, highlight: Bool) -> some View {
         VStack(spacing: 4) {
-            Text(label).font(.caption.bold()).foregroundStyle(.secondary)
+            Text(label).font(.caption.bold()).foregroundStyle(AppTheme.textSecondary)
             if let result {
                 Text(result.status)
                     .font(.headline.bold())
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                    .foregroundStyle(highlight ? .green : .primary)
+                    .foregroundStyle(highlight ? AppTheme.success : AppTheme.textPrimary)
                 Text("\(result.elapsedSeconds / 60):\(String(format: "%02d", result.elapsedSeconds % 60))")
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
             } else {
                 Text("—").font(.title2.bold()).foregroundStyle(.secondary)
-                Text(sessionModeMissingResultText).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(sessionModeMissingResultText).font(.system(size: 10)).foregroundStyle(AppTheme.textSecondary)
             }
         }
         .frame(maxWidth: .infinity)
@@ -1258,9 +1312,9 @@ struct MatchBreakdownView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding()
-        .background(Color.black.opacity(0.34))
+        .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.28), lineWidth: 1.2))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1.2))
     }
 
     private func playerBreakdownCard(_ player: MatchPlayer) -> some View {
@@ -1307,9 +1361,9 @@ struct MatchBreakdownView: View {
             }
         }
         .padding()
-        .background(Color.black.opacity(0.34))
+        .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.28), lineWidth: 1.2))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1.2))
     }
 
     private func statGrid(_ stats: [(String, String)]) -> some View {

@@ -7,7 +7,15 @@ private enum ShopSection: Hashable, CaseIterable {
     case category(CosmeticCategory)
 
     static var allCases: [ShopSection] {
-        let shopCategories = CosmeticCategory.allCases.filter { !$0.isAvatarCategory && !$0.isLegacyStoreCategory }
+        let shopCategories: [CosmeticCategory] = [
+            .title,
+            .boardTheme,
+            .tileTheme,
+            .avatarHead,
+            .avatarFace,
+            .avatarOutfit,
+            .avatarAura
+        ]
         return [.coinPacks, .rankedPass] + shopCategories.map { .category($0) }
     }
 
@@ -15,6 +23,7 @@ private enum ShopSection: Hashable, CaseIterable {
         switch self {
         case .coinPacks: return "Coin Packs"
         case .rankedPass: return "Ranked Pass"
+        case .category(.avatarOutfit): return "Avatar Body"
         case .category(let category): return category.rawValue
         }
     }
@@ -85,14 +94,11 @@ struct ShopView: View {
                             .padding()
                     case .category(let category):
                         let items = vm.items(for: category)
-                        let ownedItems = vm.ownedItems.filter { $0.category == category }
-                        if items.isEmpty && ownedItems.isEmpty {
+                        if items.isEmpty {
                             emptyStoreState(category: category)
                                 .padding()
-                        } else if category == .title {
-                            titleGrid(items: items, ownedItems: ownedItems)
                         } else {
-                            categorizedShopGrid(availableItems: items, ownedItems: ownedItems)
+                            rotationShopGrid(category: category, items: items)
                                 .padding(.vertical)
                         }
                     }
@@ -223,7 +229,8 @@ struct ShopView: View {
                     isOwned: vm.isOwned(item),
                     isEquipped: vm.isEquipped(item),
                     canAfford: vm.canAfford(item),
-                    isLimited: item.category == .title && item.price > 0 && vm.isInTodaysRotation(item)
+                    isLimited: item.price > 0 && vm.isInTodaysRotation(item),
+                    allowsOwnedEquip: false
                 ) {
                     Task { await handleShopAction(item) }
                 }
@@ -231,15 +238,13 @@ struct ShopView: View {
         }
     }
 
-    @ViewBuilder
-    private func categorizedShopGrid(availableItems: [CosmeticItem], ownedItems: [CosmeticItem]) -> some View {
+    private func rotationShopGrid(category: CosmeticCategory, items: [CosmeticItem]) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            if !ownedItems.isEmpty {
-                itemSection(title: "Owned", subtitle: "Equip anything you already have.", items: ownedItems)
-            }
-            if !availableItems.isEmpty {
-                itemSection(title: "Available", subtitle: "Today’s rotating picks.", items: availableItems)
-            }
+            itemSection(
+                title: category == .title ? "Today's Titles" : "Today's Picks",
+                subtitle: "Four rotating cosmetics for today.",
+                items: items
+            )
         }
         .padding(.horizontal)
     }
@@ -278,10 +283,10 @@ struct ShopView: View {
             Image(systemName: category == .title ? "clock.arrow.circlepath" : "bag.fill")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.crownGold)
-            Text(category == .title ? "No new titles today" : "Everything here is owned")
+            Text("No items in today’s cycle")
                 .font(.headline.bold())
                 .foregroundStyle(AppTheme.textPrimary)
-            Text("Owned cosmetics live on your Profile for faster equipping. Avatar parts live in Customize Avatar.")
+            Text("Owned cosmetics are managed from Profile. Store tabs show today’s rotating picks only.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -417,17 +422,18 @@ struct ShopItemCard: View {
     let isEquipped: Bool
     let canAfford: Bool
     let isLimited: Bool
+    var allowsOwnedEquip = true
     let onAction: () -> Void
 
     var actionLabel: String {
         if isEquipped { return "Equipped" }
-        if isOwned    { return "Equip" }
+        if isOwned    { return allowsOwnedEquip ? "Equip" : "Owned" }
         return "\(item.price)"
     }
 
     var actionColor: Color {
         if isEquipped { return AppTheme.teal.opacity(0.72) }
-        if isOwned    { return AppTheme.hotPink }
+        if isOwned    { return allowsOwnedEquip ? AppTheme.hotPink : AppTheme.royalBlue.opacity(0.72) }
         return canAfford ? AppTheme.hotPink : AppTheme.cardBorder
     }
 
@@ -495,8 +501,15 @@ struct ShopItemCard: View {
                 .padding(6)
             }
 
-            Text(item.name).font(.subheadline.bold()).lineLimit(1)
-            Text(item.description).font(.caption).foregroundStyle(AppTheme.textSecondary).lineLimit(2).multilineTextAlignment(.center)
+            Text(item.name)
+                .font(.subheadline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+                .lineLimit(1)
+            Text(item.description)
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
 
             Button(action: onAction) {
                 if isOwned || isEquipped {
@@ -522,7 +535,7 @@ struct ShopItemCard: View {
                     .clipShape(Capsule())
                 }
             }
-            .disabled(isEquipped || (!isOwned && !canAfford))
+            .disabled(isEquipped || (isOwned && !allowsOwnedEquip) || (!isOwned && !canAfford))
         }
         .padding()
         .background(AppTheme.cardBackground)

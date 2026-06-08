@@ -36,8 +36,8 @@ service cloud.firestore {
     }
 
     match /friendships/{friendshipID} {
-      allow read, create: if signedIn();
-      allow update, delete: if false;
+      allow read, create, delete: if signedIn();
+      allow update: if false;
     }
 
     match /exhibitionInvites/{inviteID} {
@@ -45,6 +45,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /partyRooms/{roomCode} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    match /partyInvites/{inviteID} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
 
     match /tournaments/{tournamentID} {
       allow read, create, update: if signedIn();

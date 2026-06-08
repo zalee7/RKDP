@@ -194,6 +194,7 @@ private struct HomeModeList: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let reduceMotionEnabled = reduceMotion
         VStack(spacing: 10) {
             ForEach(GameMode.allCases) { mode in
                 GameModeCardView(mode: mode, user: user) {
@@ -202,9 +203,9 @@ private struct HomeModeList: View {
                 .frame(height: 124)
                 .scrollTransition(.animated(.easeInOut(duration: 0.24)), axis: .vertical) { content, phase in
                     content
-                        .opacity(reduceMotion || phase.isIdentity ? 1 : 0.76)
-                        .scaleEffect(reduceMotion || phase.isIdentity ? 1 : 0.965)
-                        .offset(y: reduceMotion || phase.isIdentity ? 0 : 10)
+                        .opacity(reduceMotionEnabled || phase.isIdentity ? 1 : 0.76)
+                        .scaleEffect(reduceMotionEnabled || phase.isIdentity ? 1 : 0.965)
+                        .offset(y: reduceMotionEnabled || phase.isIdentity ? 0 : 10)
                 }
             }
         }
@@ -273,6 +274,15 @@ struct GameModeDetailView: View {
     private var timerOrFormatValue: String {
         selectedTab == .solo ? selectedDifficulty.rankedTimeLabel(for: mode) : onlineFormatSummary
     }
+    private var soloBestSummary: String {
+        rankInfo.soloBest?.displayText(for: mode) ?? "--"
+    }
+    private var onlineBestSummary: String {
+        rankInfo.onlineBest?.displayText(for: mode) ?? "--"
+    }
+    private var completedSoloSummary: String {
+        "\(user?.completedSoloDifficulties(for: mode).count ?? 0)/\(Difficulty.allCases.count)"
+    }
     private var pointsSummary: String {
         "\(String(format: "%.1f", mode.pointMultiplier(for: selectedDifficulty)))x"
     }
@@ -298,11 +308,12 @@ struct GameModeDetailView: View {
 
                         LobbySummaryStrip(
                             rankText: rankInfo.fullDisplayName,
-                            recordText: rankInfo.recordDisplay,
+                            secondTitle: selectedTab == .solo ? "Solo Best" : "Ranked W/L",
+                            secondValue: selectedTab == .solo ? soloBestSummary : rankInfo.recordDisplay,
                             formatTitle: selectedTab == .solo ? "Timer" : "Format",
                             formatValue: timerOrFormatValue,
-                            fourthTitle: selectedTab == .solo ? "Best" : "Points",
-                            fourthValue: selectedTab == .solo ? bestSummary : pointsSummary,
+                            fourthTitle: selectedTab == .solo ? "Completed" : "Online Best",
+                            fourthValue: selectedTab == .solo ? completedSoloSummary : onlineBestSummary,
                             rankColor: rankInfo.displayTier.color
                         )
                         .padding(.horizontal)
@@ -328,7 +339,7 @@ struct GameModeDetailView: View {
                                         .background(AppTheme.crownGold.opacity(0.16))
                                         .clipShape(Capsule())
                                 } else {
-                                    Text(bestSummary)
+                                    Text(soloBestSummary == "--" ? "No solo best yet" : "Best \(soloBestSummary)")
                                         .font(.caption.bold())
                                         .foregroundStyle(AppTheme.accentBright)
                                         .lineLimit(1)
@@ -341,17 +352,19 @@ struct GameModeDetailView: View {
                                     let onlineDisabled = selectedTab == .online &&
                                         !mode.rankedDifficulties.contains(difficulty) &&
                                         !mode.casualDifficulties.contains(difficulty)
+                                    let soloLockedReason = selectedTab == .solo ? user?.soloUnlockReason(mode: mode, difficulty: difficulty) : nil
+                                    let soloDisabled = soloLockedReason != nil
                                     DifficultyCardView(
                                         mode: mode,
                                         difficulty: difficulty,
                                         isSelected: selectedDifficulty == difficulty,
                                         showsOnlineAvailability: selectedTab == .online,
-                                        isDisabled: onlineDisabled,
-                                        soloLockedReason: selectedTab == .solo ? user?.soloUnlockReason(mode: mode, difficulty: difficulty) : nil,
+                                        isDisabled: onlineDisabled || soloDisabled,
+                                        soloLockedReason: soloLockedReason,
                                         rankedLockedReason: selectedTab == .online ? mode.rankedLockReason(for: difficulty) : nil,
                                         casualLockedReason: selectedTab == .online ? mode.casualLockReason(for: difficulty) : nil
                                     ) {
-                                        if !onlineDisabled {
+                                        if !onlineDisabled && !soloDisabled {
                                             selectedDifficulty = difficulty
                                         }
                                     }
@@ -414,7 +427,12 @@ struct GameModeDetailView: View {
                 }
             }
             .onChange(of: selectedTab) { _, tab in
-                guard tab == .online else { return }
+                if tab == .solo {
+                    if let user, !user.isSoloDifficultyUnlocked(mode: mode, difficulty: selectedDifficulty) {
+                        selectedDifficulty = Difficulty.allCases.first { user.isSoloDifficultyUnlocked(mode: mode, difficulty: $0) } ?? mode.defaultDifficulty
+                    }
+                    return
+                }
                 if mode.rankedDifficulties.count == 1,
                    mode.casualDifficulties.count == 1,
                    mode.rankedDifficulties.first == mode.casualDifficulties.first {
@@ -491,30 +509,6 @@ struct GameModeDetailView: View {
         ]
     }
 
-    private var bestSummary: String {
-        switch mode {
-        case .gridlock:
-            if let moves = rankInfo.bestMoves { return "Best \(moves) moves" }
-            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))% match" }
-            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
-        case .wordle:
-            if let guesses = rankInfo.bestGuesses { return "Best \(guesses) guesses" }
-            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
-        case .hangman:
-            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
-        case .anagram, .wordHunt:
-            if let score = rankInfo.bestScore { return "Best \(score) pts" }
-        case .colorLink:
-            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))% fill" }
-            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
-        case .minesweeper:
-            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
-            if let progress = rankInfo.bestProgress { return "Best \(Int((progress * 100).rounded()))%" }
-        case .sudoku:
-            if let time = rankInfo.bestTime { return "Best \(formattedTime(time))" }
-        }
-        return "No solo best yet"
-    }
 }
 
 
@@ -664,7 +658,8 @@ private struct ModeMiniPreview: View {
 
 private struct LobbySummaryStrip: View {
     let rankText: String
-    let recordText: String
+    let secondTitle: String
+    let secondValue: String
     let formatTitle: String
     let formatValue: String
     let fourthTitle: String
@@ -675,11 +670,11 @@ private struct LobbySummaryStrip: View {
         HStack(spacing: 0) {
             summaryItem(icon: "trophy.fill", title: "Rank", value: rankText, color: rankColor)
             Divider().overlay(Color.white.opacity(0.18)).padding(.vertical, 8)
-            summaryItem(icon: "chart.bar.fill", title: "W/L", value: recordText, color: AppTheme.teal)
+            summaryItem(icon: secondTitle == "Ranked W/L" ? "chart.bar.fill" : "sparkles", title: secondTitle, value: secondValue, color: AppTheme.teal)
             Divider().overlay(Color.white.opacity(0.18)).padding(.vertical, 8)
             summaryItem(icon: formatTitle == "Timer" ? "timer" : "slider.horizontal.3", title: formatTitle, value: formatValue, color: AppTheme.accentBright)
             Divider().overlay(Color.white.opacity(0.18)).padding(.vertical, 8)
-            summaryItem(icon: fourthTitle == "Best" ? "sparkles" : "star.fill", title: fourthTitle, value: fourthValue, color: AppTheme.crownGold)
+            summaryItem(icon: fourthTitle == "Completed" ? "checkmark.circle.fill" : "sparkles", title: fourthTitle, value: fourthValue, color: AppTheme.crownGold)
         }
         .frame(maxWidth: .infinity, minHeight: 58)
         .background(AppTheme.cardBackground.opacity(0.78))
@@ -1093,13 +1088,18 @@ struct GameModeCardView: View {
         if let user {
             let info = user.rank(for: mode)
             VStack(alignment: .trailing, spacing: 7) {
-                modeStatPill(label: "Best") {
-                    Text(bestText(info))
+                modeStatPill(label: "Solo Best") {
+                    Text(info.soloBest?.displayText(for: mode) ?? "--")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(AppTheme.accentBright.opacity(0.95))
                 }
+                modeStatPill(label: "Online Best") {
+                    Text(info.onlineBest?.displayText(for: mode) ?? "--")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(AppTheme.teal.opacity(0.95))
+                }
             }
-            .frame(width: 84, alignment: .trailing)
+            .frame(width: 92, alignment: .trailing)
         }
     }
 
@@ -1128,15 +1128,6 @@ struct GameModeCardView: View {
                         .strokeBorder(AppTheme.cardBorder.opacity(0.5), lineWidth: 1)
                 }
         }
-    }
-
-    private func bestText(_ info: RankInfo) -> String {
-        if let score = info.bestScore { return "\(score) pts" }
-        if let time = info.bestTime { return "\(time / 60):\(String(format: "%02d", time % 60))" }
-        if let moves = info.bestMoves { return "\(moves) moves" }
-        if let guesses = info.bestGuesses { return "\(guesses) guesses" }
-        if let progress = info.bestProgress { return "\(Int((progress * 100).rounded()))%" }
-        return "--"
     }
 }
 
@@ -1239,41 +1230,50 @@ private struct AnimatedModeThumbnailView: View {
     }
 
     private var gridDuelScene: some View {
-        ZStack {
-            MiniTileGrid(rows: 3, columns: 3, spacing: 3) { index in
-                gridDuelColor(for: index)
-            }
-            .frame(width: size * 0.62, height: size * 0.62)
-            .rotation3DEffect(.degrees(active ? 9 : -9), axis: (x: 0.25, y: 1, z: 0))
-            .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(Color.white.opacity(0.55), lineWidth: 2)
-                    .frame(width: size * 0.72, height: size * 0.72)
-            )
+        let boardSize = size * 0.68
+        let spacing: CGFloat = 3
+        let tileSize = (boardSize - spacing * 2) / 3
+        let colors = gridDuelPastelColors
 
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(Color.white.opacity(0.34))
-                .frame(width: size * 0.62, height: 2)
-                .offset(y: active ? -size * 0.10 : size * 0.10)
-
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
+        return ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(Color.white.opacity(0.28))
-                .frame(width: 2, height: size * 0.62)
-                .offset(x: active ? size * 0.10 : -size * 0.10)
+                .frame(width: boardSize + 8, height: boardSize + 8)
+
+            ForEach(0..<9, id: \.self) { index in
+                let row = index / 3
+                let column = index % 3
+                let baseX = (CGFloat(column) - 1) * (tileSize + spacing)
+                let baseY = (CGFloat(row) - 1) * (tileSize + spacing)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(colors[index])
+                    .frame(width: tileSize, height: tileSize)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(Color.white.opacity(0.46), lineWidth: 1)
+                    )
+                    .offset(
+                        x: baseX + gridDuelShiftX(row: row),
+                        y: baseY + gridDuelShiftY(column: column)
+                    )
+            }
         }
+        .frame(width: boardSize + 10, height: boardSize + 10)
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
     private var sudokuScene: some View {
-        MiniTileGrid(rows: 3, columns: 3, spacing: 3) { index in
-            index == (active ? 4 : 2) ? Color.white.opacity(0.82) : Color.white.opacity(0.20)
+        let boardSize = size * 0.68
+        let digits: [Int: String] = [1: "6", 4: "7", 6: "3"]
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.white.opacity(0.24))
+                .frame(width: boardSize + 8, height: boardSize + 8)
+
+            MiniSudokuGrid(active: active, digits: digits)
+                .frame(width: boardSize, height: boardSize)
         }
-        .frame(width: size * 0.62, height: size * 0.62)
-        .overlay(
-            Text(active ? "6" : "7")
-                .font(.system(size: size * 0.28, weight: .black, design: .rounded))
-                .foregroundStyle(AppTheme.royalBlue)
-                .offset(x: active ? 0 : size * 0.16, y: active ? 0 : -size * 0.16)
-        )
     }
 
     private var minesweeperScene: some View {
@@ -1386,8 +1386,22 @@ private struct AnimatedModeThumbnailView: View {
         [1.0, 0.86, 0.72, 0.58, 0.44][index]
     }
 
-    private func gridDuelColor(for index: Int) -> Color {
-        [AppTheme.crownGold, AppTheme.teal, AppTheme.hotPink, AppTheme.royalBlue, AppTheme.teal, AppTheme.hotPink, AppTheme.royalBlue, AppTheme.crownGold, AppTheme.teal][index]
+    private var gridDuelPastelColors: [Color] {
+        [
+            Color(hex: "F6D76B"), Color(hex: "74CFE3"), Color(hex: "F47EB2"),
+            Color(hex: "A8DC8A"), Color(hex: "BFEAF4"), Color(hex: "F6D76B"),
+            Color(hex: "F47EB2"), Color(hex: "A8DC8A"), Color(hex: "74CFE3"),
+        ]
+    }
+
+    private func gridDuelShiftX(row: Int) -> CGFloat {
+        guard !reduceMotion else { return 0 }
+        return row == 1 ? (active ? size * 0.055 : -size * 0.055) : 0
+    }
+
+    private func gridDuelShiftY(column: Int) -> CGFloat {
+        guard !reduceMotion else { return 0 }
+        return column == 0 ? (active ? -size * 0.05 : size * 0.05) : 0
     }
 
     private func minesweeperCellCenter(row: Int, column: Int) -> CGPoint {
@@ -1446,6 +1460,51 @@ private struct MiniTileGrid: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private struct MiniSudokuGrid: View {
+    let active: Bool
+    let digits: [Int: String]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let cell = geometry.size.width / 3
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.white.opacity(0.26))
+
+                ForEach(0..<9, id: \.self) { index in
+                    let row = index / 3
+                    let column = index % 3
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(index == (active ? 4 : 1) ? Color.white.opacity(0.54) : Color.white.opacity(0.18))
+                        .frame(width: cell - 3, height: cell - 3)
+                        .position(x: CGFloat(column) * cell + cell / 2, y: CGFloat(row) * cell + cell / 2)
+
+                    if let digit = digits[index] {
+                        Text(digit)
+                            .font(.system(size: geometry.size.width * 0.20, weight: .black, design: .rounded))
+                            .foregroundStyle(AppTheme.royalBlue)
+                            .position(x: CGFloat(column) * cell + cell / 2, y: CGFloat(row) * cell + cell / 2)
+                    }
+                }
+
+                Path { path in
+                    for index in 1..<3 {
+                        let position = CGFloat(index) * cell
+                        path.move(to: CGPoint(x: position, y: 0))
+                        path.addLine(to: CGPoint(x: position, y: geometry.size.height))
+                        path.move(to: CGPoint(x: 0, y: position))
+                        path.addLine(to: CGPoint(x: geometry.size.width, y: position))
+                    }
+                }
+                .stroke(Color.white.opacity(0.40), lineWidth: 1)
+
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.white.opacity(0.70), lineWidth: 2)
             }
         }
     }
@@ -1543,10 +1602,13 @@ struct PartyRoomView: View {
     let mode: GameMode
     let difficulty: Difficulty
     var autoCreate: Bool = false
+    var initialJoinCode: String?
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = PartyRoomViewModel()
     @State private var didAutoCreate = false
+    @State private var didAutoJoin = false
+    @State private var showInviteFriends = false
 
     var body: some View {
         ZStack {
@@ -1601,7 +1663,17 @@ struct PartyRoomView: View {
         .onDisappear {
             vm.stopListening()
         }
+        .sheet(isPresented: $showInviteFriends) {
+            if let room = vm.room {
+                PartyInviteFriendsSheet(user: user, room: room)
+            }
+        }
         .task {
+            if let initialJoinCode, !didAutoJoin, vm.room == nil {
+                didAutoJoin = true
+                vm.joinCode = initialJoinCode
+                await vm.join(user: user)
+            }
             guard autoCreate, !didAutoCreate, vm.room == nil else { return }
             didAutoCreate = true
             await vm.create(user: user, mode: mode, difficulty: difficulty)
@@ -1677,9 +1749,37 @@ struct PartyRoomView: View {
     }
 
     private func partyLobby(_ room: PartyRoom) -> some View {
-        ScrollView {
+        let isReady = room.isReady(user.id)
+        let canStart = room.isHost(user.id) && room.allPlayersReady
+        return ScrollView {
             VStack(spacing: 18) {
                 partyHeader(title: "Code \(room.code)", subtitle: "\(room.mode.displayName) · \(room.mode.difficultyLabel(room.difficulty))")
+
+                HStack(spacing: 10) {
+                    ShareLink(item: partyShareMessage(room)) {
+                        Label("Share Link", systemImage: "square.and.arrow.up")
+                            .font(.caption.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(AppTheme.controlBackground)
+                            .foregroundStyle(AppTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.controlBorder, lineWidth: 1.25))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button { showInviteFriends = true } label: {
+                        Label("Invite Friends", systemImage: "person.crop.circle.badge.plus")
+                            .font(.caption.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(AppTheme.hotPink.opacity(0.18))
+                            .foregroundStyle(AppTheme.hotPink)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.hotPink.opacity(0.35), lineWidth: 1.25))
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
@@ -1687,6 +1787,13 @@ struct PartyRoomView: View {
                             .font(.headline.bold())
                             .foregroundStyle(AppTheme.crownGold)
                         Spacer()
+                        Text("Ready \(room.readyCount)/\(room.players.count)")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(AppTheme.hotPink.opacity(0.14))
+                            .foregroundStyle(AppTheme.hotPink)
+                            .clipShape(Capsule())
                         Text(room.isHost(user.id) ? "Host" : "Joined")
                             .font(.caption.bold())
                             .padding(.horizontal, 10)
@@ -1698,7 +1805,7 @@ struct PartyRoomView: View {
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 10)], spacing: 10) {
                         ForEach(room.players) { player in
-                            PartyPlayerTile(player: player)
+                            PartyPlayerTile(player: player, isReady: room.isReady(player.userID))
                         }
                     }
                 }
@@ -1707,20 +1814,35 @@ struct PartyRoomView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
 
+                Button {
+                    Task { await vm.setReady(userID: user.id, isReady: !isReady) }
+                } label: {
+                    Label(isReady ? "Ready" : "Ready Up", systemImage: isReady ? "checkmark.circle.fill" : "circle")
+                        .font(.headline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(isReady ? AnyShapeStyle(AppTheme.teal.opacity(0.20)) : AnyShapeStyle(AppTheme.brandGradient))
+                        .foregroundStyle(isReady ? AppTheme.teal : .white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(isReady ? AppTheme.teal.opacity(0.35) : Color.clear, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
                 if room.isHost(user.id) {
                     Button {
                         Task { await vm.start(userID: user.id) }
                     } label: {
-                        Label(room.players.count >= 2 ? "Start Party" : "Need 2 Players", systemImage: "play.fill")
+                        Label(canStart ? "Start Party" : (room.players.count < 2 ? "Need 2 Players" : "Waiting for Ready"), systemImage: "play.fill")
                             .font(.headline.bold())
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(room.players.count >= 2 ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(Color.white.opacity(0.08)))
-                            .foregroundStyle(room.players.count >= 2 ? .white : AppTheme.textSecondary)
+                            .background(canStart ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(AppTheme.controlBackground))
+                            .foregroundStyle(canStart ? .white : AppTheme.textSecondary)
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(canStart ? Color.clear : AppTheme.controlBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .disabled(room.players.count < 2)
+                    .disabled(!canStart)
                 }
 
                 Button(role: .destructive) {
@@ -1828,6 +1950,10 @@ struct PartyRoomView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private func partyShareMessage(_ room: PartyRoom) -> String {
+        "Join my Puzzle Party room!\nCode: \(room.code)\npuzzleparty://join/\(room.code)"
+    }
+
     private func partyInfoRow(icon: String, title: String, value: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
@@ -1857,8 +1983,96 @@ struct PartyRoomView: View {
     }
 }
 
+private struct PartyInviteFriendsSheet: View {
+    let user: AppUser
+    let room: PartyRoom
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var vm = FriendsViewModel()
+    @State private var sentIDs: Set<String> = []
+    @State private var sendingID: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Send a room invite notification. You can still share the code with anyone.")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .padding(.horizontal)
+                            .padding(.top, 12)
+
+                        if vm.friends.isEmpty {
+                            Text("Add friends first, then invite them here.")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(AppTheme.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                                .padding(.horizontal)
+                        }
+
+                        ForEach(vm.friends) { friend in
+                            HStack(spacing: 12) {
+                                StickDuelerAvatarView(style: friend.avatarStyle, size: 44, initials: String(friend.username.prefix(1)))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(friend.username)
+                                        .font(.headline.bold())
+                                        .foregroundStyle(AppTheme.textPrimary)
+                                    Text("Room \(room.code) · \(room.mode.displayName)")
+                                        .font(.caption)
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                }
+                                Spacer()
+                                Button {
+                                    Task { await send(to: friend) }
+                                } label: {
+                                    Text(sentIDs.contains(friend.userID) ? "Sent" : "Invite")
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(sentIDs.contains(friend.userID) ? AppTheme.teal.opacity(0.18) : AppTheme.hotPink)
+                                        .foregroundStyle(sentIDs.contains(friend.userID) ? AppTheme.teal : AppTheme.textOnColor)
+                                        .clipShape(Capsule())
+                                }
+                                .disabled(sentIDs.contains(friend.userID) || sendingID == friend.userID)
+                            }
+                            .padding(12)
+                            .background(AppTheme.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                            .padding(.horizontal)
+                        }
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+            .navigationTitle("Invite Friends")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .onAppear { vm.start(user: user) }
+            .onDisappear { vm.stop() }
+        }
+    }
+
+    private func send(to friend: FriendSummary) async {
+        sendingID = friend.userID
+        defer { sendingID = nil }
+        do {
+            try await FirestoreService.shared.createPartyInvite(room: room, from: user, to: friend)
+            sentIDs.insert(friend.userID)
+        } catch {
+            vm.errorMessage = error.localizedDescription
+        }
+    }
+}
+
 private struct PartyPlayerTile: View {
     let player: PartyPlayer
+    let isReady: Bool
 
     var body: some View {
         VStack(spacing: 8) {
@@ -1868,14 +2082,21 @@ private struct PartyPlayerTile: View {
                 .foregroundStyle(AppTheme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
-            if player.isHost {
-                Text("HOST")
-                    .font(.system(size: 9, weight: .black))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(AppTheme.crownGold.opacity(0.20))
-                    .foregroundStyle(AppTheme.crownGold)
-                    .clipShape(Capsule())
+            HStack(spacing: 4) {
+                if player.isHost {
+                    Text("HOST")
+                        .font(.system(size: 9, weight: .black))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AppTheme.crownGold.opacity(0.20))
+                        .foregroundStyle(AppTheme.crownGold)
+                        .clipShape(Capsule())
+                }
+                if isReady {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.teal)
+                }
             }
         }
         .padding(10)
@@ -2003,6 +2224,13 @@ private final class PartyRoomViewModel: ObservableObject {
         guard let room else { return }
         await run {
             self.room = try await self.store.startPartyRoom(code: room.code, hostID: userID)
+        }
+    }
+
+    func setReady(userID: String, isReady: Bool) async {
+        guard let room else { return }
+        await run {
+            self.room = try await self.store.setPartyReady(code: room.code, userID: userID, isReady: isReady)
         }
     }
 

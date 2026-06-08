@@ -104,6 +104,19 @@ struct PartyPlayer: Codable, Identifiable, Equatable {
     var abandoned: Bool
 }
 
+struct PartyInvite: Codable, Identifiable, Equatable {
+    var id: String
+    var roomCode: String
+    var fromID: String
+    var fromUsername: String
+    var toID: String
+    var toUsername: String
+    var mode: GameMode
+    var difficulty: Difficulty
+    var createdAt: Date
+    var expiresAt: Date
+}
+
 struct PartyRoom: Codable, Identifiable, Equatable {
     var id: String { code }
     var code: String
@@ -121,6 +134,7 @@ struct PartyRoom: Codable, Identifiable, Equatable {
     var finishedAt: Date?
     var winnerID: String?
     var winnerReason: String?
+    var readyPlayerIDs: [String]?
     var maxPlayers: Int
 
     var isExpired: Bool {
@@ -133,6 +147,22 @@ struct PartyRoom: Codable, Identifiable, Equatable {
 
     func isHost(_ userID: String) -> Bool {
         hostID == userID
+    }
+
+    var readyIDs: Set<String> {
+        Set(readyPlayerIDs ?? [])
+    }
+
+    var readyCount: Int {
+        readyIDs.intersection(Set(playerIDs)).count
+    }
+
+    var allPlayersReady: Bool {
+        players.count >= 2 && Set(playerIDs).isSubset(of: readyIDs)
+    }
+
+    func isReady(_ userID: String) -> Bool {
+        readyIDs.contains(userID)
     }
 }
 

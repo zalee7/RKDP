@@ -150,16 +150,9 @@ final class RankingService {
                     }
 
                     let result = session.playerResults?[userID]
-                    let isWinner = session.winnerID == userID
                     let wonByForfeit = result?.status == "Won by forfeit"
-                    if isWinner, !wonByForfeit, result?.completed == true, let time = result?.elapsedSeconds {
-                        rankInfo.bestTime = min(rankInfo.bestTime ?? Int.max, time)
-                    }
-                    if isWinner, session.mode.isScoreBased, let score = result?.score {
-                        rankInfo.bestScore = max(rankInfo.bestScore ?? 0, score)
-                    }
-                    if isWinner, session.mode.isWordle, let guesses = result?.totalGuesses, guesses > 0 {
-                        rankInfo.bestGuesses = min(rankInfo.bestGuesses ?? Int.max, guesses)
+                    if !wonByForfeit, let result {
+                        rankInfo.onlineBest = BestStat.updated(rankInfo.onlineBest, with: .from(match: result, mode: session.mode))
                     }
 
                     user.ranks[session.mode] = rankInfo

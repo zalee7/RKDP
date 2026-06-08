@@ -81,7 +81,7 @@ struct HangmanGame {
         return uniqueLetters[Int(rng.next() % UInt64(uniqueLetters.count))]
     }
 
-    private static func defaultStarterLetter(for word: String) -> Character {
+    static func defaultStarterLetter(for word: String) -> Character {
         sortedUniqueLetters(in: word).first ?? "A"
     }
 
