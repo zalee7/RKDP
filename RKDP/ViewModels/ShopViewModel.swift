@@ -6,6 +6,8 @@ final class ShopViewModel: ObservableObject {
     @Published var ownedCosmetics: OwnedCosmetics
     @Published var errorMessage: String?
     @Published var isSaving = false
+    @Published var openedPackResult: CosmeticPackOpenResult?
+    @Published private(set) var refundDebt = 0
 
     private let store = FirestoreService.shared
     private let coinStore = CoinPackStoreKitService.shared
@@ -16,6 +18,16 @@ final class ShopViewModel: ObservableObject {
         self.ownedCosmetics = user.cosmetics
     }
 
+    func refreshIdentity(from user: AppUser) {
+        guard !isSaving, self.user.id == user.id else { return }
+        self.user = user
+        ownedCosmetics = user.cosmetics
+    }
+
+    func refreshRefundStatus() async {
+        if let debt = try? await store.walletRefundDebt(userID: user.id) { refundDebt = debt }
+    }
+
     func items(for category: CosmeticCategory) -> [CosmeticItem] {
         guard !category.isLegacyStoreCategory, category != .avatarPose else { return [] }
         let items = DailyRotation.availableItems(for: category, ownedIDs: [])
@@ -23,6 +35,26 @@ final class ShopViewModel: ObservableObject {
             if lhs.price != rhs.price { return lhs.price < rhs.price }
             return lhs.name < rhs.name
         }
+    }
+
+    var todaysAvatarShopItems: [CosmeticItem] {
+        DailyRotation.todaysAvatarShopItems(ownedIDs: [])
+    }
+
+    var todaysBoardShopItems: [CosmeticItem] {
+        items(for: .boardTheme)
+    }
+
+    var todaysTileShopItems: [CosmeticItem] {
+        items(for: .tileTheme)
+    }
+
+    var todaysCardShopItems: [CosmeticItem] {
+        items(for: .cardTheme)
+    }
+
+    var todaysTitleShopItems: [CosmeticItem] {
+        items(for: .title)
     }
 
     var ownedItems: [CosmeticItem] {
@@ -59,14 +91,30 @@ final class ShopViewModel: ObservableObject {
         defer { isSaving = false }
         do {
             await coinStore.loadProducts()
-            let receipt = try await coinStore.purchase(productID: pack.id)
-            user = try await store.applyCoinPackPurchase(userID: user.id, productID: receipt.productID, transactionID: receipt.transactionID)
+            let receipt = try await coinStore.purchase(productID: pack.id, userID: user.id)
+            user = try await coinStore.deliver(receipt)
             ownedCosmetics = user.cosmetics
+            await refreshRefundStatus()
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    @discardableResult
+    func retryPendingCoinPurchases() async -> Bool {
+        guard !isSaving else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        if let updated = await coinStore.recoverPurchases(userID: user.id) {
+            user = updated
+            ownedCosmetics = updated.cosmetics
+            await refreshRefundStatus()
+            return true
+        }
+        errorMessage = coinStore.pendingDeliveryError
+        return false
     }
 
     @discardableResult
@@ -77,6 +125,7 @@ final class ShopViewModel: ObservableObject {
         defer { isSaving = false }
         do {
             user = try await store.claimDailyCoins(userID: user.id)
+            await refreshRefundStatus()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -118,6 +167,7 @@ final class ShopViewModel: ObservableObject {
         case .title:        return ownedCosmetics.equippedTitle == item.id
         case .boardTheme:   return ownedCosmetics.equippedBoardTheme == item.id
         case .tileTheme:    return ownedCosmetics.equippedTileTheme == item.id
+        case .cardTheme:    return ownedCosmetics.equippedCardTheme == item.id
         case .numberFont:   return ownedCosmetics.equippedNumberFont == item.id
         case .cellBorder:   return ownedCosmetics.equippedCellBorder == item.id
         case .avatarHead:   return ownedCosmetics.equippedAvatarHead == item.id
@@ -129,6 +179,37 @@ final class ShopViewModel: ObservableObject {
     }
 
     func canAfford(_ item: CosmeticItem) -> Bool { user.coins >= item.price }
+
+    func canAffordPack(_ kind: CosmeticPackKind) -> Bool { user.coins >= kind.price }
+
+    func hasEligibleItems(in kind: CosmeticPackKind) -> Bool {
+        CosmeticCatalog.all.contains { item in
+            kind.eligibleCategories.contains(item.category) && item.price > 0
+        }
+    }
+
+    func canOpenPack(_ kind: CosmeticPackKind) -> Bool {
+        canAffordPack(kind) && hasEligibleItems(in: kind)
+    }
+
+    @discardableResult
+    func openPack(_ kind: CosmeticPackKind) async -> Bool {
+        guard !isSaving, canOpenPack(kind) else { return false }
+        errorMessage = nil
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let response = try await store.openCosmeticPack(userID: user.id, kind: kind)
+            user = response.user
+            ownedCosmetics = response.user.cosmetics
+            openedPackResult = response.result
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
 
     @discardableResult
     func purchase(_ item: CosmeticItem) async -> Bool {
@@ -192,6 +273,6 @@ final class ShopViewModel: ObservableObject {
     }
 
     var equippedTitleName: String {
-        CosmeticCatalog.allTitles.first { $0.id == ownedCosmetics.equippedTitle }?.name ?? "Puzzler"
+        user.displayedTitle
     }
 }

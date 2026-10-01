@@ -18,7 +18,9 @@ struct FriendsView: View {
                     VStack(spacing: 18) {
                         header
                         partySection
+                        #if !PP_SOCIAL_SANDBOX
                         searchCard
+                        #endif
                         if let error = vm.errorMessage {
                             Text(error)
                                 .font(.caption.bold())
@@ -69,8 +71,14 @@ struct FriendsView: View {
                 Text("This removes them from your friends list and cancels pending invites between you.")
             }
             .sheet(isPresented: $showPartySetup) {
-                PartySetupSheet { mode, difficulty in
-                    partyLaunch = PartyLaunch(mode: mode, difficulty: difficulty, autoCreate: true)
+                PartySetupSheet { mode, difficulty, rounds in
+                    let first = rounds?.first ?? PartyStageRoundConfiguration.quickStage[0]
+                    partyLaunch = PartyLaunch(
+                        mode: rounds == nil ? mode : first.mode,
+                        difficulty: rounds == nil ? difficulty : first.difficulty,
+                        autoCreate: true,
+                        stageRounds: rounds
+                    )
                 }
             }
             .fullScreenCover(item: $vm.activeExhibitionSession, onDismiss: {
@@ -83,13 +91,18 @@ struct FriendsView: View {
                     }
                 }
             }
-            .fullScreenCover(item: $partyLaunch) { launch in
+            .fullScreenCover(item: $partyLaunch, onDismiss: {
+                #if PP_SOCIAL_SANDBOX
+                Task { await auth.refreshUser() }
+                #endif
+            }) { launch in
                 NavigationStack {
                     PartyRoomView(
                         user: user,
                         mode: launch.mode,
                         difficulty: launch.difficulty,
-                        autoCreate: launch.autoCreate
+                        autoCreate: launch.autoCreate,
+                        stageRoundConfigurations: launch.stageRounds
                     )
                 }
             }
@@ -108,8 +121,22 @@ struct FriendsView: View {
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
+            ShareLink(item: friendInviteShareText) {
+                Label("Invite Outside App", systemImage: "square.and.arrow.up")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(AppTheme.controlBackground)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(AppTheme.controlBorder, lineWidth: 1))
+            }
         }
         .padding(.horizontal)
+    }
+
+    private var friendInviteShareText: String {
+        "Play Puzzle Party with me. Add my username: \(user.username)"
     }
 
     private var searchCard: some View {
@@ -162,12 +189,12 @@ struct FriendsView: View {
     private var partySection: some View {
         sectionCard(title: "Party Mode") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Host up to 8 players with a join code. Everyone gets the same puzzle, with no rank or coins at stake.")
+                Text("Host up to 8 players with a join code. Choose one game or a 3-round party playlist with post-round scores.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 10) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     Button {
                         showPartySetup = true
                     } label: {
@@ -253,13 +280,19 @@ struct FriendsView: View {
                     } label: {
                         Label("Invite", systemImage: "gamecontroller.fill")
                             .font(.caption.bold())
-                            .labelStyle(.iconOnly)
-                            .accessibilityLabel("Invite \(friend.username)")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(minWidth: 76)
+                            .background(AppTheme.crownGold.opacity(0.18))
+                            .foregroundStyle(AppTheme.crownGold)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(AppTheme.crownGold.opacity(0.48), lineWidth: 1.2))
+                            .shadow(color: AppTheme.crownGold.opacity(0.22), radius: 6, x: 0, y: 3)
                     }
-                    .padding(10)
-                    .background(AppTheme.crownGold.opacity(0.18))
-                    .foregroundStyle(AppTheme.crownGold)
-                    .clipShape(Circle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Invite \(friend.username)")
                 }
                 .padding(10)
                 .background(AppTheme.controlBackground.opacity(0.72))
@@ -305,16 +338,20 @@ struct FriendsView: View {
                 .fill(AppTheme.modeGradient(invite.mode))
                 .frame(width: 42, height: 42)
                 .overlay(Image(systemName: invite.mode.icon).foregroundStyle(.white))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(incoming ? "From \(invite.fromUsername)" : "To \(invite.toUsername)")
                     .font(.headline)
                     .foregroundStyle(AppTheme.textPrimary)
                 Text("\(invite.mode.displayName) · \(invite.mode.difficultyLabel(invite.difficulty)) · expires in \(remainingText(invite))")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
-                Text(statusText(for: invite, asyncState: asyncState, incoming: incoming))
-                    .font(.caption.bold())
-                    .foregroundStyle(statusColor(for: invite, asyncState: asyncState))
+                if invite.isPlayLater {
+                    playLaterStatusPill(asyncState)
+                } else {
+                    Text(statusText(for: invite, asyncState: asyncState, incoming: incoming))
+                        .font(.caption.bold())
+                        .foregroundStyle(statusColor(for: invite, asyncState: asyncState))
+                }
             }
             Spacer()
             if invite.isPlayLater {
@@ -340,11 +377,20 @@ struct FriendsView: View {
         case .waitingOnFriend:
             Text("Waiting")
                 .font(.caption.bold())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(AppTheme.controlBackground)
                 .foregroundStyle(AppTheme.textSecondary)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(AppTheme.controlBorder, lineWidth: 1))
         case .completed:
             Button("View Result") { Task { await vm.playInvite(invite, currentUser: user) } }
                 .font(.caption.bold())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(AppTheme.teal.opacity(0.16))
                 .foregroundStyle(AppTheme.teal)
+                .clipShape(Capsule())
         case .yourTurn:
             if incoming && invite.status == .pending {
                 Button("Decline") { Task { await vm.declineInvite(invite, currentUserID: user.id) } }
@@ -353,7 +399,30 @@ struct FriendsView: View {
             }
             Button("Play Turn") { Task { await vm.playInvite(invite, currentUser: user) } }
                 .font(.caption.bold())
-                .foregroundStyle(AppTheme.hotPink)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(AppTheme.hotPink)
+                .foregroundStyle(AppTheme.textOnColor)
+                .clipShape(Capsule())
+        }
+    }
+
+    private func playLaterStatusPill(_ state: PlayLaterInviteState) -> some View {
+        Text(statusPillText(for: state))
+            .font(.system(size: 10, weight: .black, design: .rounded))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(statusColor(for: state).opacity(state == .yourTurn ? 0.18 : 0.13))
+            .foregroundStyle(statusColor(for: state))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(statusColor(for: state).opacity(0.32), lineWidth: 1))
+    }
+
+    private func statusPillText(for state: PlayLaterInviteState) -> String {
+        switch state {
+        case .yourTurn: return "YOUR TURN"
+        case .waitingOnFriend: return "WAITING ON FRIEND"
+        case .completed: return "RESULT READY"
         }
     }
 
@@ -370,9 +439,9 @@ struct FriendsView: View {
             return .yourTurn
         }
 
-        let myResult = results[user.id]
+        let myResult = results[user.id].flatMap { MatchResolver.isFinalResult($0) ? $0 : nil }
         let opponentID = invite.fromID == user.id ? invite.toID : invite.fromID
-        let opponentResult = results[opponentID]
+        let opponentResult = results[opponentID].flatMap { MatchResolver.isFinalResult($0) ? $0 : nil }
 
         if session.status == .finished || (myResult != nil && opponentResult != nil) {
             return .completed
@@ -402,16 +471,20 @@ struct FriendsView: View {
 
     private func statusColor(for invite: ExhibitionInvite, asyncState: PlayLaterInviteState) -> Color {
         if invite.isPlayLater {
-            switch asyncState {
-            case .yourTurn:
-                return AppTheme.hotPink
-            case .waitingOnFriend:
-                return AppTheme.textSecondary
-            case .completed:
-                return AppTheme.teal
-            }
+            return statusColor(for: asyncState)
         }
         return invite.status == .accepted ? AppTheme.teal : AppTheme.crownGold
+    }
+
+    private func statusColor(for state: PlayLaterInviteState) -> Color {
+        switch state {
+        case .yourTurn:
+            return AppTheme.hotPink
+        case .waitingOnFriend:
+            return AppTheme.textSecondary
+        case .completed:
+            return AppTheme.teal
+        }
     }
 
     private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -474,15 +547,26 @@ private struct FriendProfileSheet: View {
         NavigationStack {
             ZStack {
                 AppTheme.arenaBackground.ignoresSafeArea()
+                ScrollView {
                 VStack(spacing: 18) {
                     VStack(spacing: 10) {
-                        StickDuelerAvatarView(style: friend.avatarStyle, size: 86, initials: String(friend.username.prefix(1)))
+                        EarnedAvatarView(style: profile?.cosmetics.avatarStyle ?? friend.avatarStyle,
+                                         frame: profile?.equippedEarnedReward(in: .frame), size: 96)
                         Text(friend.username)
                             .font(.title2.bold())
                             .foregroundStyle(AppTheme.textPrimary)
-                        Text(profile == nil ? "Loading profile stats..." : "Friend profile")
+                        Text(profile?.displayedTitle ?? "Loading profile stats...")
                             .font(.caption.bold())
                             .foregroundStyle(AppTheme.textSecondary)
+                        if let badge = profile?.equippedEarnedReward(in: .badge) { EarnedBadgeLabel(reward: badge) }
+                    }
+
+                    if let profile {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Earned Collection").font(.headline).foregroundStyle(AppTheme.hotPink)
+                            EarnedTrophyShelf(user: profile)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     VStack(spacing: 10) {
@@ -509,10 +593,13 @@ private struct FriendProfileSheet: View {
                                 .font(.headline.bold())
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(AppTheme.brandGradient)
-                                .foregroundStyle(.white)
+                                .background(AppTheme.crownGold.opacity(0.18))
+                                .foregroundStyle(AppTheme.crownGold)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.crownGold.opacity(0.52), lineWidth: 1.3))
+                                .shadow(color: AppTheme.crownGold.opacity(0.22), radius: 8, x: 0, y: 4)
                         }
+                        .buttonStyle(.plain)
 
                         Button(role: .destructive) {
                             dismiss()
@@ -531,6 +618,7 @@ private struct FriendProfileSheet: View {
                     Spacer(minLength: 0)
                 }
                 .padding()
+                }
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -597,13 +685,16 @@ private struct PartyLaunch: Identifiable {
     let mode: GameMode
     let difficulty: Difficulty
     let autoCreate: Bool
+    var stageRounds: [PartyStageRoundConfiguration]? = nil
 }
 
 private struct PartySetupSheet: View {
-    let onCreate: (GameMode, Difficulty) -> Void
+    let onCreate: (GameMode, Difficulty, [PartyStageRoundConfiguration]?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var mode: GameMode = .colorLink
     @State private var difficulty: Difficulty = .expert
+    @State private var format: PartySetupFormat = .single
+    @State private var rounds = PartyStageRoundConfiguration.quickStage
 
     var body: some View {
         NavigationStack {
@@ -615,53 +706,92 @@ private struct PartySetupSheet: View {
                             Text("Create Party")
                                 .font(.title.bold())
                                 .foregroundStyle(AppTheme.textPrimary)
-                            Text("Pick a shared puzzle. Friends can join with the room code.")
+                            Text("Pick one shared puzzle or build a 3-round playlist with post-round scores.")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textSecondary)
                                 .multilineTextAlignment(.center)
                         }
                         .padding(.top, 18)
 
-                        pickerSection(title: "Mode") {
-                            ForEach(GameMode.allCases) { candidate in
-                                setupRow(
-                                    title: candidate.displayName,
-                                    subtitle: candidate.description,
-                                    icon: candidate.icon,
-                                    selected: mode == candidate
-                                ) {
-                                    mode = candidate
-                                    difficulty = candidate.defaultDifficulty
-                                }
+                        pickerSection(title: "Party Format") {
+                            HStack(spacing: 10) {
+                                setupFormatButton(.single)
+                                setupFormatButton(.playlist)
                             }
                         }
 
-                        pickerSection(title: mode == .anagram || mode == .hangman ? "Word Length" : "Difficulty") {
-                            ForEach(Difficulty.allCases, id: \.self) { candidate in
-                                setupRow(
-                                    title: mode.difficultyLabel(candidate),
-                                    subtitle: candidate.displayName,
-                                    icon: "slider.horizontal.3",
-                                    selected: difficulty == candidate
-                                ) {
-                                    difficulty = candidate
+                        if format == .single {
+                            pickerSection(title: "Mode") {
+                                ForEach(GameMode.allCases) { candidate in
+                                    setupRow(
+                                        title: candidate.displayName,
+                                        subtitle: candidate.description,
+                                        icon: candidate.icon,
+                                        selected: mode == candidate
+                                    ) {
+                                        mode = candidate
+                                        difficulty = candidate.defaultDifficulty
+                                    }
+                                }
+                            }
+
+                            pickerSection(title: mode == .anagram || mode == .hangman ? "Word Length" : "Difficulty") {
+                                ForEach(Difficulty.allCases, id: \.self) { candidate in
+                                    setupRow(
+                                        title: mode.difficultyLabel(candidate),
+                                        subtitle: candidate.displayName,
+                                        icon: "slider.horizontal.3",
+                                        selected: difficulty == candidate
+                                    ) {
+                                        difficulty = candidate
+                                    }
+                                }
+                            }
+                        } else {
+                            pickerSection(title: "Playlist") {
+                                Text("Choose 3 different games. Scores are awarded after each round, then combined for the final party winner.")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.textSecondary)
+
+                                Button {
+                                    rounds = PartyStageRoundConfiguration.quickStage
+                                } label: {
+                                    Label("Quick Playlist", systemImage: "sparkles")
+                                        .font(.caption.bold())
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 11)
+                                        .background(AppTheme.hotPink.opacity(0.18))
+                                        .foregroundStyle(AppTheme.hotPink)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.hotPink.opacity(0.36), lineWidth: 1.25))
+                                }
+                                .buttonStyle(.plain)
+
+                                ForEach(rounds.indices, id: \.self) { index in
+                                    playlistRoundCard(index: index)
                                 }
                             }
                         }
 
                         Button {
-                            onCreate(mode, difficulty)
+                            if format == .playlist {
+                                onCreate(mode, difficulty, normalizedRounds)
+                            } else {
+                                onCreate(mode, difficulty, nil)
+                            }
                             dismiss()
                         } label: {
-                            Label("Create Room", systemImage: "person.3.fill")
+                            Label(format == .playlist ? "Create Playlist Party" : "Create Room", systemImage: "person.3.fill")
                                 .font(.headline.bold())
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(AppTheme.brandGradient)
-                                .foregroundStyle(.white)
+                                .background(canCreate ? AnyShapeStyle(AppTheme.brandGradient) : AnyShapeStyle(AppTheme.controlBackground))
+                                .foregroundStyle(canCreate ? .white : AppTheme.textSecondary)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(canCreate ? Color.clear : AppTheme.controlBorder, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
+                        .disabled(!canCreate)
                     }
                     .padding()
                 }
@@ -675,6 +805,44 @@ private struct PartySetupSheet: View {
                 }
             }
         }
+    }
+
+    private var normalizedRounds: [PartyStageRoundConfiguration] {
+        rounds.enumerated().map { offset, round in
+            PartyStageRoundConfiguration(index: offset, mode: round.mode, difficulty: round.difficulty)
+        }
+    }
+
+    private var canCreate: Bool {
+        format == .single || Set(rounds.map(\.mode)).count == 3
+    }
+
+    private func setupFormatButton(_ candidate: PartySetupFormat) -> some View {
+        Button {
+            format = candidate
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: candidate.icon)
+                    .font(.headline.bold())
+                Text(candidate.title)
+                    .font(.caption.bold())
+                Text(candidate.subtitle)
+                    .font(.system(size: 10, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 92)
+            .padding(10)
+            .background(format == candidate ? AnyShapeStyle(AppTheme.selectedControlBackground) : AnyShapeStyle(AppTheme.controlBackground))
+            .foregroundStyle(format == candidate ? AppTheme.accentBright : AppTheme.textSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(format == candidate ? AppTheme.accentBright.opacity(0.55) : AppTheme.controlBorder, lineWidth: format == candidate ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func pickerSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -730,6 +898,104 @@ private struct PartySetupSheet: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func playlistRoundCard(index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Round \(index + 1)")
+                .font(.headline.bold())
+                .foregroundStyle(AppTheme.accentBright)
+
+            Menu {
+                ForEach(GameMode.allCases.filter { candidate in
+                    candidate == rounds[index].mode || !rounds.contains(where: { $0.mode == candidate })
+                }) { candidate in
+                    Button(candidate.displayName) {
+                        rounds[index].mode = candidate
+                        rounds[index].difficulty = candidate.defaultDifficulty
+                    }
+                }
+            } label: {
+                setupSummaryRow(
+                    title: rounds[index].mode.displayName,
+                    subtitle: rounds[index].mode.description,
+                    icon: rounds[index].mode.icon
+                )
+            }
+
+            Menu {
+                ForEach(Difficulty.allCases, id: \.self) { candidate in
+                    Button(rounds[index].mode.difficultyLabel(candidate)) {
+                        rounds[index].difficulty = candidate
+                    }
+                }
+            } label: {
+                setupSummaryRow(
+                    title: rounds[index].mode.difficultyLabel(rounds[index].difficulty),
+                    subtitle: rounds[index].difficulty.displayName,
+                    icon: "slider.horizontal.3"
+                )
+            }
+        }
+        .padding()
+        .background(AppTheme.controlBackground.opacity(0.62))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.controlBorder, lineWidth: 1))
+    }
+
+    private func setupSummaryRow(title: String, subtitle: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppTheme.controlBackground)
+                .frame(width: 42, height: 42)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.headline.bold())
+                        .foregroundStyle(AppTheme.accentBright)
+                )
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.controlBorder, lineWidth: 1))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: "chevron.down")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
+private enum PartySetupFormat: Hashable {
+    case single
+    case playlist
+
+    var title: String {
+        switch self {
+        case .single: return "Single Game"
+        case .playlist: return "3 Rounds"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .single: return "One shared puzzle"
+        case .playlist: return "Playlist and scores"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .single: return "gamecontroller.fill"
+        case .playlist: return "list.number"
+        }
     }
 }
 

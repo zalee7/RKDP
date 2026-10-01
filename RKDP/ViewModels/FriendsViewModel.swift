@@ -206,6 +206,15 @@ final class FriendsViewModel: ObservableObject {
                 } else {
                     session = try await store.fetchSession(id: sessionID)
                 }
+                let results = session.playerResults ?? [:]
+                let opponentID = invite.fromID == currentUser.id ? invite.toID : invite.fromID
+                if session.status != .finished,
+                   let myResult = results[currentUser.id],
+                   MatchResolver.isFinalResult(myResult),
+                   results[opponentID].map(MatchResolver.isFinalResult) != true {
+                    errorMessage = "Your turn is submitted. Waiting on your friend."
+                    return
+                }
                 if invite.toID == currentUser.id && invite.status == .pending {
                     _ = try await store.acceptExhibitionInvite(invite, currentUser: currentUser)
                 }

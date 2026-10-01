@@ -1,0 +1,10 @@
+{
+  "score": 4,
+  "summary": "Restricted test harness: server-owned participant reads added; all client writes remain denied. Live positive/negative probes passed, but no full production/emulator audit is claimed.",
+  "findings": [{
+    "check": "Scope and exhaustive coverage",
+    "severity": "minor",
+    "issue": "Harness probes cover participant reads, outsiders, anonymous access, update/delete and private documents; exhaustive batched/query and production compatibility testing remains outstanding.",
+    "recommendation": "Retain test-project isolation and complete the full-app rules audit before production rollout."
+  }]
+}

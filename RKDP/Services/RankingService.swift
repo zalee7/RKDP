@@ -21,6 +21,8 @@ final class RankingService {
     struct AppliedPlayerOutcome {
         let user: AppUser
         let didApplyRewards: Bool
+        var coinReward: Int = 0
+        var walletReceipt: FirestoreService.MatchWalletReply? = nil
     }
 
     func processOutcome(_ outcome: MatchOutcome) async throws {
@@ -34,6 +36,12 @@ final class RankingService {
               session.players.contains(where: { $0.userID == userID }) else {
             let user = try await db.collection("users").document(userID).getDocument(as: AppUser.self)
             return AppliedPlayerOutcome(user: user, didApplyRewards: false)
+        }
+        if try await FirestoreService.shared.usesServerWallet(userID: userID) {
+            let receipt = try await FirestoreService.shared.settleMatchWallet(sessionID: session.id, userID: userID)
+            let user = try await FirestoreService.shared.fetchUser(id: userID)
+            return AppliedPlayerOutcome(user: user, didApplyRewards: receipt.didApplyRewards,
+                                        coinReward: receipt.matchReward, walletReceipt: receipt)
         }
         return try await applyPlayerOutcome(session: session, userID: userID)
     }
@@ -120,9 +128,16 @@ final class RankingService {
 
                 do {
                     var user = try transaction.getDocument(userRef).data(as: AppUser.self)
-                    if user.appliedRankedOutcomes[session.id] == true {
+                    let sessionRef = self.db.collection("sessions").document(session.id)
+                    let session = try transaction.getDocument(sessionRef).data(as: GameSession.self)
+                    guard session.isRanked, session.status == .finished,
+                          session.players.contains(where: { $0.userID == userID && !$0.isBot }) else {
                         return AppliedPlayerOutcome(user: user, didApplyRewards: false)
                     }
+                    if user.appliedRankedOutcomes[session.id] == true {
+                        return AppliedPlayerOutcome(user: user, didApplyRewards: false, coinReward: session.rankedCoinRewards?[userID] ?? 0)
+                    }
+                    user.recordCompetitiveBadgeWin(from: session)
                     let leaderboardRef = self.db.collection("leaderboards")
                         .document(session.mode.rawValue)
                         .collection("entries")
@@ -139,6 +154,7 @@ final class RankingService {
                     ) : 0
 
                     var rankInfo = user.ranks[session.mode] ?? .empty
+                    user.reconcileEarnedRewards()
                     rankInfo.points = max(0, rankInfo.points + delta)
                     rankInfo.tier = RankTier.tier(for: rankInfo.points)
                     if canApplyBotWinReward, let winnerID = session.winnerID {
@@ -156,12 +172,9 @@ final class RankingService {
                     }
 
                     user.ranks[session.mode] = rankInfo
-                    if canApplyBotWinReward,
-                       let winnerID = session.winnerID,
-                       let player = session.players.first(where: { $0.userID == userID }) {
-                        let opponentWager = session.players.first(where: { $0.userID != userID })?.wager ?? player.wager
-                        user.coins += winnerID == userID ? opponentWager : -player.wager
-                    }
+                    user.reconcileEarnedRewards()
+                    let coinReward = RankedCoinRewards.amount(in: session, for: userID, botWinRewardAvailable: canApplyBotWinReward)
+                    user.coins += coinReward
                     if isRewardedBotWin, canApplyBotWinReward {
                         _ = user.botMatchProgress.recordRewardedWin()
                     }
@@ -177,13 +190,16 @@ final class RankingService {
                         wins: rankInfo.wins,
                         bestTime: rankInfo.bestTime,
                         mode: session.mode,
-                        equippedTitle: CosmeticCatalog.allTitles.first { $0.id == user.cosmetics.equippedTitle }?.name,
+                        equippedTitle: user.displayedTitle,
                         avatarStyle: user.cosmetics.avatarStyle
                     )
                     let encodedEntry = try Firestore.Encoder().encode(leaderboardEntry)
                     transaction.setData(encodedUser, forDocument: userRef, merge: true)
                     transaction.setData(encodedEntry, forDocument: leaderboardRef, merge: true)
-                    return AppliedPlayerOutcome(user: user, didApplyRewards: true)
+                    var receipts = session.rankedCoinRewards ?? [:]
+                    receipts[userID] = coinReward
+                    transaction.updateData(["rankedCoinRewards": receipts], forDocument: sessionRef)
+                    return AppliedPlayerOutcome(user: user, didApplyRewards: true, coinReward: coinReward)
                 } catch {
                     return fail(error)
                 }

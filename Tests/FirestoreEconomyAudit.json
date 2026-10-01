@@ -1,0 +1,42 @@
+{
+  "score": 1,
+  "summary": "Source audit plus successful Firebase CLI rules-compilation dry run. Private reward collections deny client writes; migrated balances, cosmetics and migration markers are conditionally protected. Legacy rules remain critical prototype/beta rules. No deployment or emulator authorization testing was performed. Do not enable migrated wallets before all live wallet writers are ported.",
+  "findings": [
+    {
+      "check": "Authority Source / Update Bypass",
+      "severity": "critical",
+      "issue": "Legacy accounts may create/update their own coins, caps, purchase markers and ownership. Any authenticated user can write sessions used as reward evidence.",
+      "recommendation": "Move all grants/spending and competitive result validation to trusted operations; protect their inputs as well as wallet fields. Do not trust old client-authored records as verified migration evidence."
+    },
+    {
+      "check": "Business Logic vs. Rules",
+      "severity": "major",
+      "issue": "Provisioning a coinWallet prevents legacy economy/cosmetic writes and user-document deletion. Daily claim, cosmetics, official match verification, and Apple purchase/refund verification are implemented locally, but Apple credentials and real sandbox validation are pending. serverMatches permit participant-only reads and no client writes. Apple token bindings/transactions inherit economyPrivate client denial; wallets/receipts are server-write-only. Historical purchases, Daily rewards, earned rewards and account lifecycle remain incomplete. Rollout gates must remain off.",
+      "recommendation": "Finish all live earning/spending/lifecycle paths and authorize their trusted inputs before wallet provisioning. Test old-client behavior and legitimate account deletion."
+    },
+    {
+      "check": "Field-Level vs. Identity-Level Security",
+      "severity": "critical",
+      "issue": "Sessions, party rooms and social records allow broad authenticated updates without participant/host ownership restrictions. Legacy self-owned user records still permit cosmetic unlock forgery; migrated cosmetic maps now reject direct client changes.",
+      "recommendation": "Use server-owned lifecycle transitions, participant-scoped access and verified inventory grants. Hiding UI controls is not authorization."
+    },
+    {
+      "check": "Privacy",
+      "severity": "moderate",
+      "issue": "Any signed-in user can read complete user documents, including non-public account data.",
+      "recommendation": "Separate public profile fields from private wallet/account data, then restrict private reads to the owner."
+    },
+    {
+      "check": "Storage Abuse / Type Safety",
+      "severity": "major",
+      "issue": "Legacy create/update rules do not enforce schemas, bounded strings/arrays or valid types. The new server endpoints validate their own inputs, but lack request throttling and enforced App Check.",
+      "recommendation": "Add schema/size checks for allowed client writes and server-side abuse controls. Test anonymous, malformed, oversized and repeated requests."
+    },
+    {
+      "check": "Verification",
+      "severity": "major",
+      "issue": "Rules compiled successfully in a non-deploying Firebase CLI dry run but have not been exercised in an emulator. Java is unavailable on this machine. Transaction-double tests do not execute security rules.",
+      "recommendation": "Run authorization tests before deployment, covering user ownership, private catalog/approval/snapshot access, wallet/receipt writes, cosmetics forgery, user deletion and protected-field removal."
+    }
+  ]
+}

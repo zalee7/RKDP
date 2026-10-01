@@ -1,5 +1,7 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseAuth
+import FirebaseCore
 
 enum FirestoreServiceError: LocalizedError {
     case insufficientCoins
@@ -14,11 +16,14 @@ enum FirestoreServiceError: LocalizedError {
     case dailyCoinsAlreadyClaimed
     case rewardedCoinLimitReached
     case unknownCoinPack
+    case cosmeticPackComplete
     case partyRoomNotFound
     case partyRoomFull
     case partyRoomExpired
     case partyRoomAlreadyStarted
     case notPartyHost
+    case earnedRewardLocked
+    case walletMigrationPending
 
     var errorDescription: String? {
         switch self {
@@ -46,6 +51,8 @@ enum FirestoreServiceError: LocalizedError {
             return "You have reached today's rewarded coin ad limit."
         case .unknownCoinPack:
             return "That coin pack is not available yet."
+        case .cosmeticPackComplete:
+            return "You already own every item in that pack."
         case .partyRoomNotFound:
             return "That party code was not found."
         case .partyRoomFull:
@@ -56,7 +63,157 @@ enum FirestoreServiceError: LocalizedError {
             return "That party already started."
         case .notPartyHost:
             return "Only the host can do that."
+        case .earnedRewardLocked:
+            return "That reward is not unlocked yet. Refresh your progress and try again."
+        case .walletMigrationPending:
+            return "This action is not available for migrated wallets yet. Your coins have not been changed."
         }
+    }
+}
+
+struct SoloRewardAttempt: Codable {
+    let id: String
+    let mode: GameMode
+    let difficulty: Difficulty
+    let seed: Int
+    let reward: Int
+    let expiresAtMs: Double
+}
+
+struct SoloRewardReceipt: Codable {
+    let attemptID: String
+    let puzzleCoins: Int
+    let dailyCoins: Int
+    let balance: Int
+}
+
+@MainActor
+enum SoloRewardClient {
+    // Keep off until every existing wallet writer is migrated and the rollout
+    // checklist is satisfied. Server flags independently enforce the same gate.
+    static let rolloutEnabled = false
+    private struct Start: Codable {
+        let attemptID: String
+        let mode: GameMode
+        let difficulty: Difficulty
+    }
+    private struct Pending: Codable {
+        let attemptID: String
+        let evidenceJSON: String
+    }
+    private struct Availability: Decodable { let enabled: Bool }
+    private struct Abandoned: Decodable { let abandoned: Bool }
+
+    static func isEnabled(userID: String) async -> Bool {
+        guard rolloutEnabled else { return false }
+        let status: Availability? = try? await call("soloRewardStatus", userID: userID, data: [:])
+        return status?.enabled == true
+    }
+
+    static func begin(userID: String, mode: GameMode, difficulty: Difficulty) async throws -> SoloRewardAttempt {
+        // A pending payout must resolve before another puzzle can replace its receipt.
+        _ = try await recover(userID: userID)
+        let key = "soloRewardStart_\(userID)"
+        var start = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(Start.self, from: $0) }
+        if let old = start, old.mode != mode || old.difficulty != difficulty {
+            try await abandon(userID: userID, attemptID: old.attemptID)
+            start = nil
+        }
+        let request = start ?? Start(attemptID: UUID().uuidString, mode: mode, difficulty: difficulty)
+        UserDefaults.standard.set(try JSONEncoder().encode(request), forKey: key)
+        let attempt: SoloRewardAttempt = try await call("beginSoloReward", userID: userID, data: [
+            "attemptID": request.attemptID, "mode": mode.rawValue,
+            "difficulty": difficulty.rawValue, "protocolVersion": "solo-v1"
+        ])
+        UserDefaults.standard.set(try JSONEncoder().encode(Start(attemptID: attempt.id, mode: mode, difficulty: difficulty)), forKey: key)
+        return attempt
+    }
+
+    static func submit(userID: String, attemptID: String, evidenceJSON: String) async throws -> SoloRewardReceipt {
+        let key = "soloRewardPending_\(userID)"
+        if let data = UserDefaults.standard.data(forKey: key),
+           let existing = try? JSONDecoder().decode(Pending.self, from: data), existing.attemptID != attemptID {
+            _ = try await recover(userID: userID)
+        }
+        let pending = Pending(attemptID: attemptID, evidenceJSON: evidenceJSON)
+        UserDefaults.standard.set(try JSONEncoder().encode(pending), forKey: key)
+        guard let receipt = try await recover(userID: userID) else { throw URLError(.cannotParseResponse) }
+        return receipt
+    }
+
+    static func recover(userID: String) async throws -> SoloRewardReceipt? {
+        let key = "soloRewardPending_\(userID)"
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        let pending = try JSONDecoder().decode(Pending.self, from: data)
+        let evidence = try JSONSerialization.jsonObject(with: Data(pending.evidenceJSON.utf8))
+        let receipt: SoloRewardReceipt = try await call("completeSoloReward", userID: userID,
+            data: ["attemptID": pending.attemptID, "evidence": evidence])
+        guard receipt.attemptID == pending.attemptID else { throw URLError(.cannotParseResponse) }
+        // A delayed duplicate response must not erase a newer run's saved claim.
+        if let current = UserDefaults.standard.data(forKey: key),
+           (try? JSONDecoder().decode(Pending.self, from: current))?.attemptID == pending.attemptID {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        clearStart(userID: userID, attemptID: pending.attemptID)
+        return receipt
+    }
+
+    static func abandon(userID: String, attemptID: String) async throws {
+        let _: Abandoned = try await call("abandonSoloReward", userID: userID, data: ["attemptID": attemptID])
+        clearStart(userID: userID, attemptID: attemptID)
+    }
+
+    private static func clearStart(userID: String, attemptID: String) {
+        let key = "soloRewardStart_\(userID)"
+        guard let data = UserDefaults.standard.data(forKey: key),
+              (try? JSONDecoder().decode(Start.self, from: data))?.attemptID == attemptID else { return }
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
+    static func discardPendingAttempt(userID: String) async throws {
+        let pendingKey = "soloRewardPending_\(userID)"
+        let startKey = "soloRewardStart_\(userID)"
+        // Explicit confirmation also closes an attempt from a previous install/device.
+        // If settlement won the transaction race, its coins remain credited.
+        let _: Abandoned = try await call("abandonSoloReward", userID: userID, data: ["allPending": true])
+        UserDefaults.standard.removeObject(forKey: pendingKey)
+        UserDefaults.standard.removeObject(forKey: startKey)
+    }
+
+    // Uses Firebase's callable protocol without adding another package product.
+    private static func call<T: Decodable>(_ name: String, userID: String, data: [String: Any]) async throws -> T {
+        try await EconomyCallable.call(name, userID: userID, data: data)
+    }
+}
+
+@MainActor
+enum EconomyCallable {
+    static func call<T: Decodable>(_ name: String, userID: String, data: [String: Any]) async throws -> T {
+        guard let user = Auth.auth().currentUser, user.uid == userID,
+              let project = FirebaseApp.app()?.options.projectID,
+              let url = URL(string: "https://us-central1-\(project).cloudfunctions.net/\(name)") else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        let token = try await user.getIDToken()
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 35
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["data": data])
+        let (body, response) = try await URLSession.shared.data(for: request)
+        guard Auth.auth().currentUser?.uid == userID else { throw URLError(.userAuthenticationRequired) }
+        let envelope = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        if let error = envelope?["error"] as? [String: Any], let message = error["message"] as? String {
+            throw NSError(domain: "Economy", code: 1, userInfo: [NSLocalizedDescriptionKey: String(message.prefix(300))])
+        }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let envelope,
+              envelope["error"] == nil, let result = envelope["result"] ?? envelope["data"] else {
+            throw NSError(domain: "Economy", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                "Could not complete this request. Refresh and retry when connected."])
+        }
+        return try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: result))
     }
 }
 
@@ -66,21 +223,280 @@ final class FirestoreService {
 
     private init() {}
 
+    // Enable only with the coordinated backend/rules rollout. An account that has
+    // migrated must never fall back to legacy writes after a network error.
+    static let serverWalletRolloutEnabled = false
+
+    func usesServerWallet(userID: String) async throws -> Bool {
+        #if PP_PURCHASE_SANDBOX || PP_SOCIAL_SANDBOX
+        guard FirebaseApp.app()?.options.projectID == "puzzlepartytest",
+              try await db.collection("coinWallets").document(userID).getDocument(source: .server).exists else {
+            throw FirestoreServiceError.walletMigrationPending
+        }
+        return true
+        #else
+        guard Self.serverWalletRolloutEnabled else { return false }
+        return try await db.collection("coinWallets").document(userID).getDocument().exists
+        #endif
+    }
+
+    func requireLegacyWallet(userID: String) async throws {
+        if try await usesServerWallet(userID: userID) { throw FirestoreServiceError.walletMigrationPending }
+    }
+
+    private struct WalletReply: Decodable { let balance: Int }
+
+    struct PurchasePreparation: Decodable {
+        let appAccountToken: UUID
+        let environment: String
+        let refundDebt: Int
+    }
+
+    func prepareWalletPurchase(userID: String) async throws -> PurchasePreparation {
+        let reply: PurchasePreparation = try await EconomyCallable.call("prepareWalletPurchase", userID: userID, data: [:])
+        #if PP_PURCHASE_SANDBOX || PP_SOCIAL_SANDBOX
+        guard reply.environment == "Sandbox" else { throw CoinPackStoreKitError.unverified }
+        #endif
+        return reply
+    }
+
+    func walletRefundDebt(userID: String) async throws -> Int {
+        guard Self.serverWalletRolloutEnabled else { return 0 }
+        let snapshot = try await db.collection("coinWallets").document(userID).getDocument()
+        return max(0, (snapshot.data()?["purchaseRefundDebt"] as? NSNumber)?.intValue ?? 0)
+    }
+
+    func claimWalletPurchase(userID: String, signedTransaction: String) async throws -> AppUser {
+        struct PurchaseReply: Decodable { let accepted: Bool; let revoked: Bool }
+        let reply: PurchaseReply = try await EconomyCallable.call("claimWalletPurchase", userID: userID,
+                                                                 data: ["signedTransaction": signedTransaction])
+        guard reply.accepted else { throw CoinPackStoreKitError.unverified }
+        return try await fetchUser(id: userID)
+    }
+    private struct SavedReply: Decodable { let saved: Bool }
+
+    struct MatchWalletReply: Decodable {
+        let sessionID: String
+        let matchReward: Int
+        let dailyCoins: Int
+        let rankDelta: Int
+        let balance: Int
+        let didApplyRewards: Bool
+        let reason: String
+    }
+
+    func settleMatchWallet(sessionID: String, userID: String) async throws -> MatchWalletReply {
+        // Only the identity is sent. The server selects the verified outcome,
+        // starting rank, caps and reward, and settles both human participants.
+        try await EconomyCallable.call("settleWalletMatch", userID: userID, data: ["sessionID": sessionID])
+    }
+
+    struct OfficialMatchReply: Decodable {
+        var sessionID: String?
+        var accepted: Bool?
+        var status: String?
+        var ownResult: MatchPlayerResult?
+    }
+
+    func officialQueue(userID: String, mode: GameMode, kind: SessionKind, requestID: String) async throws -> OfficialMatchReply {
+        try await EconomyCallable.call("officialMatch_queue", userID: userID,
+                                       data: ["mode": mode.rawValue, "matchKind": kind.rawValue, "requestID": requestID])
+    }
+
+    func officialCancel(userID: String, requestID: String) async throws -> OfficialMatchReply {
+        try await EconomyCallable.call("officialMatch_cancel", userID: userID, data: ["requestID": requestID])
+    }
+
+    @discardableResult
+    func officialAction(_ action: String, userID: String, sessionID: String, evidenceJSON: String? = nil) async throws -> OfficialMatchReply {
+        var data: [String: Any] = ["sessionID": sessionID]
+        if let evidenceJSON {
+            data["evidence"] = try JSONSerialization.jsonObject(with: Data(evidenceJSON.utf8))
+        }
+        if sessionID.hasPrefix("sv1_") {
+            data["roundIndex"] = 0
+            return try await EconomyCallable.call("socialGame_\(action)", userID: userID, data: data)
+        }
+        return try await EconomyCallable.call("officialMatch_\(action)", userID: userID, data: data)
+    }
+
+    private func createVerifiedSocial(userID: String, kind: String, rounds: [PartyStageRoundConfiguration], friendID: String? = nil) async throws -> String {
+        // Retain a request identity through a lost response instead of making a second room.
+        let key = "socialCreate_\(userID)_\(kind)_\(friendID ?? "party")_" + rounds.map { "\($0.mode.rawValue)_\($0.difficulty.rawValue)" }.joined(separator: "_")
+        let requestID = UserDefaults.standard.string(forKey: key) ?? UUID().uuidString
+        UserDefaults.standard.set(requestID, forKey: key)
+        var data: [String: Any] = ["kind": kind, "requestID": requestID,
+            "rounds": rounds.map { ["mode": $0.mode.rawValue, "difficulty": $0.difficulty.rawValue] }]
+        if let friendID { data["friendID"] = friendID }
+        let reply: OfficialMatchReply = try await EconomyCallable.call("socialGame_create", userID: userID, data: data)
+        guard let id = reply.sessionID else { throw FirestoreServiceError.invalidFriendAction }
+        UserDefaults.standard.removeObject(forKey: key)
+        return id
+    }
+
+    @discardableResult
+    func verifiedPartyAction(_ action: String, code: String, userID: String, roundIndex: Int? = nil,
+                             evidenceJSON: String? = nil, isReady: Bool? = nil) async throws -> PartyRoom {
+        // A guest loses read access after leaving the lobby. Keep that final local view for dismissal.
+        let leavingRoom: PartyRoom? = action == "forfeit" ? try await db.collection("partyRooms").document(normalizedPartyCode(code)).getDocument(as: PartyRoom.self) : nil
+        var data: [String: Any] = ["sessionID": normalizedPartyCode(code)]
+        if let roundIndex { data["roundIndex"] = roundIndex }
+        if let isReady { data["isReady"] = isReady }
+        if let evidenceJSON { data["evidence"] = try JSONSerialization.jsonObject(with: Data(evidenceJSON.utf8)) }
+        let _: OfficialMatchReply = try await EconomyCallable.call("socialGame_\(action)", userID: userID, data: data)
+        if let leavingRoom, leavingRoom.status == .lobby, leavingRoom.hostID != userID { return leavingRoom }
+        return try await db.collection("partyRooms").document(normalizedPartyCode(code)).getDocument(as: PartyRoom.self)
+    }
+
     // MARK: - Users
 
     func createUser(_ user: AppUser) async throws {
+        try await requireLegacyWallet(userID: user.id)
         try db.collection("users").document(user.id).setData(from: user)
     }
 
     func fetchUser(id: String) async throws -> AppUser {
-        try await db.collection("users").document(id).getDocument(as: AppUser.self)
+        #if PP_SOCIAL_SANDBOX
+        if id != Auth.auth().currentUser?.uid {
+            return try await db.collection("socialTestProfiles").document(id).getDocument(as: AppUser.self)
+        }
+        #endif
+        return try await db.collection("users").document(id).getDocument(as: AppUser.self)
     }
 
     func updateUser(_ user: AppUser) async throws {
+        try await requireLegacyWallet(userID: user.id)
         try db.collection("users").document(user.id).setData(from: user, merge: true)
     }
 
+    func updateSoloStatistics(_ user: AppUser, mode: GameMode) async throws {
+        let rank = user.rank(for: mode)
+        var updates: [String: Any] = [
+            "soloCompletions.\(mode.rawValue)": FieldValue.arrayUnion((user.soloCompletions[mode] ?? []).map(\.rawValue))
+        ]
+        if let best = rank.soloBest {
+            updates["ranks.\(mode.rawValue).soloBest"] = try Firestore.Encoder().encode(best)
+        }
+        if let bests = rank.soloBestsByDifficulty {
+            for (difficulty, best) in bests {
+                updates["ranks.\(mode.rawValue).soloBestsByDifficulty.\(difficulty)"] = try Firestore.Encoder().encode(best)
+            }
+        }
+        try await db.collection("users").document(user.id).updateData(updates)
+    }
+
+    func updateNotificationSettings(userID: String, settings: NotificationSettings) async throws -> AppUser {
+        let encoded = try Firestore.Encoder().encode(settings)
+        try await db.collection("users").document(userID).updateData([
+            "notificationSettings": encoded
+        ])
+        return try await fetchUser(id: userID)
+    }
+
+    func updateEarnedShowcase(userID: String, slot: EarnedRewardSlot? = nil, rewardID: String? = nil) async throws -> AppUser {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            let ref = db.collection("users").document(userID)
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                do {
+                    var user = try transaction.getDocument(ref).data(as: AppUser.self)
+                    let previous = user.earnedShowcase
+                    if let slot {
+                        guard user.equipEarnedReward(rewardID, in: slot) else { throw FirestoreServiceError.earnedRewardLocked }
+                    } else {
+                        user.reconcileEarnedRewards()
+                    }
+                    var updates: [String: Any] = [:]
+                    if previous != user.earnedShowcase {
+                        updates["earnedShowcase"] = try Firestore.Encoder().encode(user.earnedShowcase)
+                    }
+                    if slot == .title { updates["cosmetics.equippedTitle"] = user.cosmetics.equippedTitle }
+                    if !updates.isEmpty { transaction.updateData(updates, forDocument: ref) }
+                    return user
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+            }, completion: { result, error in
+                if let error { continuation.resume(throwing: error) }
+                else if let user = result as? AppUser { continuation.resume(returning: user) }
+                else { continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser) }
+            })
+        }
+    }
+
+    func recordDailyPlay(userID: String, activityID: String) async throws -> AppUser {
+        try await requireLegacyWallet(userID: userID)
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    let reward = user.playProgress.recordGamePlayed(activityID: activityID)
+                    if reward > 0 {
+                        user.coins += reward
+                    }
+                    user.reconcileEarnedRewards()
+
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+                    return user
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let user = result as? AppUser {
+                    continuation.resume(returning: user)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+    func anonymizeAccountData(userID: String) async throws {
+        try? await clearPendingSession(userID: userID)
+        for mode in GameMode.allCases {
+            for difficulty in Difficulty.allCases {
+                try? await leaveMatchmakingQueue(userID: userID, mode: mode, difficulty: difficulty)
+            }
+        }
+
+        try? await cancelFriendRequestDocs(inField: "fromID", userID: userID)
+        try? await cancelFriendRequestDocs(inField: "toID", userID: userID)
+        try? await cancelExhibitionInviteDocs(inField: "fromID", userID: userID)
+        try? await cancelExhibitionInviteDocs(inField: "toID", userID: userID)
+        try? await expirePartyInviteDocs(inField: "fromID", userID: userID)
+        try? await expirePartyInviteDocs(inField: "toID", userID: userID)
+        try? await deleteFriendshipDocs(userID: userID)
+
+        let disabledNotifications = try Firestore.Encoder().encode(NotificationSettings(
+            friendRequests: false,
+            playNowInvites: false,
+            playLaterInvites: false,
+            partyInvites: false,
+            rematches: false
+        ))
+        try await db.collection("users").document(userID).setData([
+            "username": "Deleted Player",
+            "email": "",
+            "avatarURL": FieldValue.delete(),
+            "fcmTokens": [],
+            "fcmTokenUpdatedAt": FieldValue.delete(),
+            "notificationSettings": disabledNotifications,
+            "deletedAt": FieldValue.serverTimestamp()
+        ], merge: true)
+    }
+
     func updateCoins(userID: String, delta: Int) async throws {
+        try await requireLegacyWallet(userID: userID)
         try await db.collection("users").document(userID).updateData([
             "coins": FieldValue.increment(Int64(delta))
         ])
@@ -88,11 +504,21 @@ final class FirestoreService {
 
     func updateCosmetics(userID: String, cosmetics: OwnedCosmetics) async throws {
         let encoded = try Firestore.Encoder().encode(cosmetics)
+        if try await usesServerWallet(userID: userID) {
+            let selection = encoded.filter { $0.key != "purchasedIDs" }
+            let _: SavedReply = try await EconomyCallable.call("equipWalletCosmetics", userID: userID, data: ["selection": selection])
+            return
+        }
         try await db.collection("users").document(userID).updateData(["cosmetics": encoded])
     }
 
     func purchaseCosmetic(userID: String, item: CosmeticItem) async throws -> AppUser {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+        if try await usesServerWallet(userID: userID) {
+            let _: WalletReply = try await EconomyCallable.call("purchaseWalletCosmetic", userID: userID,
+                data: ["itemID": item.id, "expectedPrice": item.price])
+            return try await fetchUser(id: userID)
+        }
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
                 let userRef = self.db.collection("users").document(userID)
 
@@ -128,6 +554,102 @@ final class FirestoreService {
         }
     }
 
+    func openCosmeticPack(userID: String, kind: CosmeticPackKind) async throws -> CosmeticPackOpenResponse {
+        try await requireLegacyWallet(userID: userID)
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<CosmeticPackOpenResponse, Error>) in
+            db.runTransaction({ transaction, errorPointer -> Any? in
+                let userRef = self.db.collection("users").document(userID)
+
+                func fail(_ error: Error) -> Any? {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+
+                do {
+                    var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    guard user.coins >= kind.price else { return fail(FirestoreServiceError.insufficientCoins) }
+
+                    let packDrop = try self.pickCosmeticPackDrop(kind: kind)
+                    let isDuplicate = user.cosmetics.purchasedIDs.contains(packDrop.item.id)
+                    let duplicateRefund = isDuplicate ? packDrop.item.rarity.duplicateRefund : 0
+                    user.coins -= kind.price
+                    if isDuplicate {
+                        user.coins += duplicateRefund
+                    } else {
+                        user.cosmetics.purchasedIDs.insert(packDrop.item.id)
+                    }
+
+                    let encodedUser = try Firestore.Encoder().encode(user)
+                    transaction.setData(encodedUser, forDocument: userRef, merge: true)
+
+                    return CosmeticPackOpenResponse(
+                        user: user,
+                        result: CosmeticPackOpenResult(
+                            kind: kind,
+                            item: packDrop.item,
+                            coinsSpent: kind.price,
+                            rolledRarity: packDrop.rolledRarity,
+                            isDuplicate: isDuplicate,
+                            duplicateRefund: duplicateRefund
+                        )
+                    )
+                } catch {
+                    return fail(error)
+                }
+            }, completion: { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let response = result as? CosmeticPackOpenResponse {
+                    continuation.resume(returning: response)
+                } else {
+                    continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser)
+                }
+            })
+        }
+    }
+
+    private func pickCosmeticPackDrop(kind: CosmeticPackKind) throws -> (item: CosmeticItem, rolledRarity: CosmeticRarity) {
+        let eligibleItems = CosmeticCatalog.all.filter { item in
+            kind.eligibleCategories.contains(item.category) && item.price > 0 && item.isLaunchCatalogVisible
+        }
+        guard !eligibleItems.isEmpty else { throw FirestoreServiceError.cosmeticPackComplete }
+
+        let rolledRarity = rollPackRarity(kind)
+        for rarity in packRarityFallbackOrder(from: rolledRarity) {
+            let candidates = eligibleItems.filter { $0.rarity == rarity }
+            if let item = candidates.randomElement() {
+                return (item, rolledRarity)
+            }
+        }
+
+        return (eligibleItems.randomElement()!, rolledRarity)
+    }
+
+    private func rollPackRarity(_ kind: CosmeticPackKind) -> CosmeticRarity {
+        let roll = Int.random(in: 0..<100)
+        var threshold = 0
+        for odds in kind.odds {
+            threshold += odds.percent
+            if roll < threshold { return odds.rarity }
+        }
+        return .common
+    }
+
+    private func packRarityFallbackOrder(from rarity: CosmeticRarity) -> [CosmeticRarity] {
+        switch rarity {
+        case .free:
+            return [.common, .rare, .epic, .legendary]
+        case .common:
+            return [.common, .rare, .epic, .legendary]
+        case .rare:
+            return [.rare, .epic, .legendary, .common]
+        case .epic:
+            return [.epic, .legendary, .rare, .common]
+        case .legendary:
+            return [.legendary, .epic, .rare, .common]
+        }
+    }
+
 
     // MARK: - Coin Economy
 
@@ -141,7 +663,11 @@ final class FirestoreService {
     }
 
     func claimDailyCoins(userID: String, dayKey: String = CoinWallet.todayKey()) async throws -> AppUser {
-        try await updateCoinWallet(userID: userID) { user in
+        if try await usesServerWallet(userID: userID) {
+            let _: WalletReply = try await EconomyCallable.call("claimWalletDaily", userID: userID, data: [:])
+            return try await fetchUser(id: userID)
+        }
+        return try await updateCoinWallet(userID: userID) { user in
             guard user.coinWallet.recordDailyClaim(dayKey: dayKey) else { throw FirestoreServiceError.dailyCoinsAlreadyClaimed }
             user.coins += CoinWallet.dailyClaimAmount
         }
@@ -155,7 +681,8 @@ final class FirestoreService {
     }
 
     private func updateCoinWallet(userID: String, mutate: @escaping (inout AppUser) throws -> Void) async throws -> AppUser {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+        try await requireLegacyWallet(userID: userID)
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
                 let userRef = self.db.collection("users").document(userID)
 
@@ -188,7 +715,8 @@ final class FirestoreService {
     // MARK: - Ranked Access
 
     func syncRankedAccessEntitlements(userID: String, productIDs: Set<String>) async throws -> AppUser {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+        try await requireLegacyWallet(userID: userID)
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
                 let userRef = self.db.collection("users").document(userID)
 
@@ -339,7 +867,7 @@ final class FirestoreService {
             id: userID, username: username, avatarURL: user?.avatarURL,
             rankTier: info.displayTier, rankPoints: info.points,
             wins: info.wins, bestTime: info.bestTime, mode: mode,
-            equippedTitle: user.flatMap { loadedUser in CosmeticCatalog.allTitles.first { $0.id == loadedUser.cosmetics.equippedTitle }?.name },
+            equippedTitle: user?.displayedTitle,
             avatarStyle: user?.cosmetics.avatarStyle ?? .default
         )
         try db.collection("leaderboards")
@@ -353,6 +881,7 @@ final class FirestoreService {
         let user: AppUser
         let coinDelta: Int
         let didApplyRewards: Bool
+        var walletReceipt: MatchWalletReply? = nil
     }
 
     func applyFinishedCasualSession(_ session: GameSession, for userID: String) async throws -> AppliedCasualOutcome {
@@ -361,6 +890,13 @@ final class FirestoreService {
               session.players.contains(where: { $0.userID == userID }) else {
             let user = try await fetchUser(id: userID)
             return AppliedCasualOutcome(user: user, coinDelta: 0, didApplyRewards: false)
+        }
+
+        if try await usesServerWallet(userID: userID) {
+            let receipt = try await settleMatchWallet(sessionID: session.id, userID: userID)
+            let user = try await fetchUser(id: userID)
+            return AppliedCasualOutcome(user: user, coinDelta: receipt.matchReward,
+                                        didApplyRewards: receipt.didApplyRewards, walletReceipt: receipt)
         }
 
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppliedCasualOutcome, Error>) in
@@ -414,6 +950,11 @@ final class FirestoreService {
     }
 
     func recordOnlineBestIfNeeded(session: GameSession, for userID: String) async throws -> AppUser {
+        if try await usesServerWallet(userID: userID) {
+            // Verified match settlement owns online records for migrated users.
+            // Never write a stale whole user after a server reward has arrived.
+            return try await fetchUser(id: userID)
+        }
         guard session.status == .finished,
               let result = session.playerResults?[userID],
               session.players.contains(where: { $0.userID == userID }) else {
@@ -431,6 +972,8 @@ final class FirestoreService {
 
                 do {
                     var user = try transaction.getDocument(userRef).data(as: AppUser.self)
+                    let savedSession = try transaction.getDocument(self.db.collection("sessions").document(session.id)).data(as: GameSession.self)
+                    user.recordCompetitiveBadgeWin(from: savedSession)
                     var rankInfo = user.ranks[session.mode] ?? .empty
                     rankInfo.onlineBest = BestStat.updated(rankInfo.onlineBest, with: .from(match: result, mode: session.mode))
                     user.ranks[session.mode] = rankInfo
@@ -455,6 +998,46 @@ final class FirestoreService {
 
     // MARK: - Game Sessions
 
+    /// Also catches Play Later wins resolved while this player was away. Never replays coin/rank payouts.
+    func reconcileCompetitiveBadgeWins(for user: AppUser) async throws -> AppUser {
+        guard user.earnedShowcase.friendlyWins < 100 || user.earnedShowcase.underdogWins < 100 else { return user }
+        let snapshot = try await db.collection("sessions").whereField("winnerID", isEqualTo: user.id).getDocuments()
+        var candidate = user
+        let ids = snapshot.documents.compactMap { document -> String? in
+            guard let session = try? document.data(as: GameSession.self),
+                  candidate.recordCompetitiveBadgeWin(from: session) else { return nil }
+            return document.documentID
+        }
+        guard !ids.isEmpty else { return user }
+        var updated = user
+        // Keep each transaction small; every outcome and latest user are re-read before writing.
+        for offset in stride(from: 0, to: ids.count, by: 20) {
+            let batch = Array(ids[offset..<min(offset + 20, ids.count)])
+            updated = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AppUser, Error>) in
+                db.runTransaction({ transaction, errorPointer -> Any? in
+                    do {
+                        let ref = self.db.collection("users").document(user.id)
+                        var latest = try transaction.getDocument(ref).data(as: AppUser.self)
+                        for sessionID in batch {
+                            let session = try transaction.getDocument(self.db.collection("sessions").document(sessionID)).data(as: GameSession.self)
+                            latest.recordCompetitiveBadgeWin(from: session)
+                        }
+                        transaction.updateData(["earnedShowcase": try Firestore.Encoder().encode(latest.earnedShowcase)], forDocument: ref)
+                        return latest
+                    } catch {
+                        errorPointer?.pointee = error as NSError
+                        return nil
+                    }
+                }, completion: { result, error in
+                    if let error { continuation.resume(throwing: error) }
+                    else if let latest = result as? AppUser { continuation.resume(returning: latest) }
+                    else { continuation.resume(throwing: FirestoreServiceError.missingUpdatedUser) }
+                })
+            }
+        }
+        return updated
+    }
+
     func createSession(_ session: GameSession) async throws -> String {
         let ref = db.collection("sessions").document(session.id)
         try ref.setData(from: session)
@@ -462,10 +1045,19 @@ final class FirestoreService {
     }
 
     func fetchSession(id: String) async throws -> GameSession {
-        try await db.collection("sessions").document(id).getDocument(as: GameSession.self)
+        try await db.collection(id.hasPrefix("v1_") ? "serverMatches" : "sessions").document(id).getDocument(as: GameSession.self)
     }
 
     func fetchUnappliedFinishedSessions(for user: AppUser, limit: Int = 10) async throws -> [GameSession] {
+        if try await usesServerWallet(userID: user.id) {
+            return Array(try await fetchFinishedOnlineSessions(for: user.id)
+                .filter { session in
+                    session.usesServerAuthority && (session.isRanked
+                        ? user.appliedRankedOutcomes[session.id] != true
+                        : user.appliedCasualOutcomes[session.id] != true)
+                }
+                .prefix(limit))
+        }
         let snapshot = try await db.collection("sessions")
             .whereField("playerIDs", arrayContains: user.id)
             .whereField("status", isEqualTo: SessionStatus.finished.rawValue)
@@ -478,8 +1070,7 @@ final class FirestoreService {
     }
 
     func fetchRecentFinishedSessions(for userID: String, limit: Int = 20) async throws -> [GameSession] {
-        let fetchLimit = max(limit * 4, 80)
-        return try await fetchFinishedOnlineSessions(for: userID, fetchLimit: fetchLimit)
+        return try await fetchFinishedOnlineSessions(for: userID, fetchLimit: nil)
             .prefix(limit)
             .map { $0 }
     }
@@ -495,8 +1086,13 @@ final class FirestoreService {
             query = query.limit(to: fetchLimit)
         }
         let snapshot = try await query.getDocuments()
+        var documents = snapshot.documents
+        if try await usesServerWallet(userID: userID) {
+            let official = try await db.collection("serverMatches").whereField("playerIDs", arrayContains: userID).getDocuments()
+            documents += official.documents
+        }
 
-        return snapshot.documents
+        return documents
             .compactMap { document -> GameSession? in
                 do {
                     return try document.data(as: GameSession.self)
@@ -521,7 +1117,7 @@ final class FirestoreService {
     }
 
     func listenForSession(id: String, onChange: @escaping (GameSession) -> Void) -> ListenerRegistration {
-        db.collection("sessions").document(id)
+        db.collection(id.hasPrefix("v1_") ? "serverMatches" : "sessions").document(id)
             .addSnapshotListener { snapshot, _ in
                 guard let snapshot, let session = try? snapshot.data(as: GameSession.self) else { return }
                 onChange(session)
@@ -588,14 +1184,13 @@ final class FirestoreService {
         let refreshedPlayers = try await oldSession.players.asyncMap { player -> MatchPlayer in
             let latestUser = try await fetchUser(id: player.userID)
             if oldSession.isRanked {
-                guard latestUser.coins >= player.wager else { throw FirestoreServiceError.insufficientCoins }
                 guard latestUser.rankedAccess.canStartRanked(mode: oldSession.mode) else { throw FirestoreServiceError.rankedAccessUnavailable }
             }
             let rank = latestUser.rank(for: oldSession.mode)
             return MatchPlayer(
                 userID: latestUser.id,
                 username: latestUser.username,
-                wager: oldSession.isExhibition ? 0 : player.wager,
+                wager: 0,
                 finishTime: nil,
                 rankTier: rank.displayTier,
                 rankPoints: rank.points,
@@ -648,7 +1243,7 @@ final class FirestoreService {
         guard realOpponents.isEmpty else { return nil }
 
         let seed = Int.random(in: 0..<Int.max)
-        let bot = BotMatchService.makeBotPlayer(mode: mode, wager: wager, searchID: searchID, seed: seed)
+        let bot = BotMatchService.makeBotPlayer(mode: mode, wager: 0, searchID: searchID, seed: seed)
         let sessionID = makeSessionID(
             userID: user.id,
             opponentID: bot.userID,
@@ -672,7 +1267,7 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .inProgress,
             players: [
-                MatchPlayer(userID: user.id, username: user.username, wager: wager, rankTier: tier, rankPoints: user.rank(for: mode).points, avatarStyle: user.cosmetics.avatarStyle),
+                MatchPlayer(userID: user.id, username: user.username, wager: 0, rankTier: tier, rankPoints: user.rank(for: mode).points, avatarStyle: user.cosmetics.avatarStyle),
                 bot
             ],
             seed: seed,
@@ -905,7 +1500,6 @@ final class FirestoreService {
         }
 
         let opponentUsername = opponentQueue["username"] as? String ?? "Opponent"
-        let opponentWager    = opponentQueue["wager"]    as? Int    ?? wager
         let opponentTierRaw  = opponentQueue["rankTier"] as? Int    ?? 0
         let opponentTier     = RankTier(rawValue: opponentTierRaw) ?? .bronze
 
@@ -938,8 +1532,8 @@ final class FirestoreService {
             difficulty: difficulty,
             status: .inProgress,
             players: [
-                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: wager, rankTier: tier, rankPoints: hostUser.rank(for: mode).points, avatarStyle: hostUser.cosmetics.avatarStyle),
-                MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: opponentWager, rankTier: opponentTier, rankPoints: opponentRankPoints, avatarStyle: opponentAvatarStyle)
+                MatchPlayer(userID: hostUser.id, username: hostUser.username, wager: 0, rankTier: tier, rankPoints: hostUser.rank(for: mode).points, avatarStyle: hostUser.cosmetics.avatarStyle),
+                MatchPlayer(userID: opponentID,  username: opponentUsername,  wager: 0, rankTier: opponentTier, rankPoints: opponentRankPoints, avatarStyle: opponentAvatarStyle)
             ],
             seed: seed,
             puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(mode: mode, difficulty: difficulty, seed: seed, context: "online session"),
@@ -1270,13 +1864,64 @@ final class FirestoreService {
         for document in forward.documents + reverse.documents {
             guard let status = document.data()["status"] as? String,
                   activeStatuses.contains(status) else { continue }
+            if document.documentID.hasPrefix("sv1_") {
+                try await officialAction("forfeit", userID: firstUserID, sessionID: document.documentID)
+                continue
+            }
             try await document.reference.setData([
                 "status": ExhibitionInviteStatus.canceled.rawValue
             ], merge: true)
         }
     }
 
+    private func cancelFriendRequestDocs(inField field: String, userID: String) async throws {
+        let snapshot = try await db.collection("friendRequests")
+            .whereField(field, isEqualTo: userID)
+            .getDocuments()
+        for document in snapshot.documents {
+            try? await document.reference.setData([
+                "status": FriendRequestStatus.canceled.rawValue
+            ], merge: true)
+        }
+    }
+
+    private func cancelExhibitionInviteDocs(inField field: String, userID: String) async throws {
+        let snapshot = try await db.collection("exhibitionInvites")
+            .whereField(field, isEqualTo: userID)
+            .getDocuments()
+        for document in snapshot.documents {
+            try? await document.reference.setData([
+                "status": ExhibitionInviteStatus.canceled.rawValue
+            ], merge: true)
+        }
+    }
+
+    private func expirePartyInviteDocs(inField field: String, userID: String) async throws {
+        let snapshot = try await db.collection("partyInvites")
+            .whereField(field, isEqualTo: userID)
+            .getDocuments()
+        for document in snapshot.documents {
+            try? await document.reference.setData([
+                "expiresAt": Date()
+            ], merge: true)
+        }
+    }
+
+    private func deleteFriendshipDocs(userID: String) async throws {
+        let snapshot = try await db.collection("friendships")
+            .whereField("userIDs", arrayContains: userID)
+            .getDocuments()
+        for document in snapshot.documents {
+            try? await document.reference.delete()
+        }
+    }
+
     func createExhibitionInvite(from user: AppUser, to friend: FriendSummary, mode: GameMode, difficulty: Difficulty, inviteType: ExhibitionInviteType = .playNow) async throws -> ExhibitionInvite {
+        if try await usesServerWallet(userID: user.id) {
+            let id = try await createVerifiedSocial(userID: user.id, kind: inviteType == .playLater ? "asyncExhibition" : "exhibition",
+                rounds: [PartyStageRoundConfiguration(index: 0, mode: mode, difficulty: difficulty)], friendID: friend.userID)
+            return try await db.collection("exhibitionInvites").document(id).getDocument(as: ExhibitionInvite.self)
+        }
         let friendshipDoc = try await db.collection("friendships").document(friendshipID(user.id, friend.userID)).getDocument()
         guard friendshipDoc.exists else { throw FirestoreServiceError.notFriends }
         let now = Date()
@@ -1323,6 +1968,11 @@ final class FirestoreService {
     }
 
     func acceptExhibitionInvite(_ invite: ExhibitionInvite, currentUser: AppUser) async throws -> GameSession {
+        if invite.id.hasPrefix("sv1_") {
+            try await officialAction("accept", userID: currentUser.id, sessionID: invite.id)
+            return try await fetchSession(id: invite.id)
+        }
+        try await requireLegacyWallet(userID: currentUser.id)
         guard invite.toID == currentUser.id else { throw FirestoreServiceError.invalidFriendAction }
         guard !invite.isExpired else {
             try? await expireExhibitionInvite(invite.id)
@@ -1389,6 +2039,10 @@ final class FirestoreService {
     }
 
     func declineExhibitionInvite(_ invite: ExhibitionInvite, currentUserID: String) async throws {
+        if invite.id.hasPrefix("sv1_") {
+            try await officialAction("decline", userID: currentUserID, sessionID: invite.id)
+            return
+        }
         guard invite.toID == currentUserID else { throw FirestoreServiceError.invalidFriendAction }
         var updated = invite
         updated.status = .declined
@@ -1396,6 +2050,8 @@ final class FirestoreService {
     }
 
     func completeExhibitionInvite(_ inviteID: String) async throws {
+        // Verified room settlement owns the invite's final status.
+        guard !inviteID.hasPrefix("sv1_") else { return }
         try await db.collection("exhibitionInvites").document(inviteID).setData(["status": ExhibitionInviteStatus.completed.rawValue], merge: true)
     }
 
@@ -1486,6 +2142,11 @@ final class FirestoreService {
     // MARK: - Party Rooms
 
     func createPartyRoom(host: AppUser, mode: GameMode, difficulty: Difficulty) async throws -> PartyRoom {
+        if try await usesServerWallet(userID: host.id) {
+            let code = try await createVerifiedSocial(userID: host.id, kind: "party",
+                rounds: [PartyStageRoundConfiguration(index: 0, mode: mode, difficulty: difficulty)])
+            return try await db.collection("partyRooms").document(code).getDocument(as: PartyRoom.self)
+        }
         let now = Date()
         let seed = Int.random(in: 0..<Int.max)
         let player = PartyPlayer(
@@ -1521,6 +2182,98 @@ final class FirestoreService {
                 winnerID: nil,
                 winnerReason: nil,
                 readyPlayerIDs: [],
+                finishWindowStartedAt: nil,
+                finishWindowDeadline: nil,
+                finishWindowStarterID: nil,
+                stageRounds: nil,
+                currentStageRoundIndex: nil,
+                stageScores: nil,
+                isStageRoom: nil,
+                maxPlayers: 8
+            )
+            try ref.setData(from: room)
+            return room
+        }
+
+        throw FirestoreServiceError.invalidFriendAction
+    }
+
+    func createPartyStageRoom(host: AppUser, rounds configurations: [PartyStageRoundConfiguration]) async throws -> PartyRoom {
+        if try await usesServerWallet(userID: host.id) {
+            let code = try await createVerifiedSocial(userID: host.id, kind: "party", rounds: configurations)
+            return try await db.collection("partyRooms").document(code).getDocument(as: PartyRoom.self)
+        }
+        let now = Date()
+        let sanitized = Array(configurations.prefix(3))
+        guard sanitized.count == 3, Set(sanitized.map(\.mode)).count == 3 else {
+            throw FirestoreServiceError.invalidFriendAction
+        }
+
+        let stageRounds = sanitized.enumerated().map { offset, configuration in
+            let seed = Int.random(in: 0..<Int.max)
+            return PartyStageRound(
+                index: offset,
+                mode: configuration.mode,
+                difficulty: configuration.difficulty,
+                seed: seed,
+                puzzleData: MultiplayerPuzzleDataFactory.onlinePayload(
+                    mode: configuration.mode,
+                    difficulty: configuration.difficulty,
+                    seed: seed,
+                    context: "party playlist round \(offset + 1)"
+                ),
+                status: .waiting,
+                startedAt: nil,
+                finishedAt: nil,
+                finishWindowStartedAt: nil,
+                finishWindowDeadline: nil,
+                finishWindowStarterID: nil,
+                results: [:],
+                scoreRows: nil
+            )
+        }
+
+        let player = PartyPlayer(
+            userID: host.id,
+            username: host.username,
+            avatarStyle: host.cosmetics.avatarStyle,
+            joinedAt: now,
+            isHost: true,
+            result: nil,
+            abandoned: false
+        )
+
+        for _ in 0..<12 {
+            let code = makePartyCode()
+            let ref = db.collection("partyRooms").document(code)
+            let existing = try await ref.getDocument()
+            guard !existing.exists else { continue }
+
+            let firstRound = stageRounds[0]
+            let room = PartyRoom(
+                code: code,
+                hostID: host.id,
+                mode: firstRound.mode,
+                difficulty: firstRound.difficulty,
+                status: .lobby,
+                players: [player],
+                playerIDs: [host.id],
+                seed: firstRound.seed,
+                puzzleData: firstRound.puzzleData,
+                createdAt: now,
+                expiresAt: now.addingTimeInterval(1_800),
+                startedAt: nil,
+                finishedAt: nil,
+                winnerID: nil,
+                winnerReason: nil,
+                readyPlayerIDs: [],
+                finishWindowStartedAt: nil,
+                finishWindowDeadline: nil,
+                finishWindowStarterID: nil,
+                stageRounds: stageRounds,
+                currentStageRoundIndex: nil,
+                stageScores: [host.id: 0],
+                isStageRoom: true,
                 maxPlayers: 8
             )
             try ref.setData(from: room)
@@ -1560,6 +2313,10 @@ final class FirestoreService {
     }
 
     func joinPartyRoom(code rawCode: String, user: AppUser) async throws -> PartyRoom {
+        if normalizedPartyCode(rawCode).hasPrefix("S1") {
+            return try await verifiedPartyAction("join", code: rawCode, userID: user.id)
+        }
+        try await requireLegacyWallet(userID: user.id)
         let code = normalizedPartyCode(rawCode)
         guard !code.isEmpty else { throw FirestoreServiceError.partyRoomNotFound }
         let roomRef = db.collection("partyRooms").document(code)
@@ -1599,6 +2356,11 @@ final class FirestoreService {
                     room.players.append(player)
                     room.playerIDs = room.players.map(\.userID)
                     room.readyPlayerIDs = (room.readyPlayerIDs ?? []).filter { $0 != user.id }
+                    if room.isStageRoom == true {
+                        var scores = room.stageScores ?? [:]
+                        scores[user.id] = scores[user.id] ?? 0
+                        room.stageScores = scores
+                    }
                     let encoded = try Firestore.Encoder().encode(room)
                     transaction.setData(encoded, forDocument: roomRef, merge: true)
                     return room
@@ -1618,6 +2380,7 @@ final class FirestoreService {
     }
 
     func startPartyRoom(code: String, hostID: String) async throws -> PartyRoom {
+        if code.hasPrefix("S1") { return try await verifiedPartyAction("start", code: code, userID: hostID) }
         let roomRef = db.collection("partyRooms").document(normalizedPartyCode(code))
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<PartyRoom, Error>) in
             db.runTransaction({ transaction, errorPointer -> Any? in
@@ -1635,6 +2398,9 @@ final class FirestoreService {
                     guard room.allPlayersReady else { return fail(FirestoreServiceError.invalidFriendAction) }
                     room.status = .inProgress
                     room.startedAt = Date()
+                    if room.isStageRoom == true {
+                        room = self.startFirstPartyStageRound(room, at: room.startedAt ?? Date())
+                    }
                     let encoded = try Firestore.Encoder().encode(room)
                     transaction.setData(encoded, forDocument: roomRef, merge: true)
                     return room
@@ -1654,7 +2420,8 @@ final class FirestoreService {
     }
 
     func setPartyReady(code: String, userID: String, isReady: Bool) async throws -> PartyRoom {
-        try await mutatePartyRoom(code: code) { room in
+        if code.hasPrefix("S1") { return try await verifiedPartyAction("ready", code: code, userID: userID, isReady: isReady) }
+        return try await mutatePartyRoom(code: code) { room in
             guard room.status == .lobby, room.containsPlayer(userID) else {
                 throw FirestoreServiceError.invalidFriendAction
             }
@@ -1669,18 +2436,100 @@ final class FirestoreService {
     }
 
     func submitPartyResult(code: String, userID: String, result: MatchPlayerResult) async throws -> PartyRoom {
-        try await mutatePartyRoom(code: code) { room in
+        if code.hasPrefix("S1") {
+            guard let evidence = result.rewardEvidenceJSON else { throw FirestoreServiceError.invalidFriendAction }
+            return try await verifiedPartyAction("submit", code: code, userID: userID, roundIndex: 0, evidenceJSON: evidence)
+        }
+        return try await mutatePartyRoom(code: code) { room in
             guard let index = room.players.firstIndex(where: { $0.userID == userID }) else {
                 throw FirestoreServiceError.invalidFriendAction
             }
             room.players[index].result = result
             room.players[index].abandoned = false
+            room = self.startPartyFinishWindowIfNeeded(room, starterID: userID, result: result)
+            room = self.finishPartyRoomIfReady(room)
+        }
+    }
+
+    func submitPartyStageResult(code: String, userID: String, result: MatchPlayerResult) async throws -> PartyRoom {
+        // Verified playlists submit with an explicit captured round index in the view model.
+        guard !code.hasPrefix("S1") else { throw FirestoreServiceError.invalidFriendAction }
+        return try await mutatePartyRoom(code: code) { room in
+            guard room.isStageRoom == true,
+                  room.status == .inProgress,
+                  room.containsPlayer(userID),
+                  let roundIndex = room.currentStageRoundIndex,
+                  var rounds = room.stageRounds,
+                  rounds.indices.contains(roundIndex),
+                  rounds[roundIndex].status == .inProgress else {
+                throw FirestoreServiceError.invalidFriendAction
+            }
+
+            rounds[roundIndex].results[userID] = result
+            rounds[roundIndex] = self.startPartyStageFinishWindowIfNeeded(rounds[roundIndex], starterID: userID, result: result)
+            room.stageRounds = rounds
+            room = self.finishPartyStageRoundIfReady(room)
+        }
+    }
+
+    func advancePartyStageRound(code: String, hostID: String) async throws -> PartyRoom {
+        if code.hasPrefix("S1") {
+            let room = try await db.collection("partyRooms").document(code).getDocument(as: PartyRoom.self)
+            return try await verifiedPartyAction("advance", code: code, userID: hostID, roundIndex: room.currentStageRoundIndex ?? 0)
+        }
+        return try await mutatePartyRoom(code: code) { room in
+            guard room.isStageRoom == true,
+                  room.status == .inProgress,
+                  room.hostID == hostID,
+                  let currentIndex = room.currentStageRoundIndex,
+                  var rounds = room.stageRounds,
+                  rounds.indices.contains(currentIndex),
+                  rounds[currentIndex].status == .finished else {
+                throw FirestoreServiceError.invalidFriendAction
+            }
+
+            let nextIndex = currentIndex + 1
+            guard rounds.indices.contains(nextIndex) else {
+                room = self.finishPartyStageRoom(room)
+                return
+            }
+
+            rounds[nextIndex].status = .inProgress
+            rounds[nextIndex].startedAt = Date()
+            room.stageRounds = rounds
+            room.currentStageRoundIndex = nextIndex
+            room.mode = rounds[nextIndex].mode
+            room.difficulty = rounds[nextIndex].difficulty
+            room.seed = rounds[nextIndex].seed
+            room.puzzleData = rounds[nextIndex].puzzleData
+        }
+    }
+
+    func finalizeExpiredPartyFinishWindow(code: String) async throws -> PartyRoom {
+        guard !code.hasPrefix("S1") else { throw FirestoreServiceError.invalidFriendAction }
+        return try await mutatePartyRoom(code: code) { room in
+            if room.isStageRoom == true {
+                room = self.finalizeExpiredPartyStageFinishWindow(room)
+                return
+            }
+
+            guard room.status == .inProgress,
+                  let deadline = room.finishWindowDeadline,
+                  Date() >= deadline else {
+                return
+            }
+
+            for index in room.players.indices where !self.isFinalPartyResult(room.players[index].result) {
+                room.players[index].result = self.partyTimeoutResult(for: room, userID: room.players[index].userID)
+                room.players[index].abandoned = false
+            }
             room = self.finishPartyRoomIfReady(room)
         }
     }
 
     func leavePartyRoom(code: String, userID: String) async throws -> PartyRoom {
-        try await mutatePartyRoom(code: code) { room in
+        if code.hasPrefix("S1") { return try await verifiedPartyAction("forfeit", code: code, userID: userID) }
+        return try await mutatePartyRoom(code: code) { room in
             room.readyPlayerIDs = (room.readyPlayerIDs ?? []).filter { $0 != userID }
             switch room.status {
             case .lobby:
@@ -1693,6 +2542,27 @@ final class FirestoreService {
                 }
             case .inProgress:
                 guard let index = room.players.firstIndex(where: { $0.userID == userID }) else { return }
+                if room.isStageRoom == true {
+                    if let roundIndex = room.currentStageRoundIndex,
+                       var rounds = room.stageRounds,
+                       rounds.indices.contains(roundIndex),
+                       rounds[roundIndex].results[userID] == nil {
+                        rounds[roundIndex].results[userID] = MatchPlayerResult(
+                            userID: userID,
+                            mode: rounds[roundIndex].mode,
+                            completed: false,
+                            elapsedSeconds: 0,
+                            score: 0,
+                            progress: 0,
+                            status: "Abandoned",
+                            summary: ["abandoned": "true"],
+                            details: ["Left the party round."]
+                        )
+                        room.stageRounds = rounds
+                        room = self.finishPartyStageRoundIfReady(room)
+                    }
+                    return
+                }
                 if room.players[index].result == nil {
                     room.players[index].result = MatchPlayerResult(
                         userID: userID,
@@ -1753,12 +2623,192 @@ final class FirestoreService {
         }
     }
 
+    private func startFirstPartyStageRound(_ room: PartyRoom, at date: Date) -> PartyRoom {
+        guard room.isStageRoom == true,
+              var rounds = room.stageRounds,
+              rounds.indices.contains(0) else {
+            return room
+        }
+        var updated = room
+        rounds[0].status = .inProgress
+        rounds[0].startedAt = date
+        updated.stageRounds = rounds
+        updated.currentStageRoundIndex = 0
+        updated.mode = rounds[0].mode
+        updated.difficulty = rounds[0].difficulty
+        updated.seed = rounds[0].seed
+        updated.puzzleData = rounds[0].puzzleData
+        updated.stageScores = updated.players.reduce(into: updated.stageScores ?? [:]) { scores, player in
+            scores[player.userID] = scores[player.userID] ?? 0
+        }
+        return updated
+    }
+
+    private func finishPartyStageRoundIfReady(_ room: PartyRoom) -> PartyRoom {
+        guard room.isStageRoom == true,
+              room.status == .inProgress,
+              let roundIndex = room.currentStageRoundIndex,
+              var rounds = room.stageRounds,
+              rounds.indices.contains(roundIndex),
+              rounds[roundIndex].status == .inProgress,
+              !room.players.isEmpty,
+              room.players.allSatisfy({ player in
+                  isFinalPartyResult(rounds[roundIndex].results[player.userID])
+              }) else {
+            return room
+        }
+
+        var updated = room
+        rounds[roundIndex] = scoreFinishedPartyStageRound(rounds[roundIndex], players: room.players, cumulativeBefore: room.stageScores ?? [:])
+        updated.stageScores = rounds[roundIndex].scoreRows?.reduce(into: room.stageScores ?? [:]) { scores, row in
+            scores[row.userID] = row.cumulativePoints
+        }
+        rounds[roundIndex].status = .finished
+        rounds[roundIndex].finishedAt = Date()
+        updated.stageRounds = rounds
+
+        if roundIndex >= rounds.count - 1 {
+            updated = finishPartyStageRoom(updated)
+        }
+        return updated
+    }
+
+    private func scoreFinishedPartyStageRound(
+        _ round: PartyStageRound,
+        players: [PartyPlayer],
+        cumulativeBefore: [String: Int]
+    ) -> PartyStageRound {
+        let sortedPlayers = players.sorted {
+            PartyScoring.compare(round.results[$0.userID], round.results[$1.userID], mode: round.mode) < 0
+        }
+        var scored = round
+        var rows: [PartyStageRoundScore] = []
+        var previousResult: MatchPlayerResult?
+        var currentPlacement = 1
+
+        for (offset, player) in sortedPlayers.enumerated() {
+            let result = round.results[player.userID]
+            if offset > 0,
+               PartyScoring.compare(result, previousResult, mode: round.mode) != 0 {
+                currentPlacement = offset + 1
+            }
+            let points = stagePoints(for: currentPlacement)
+            let cumulative = (cumulativeBefore[player.userID] ?? 0) + points
+            rows.append(PartyStageRoundScore(
+                userID: player.userID,
+                username: player.username,
+                placement: currentPlacement,
+                roundPoints: points,
+                cumulativePoints: cumulative,
+                resultSummary: PartyScoring.summary(for: result, mode: round.mode)
+            ))
+            previousResult = result
+        }
+
+        scored.scoreRows = rows
+        return scored
+    }
+
+    private func finishPartyStageRoom(_ room: PartyRoom) -> PartyRoom {
+        var updated = room
+        updated.status = .finished
+        updated.finishedAt = Date()
+        let resolution = partyStageWinnerResolution(for: updated)
+        updated.winnerID = resolution.winnerID
+        updated.winnerReason = resolution.reason
+        return updated
+    }
+
+    private func partyStageWinnerResolution(for room: PartyRoom) -> (winnerID: String?, reason: String) {
+        let scores = room.stageScores ?? [:]
+        guard let topScore = scores.values.max() else {
+            return (nil, "No submitted results")
+        }
+
+        var candidates = scores.filter { $0.value == topScore }.map(\.key)
+        if candidates.count == 1 {
+            return (candidates[0], "Party champion with \(topScore) points")
+        }
+
+        let roundWins = partyStageRoundWins(in: room)
+        if let bestWins = candidates.map({ roundWins[$0] ?? 0 }).max() {
+            let winLeaders = candidates.filter { (roundWins[$0] ?? 0) == bestWins }
+            if winLeaders.count == 1 {
+                return (winLeaders[0], "Party champion with \(topScore) points")
+            }
+            candidates = winLeaders
+        }
+
+        if let latestRows = room.stageRounds?.last(where: { $0.status == .finished })?.scoreRows {
+            let placements = Dictionary(uniqueKeysWithValues: latestRows.map { ($0.userID, $0.placement) })
+            if let bestPlacement = candidates.compactMap({ placements[$0] }).min() {
+                let latestLeaders = candidates.filter { placements[$0] == bestPlacement }
+                if latestLeaders.count == 1 {
+                    return (latestLeaders[0], "Party champion with \(topScore) points")
+                }
+            }
+        }
+
+        return (nil, "Party ended in a tie")
+    }
+
+    private func partyStageRoundWins(in room: PartyRoom) -> [String: Int] {
+        (room.stageRounds ?? []).reduce(into: [String: Int]()) { wins, round in
+            for row in round.scoreRows ?? [] where row.placement == 1 {
+                wins[row.userID, default: 0] += 1
+            }
+        }
+    }
+
+    private func finalizeExpiredPartyStageFinishWindow(_ room: PartyRoom) -> PartyRoom {
+        guard room.isStageRoom == true,
+              room.status == .inProgress,
+              let roundIndex = room.currentStageRoundIndex,
+              var rounds = room.stageRounds,
+              rounds.indices.contains(roundIndex),
+              rounds[roundIndex].status == .inProgress,
+              let deadline = rounds[roundIndex].finishWindowDeadline,
+              Date() >= deadline else {
+            return room
+        }
+
+        var updated = room
+        for player in room.players where !isFinalPartyResult(rounds[roundIndex].results[player.userID]) {
+            rounds[roundIndex].results[player.userID] = partyStageTimeoutResult(for: rounds[roundIndex], room: room, userID: player.userID)
+        }
+        updated.stageRounds = rounds
+        return finishPartyStageRoundIfReady(updated)
+    }
+
+    private func startPartyStageFinishWindowIfNeeded(_ round: PartyStageRound, starterID: String, result: MatchPlayerResult) -> PartyStageRound {
+        guard round.finishWindowDeadline == nil,
+              isSuccessfulPartyCompletion(result) else {
+            return round
+        }
+
+        var updated = round
+        let now = Date()
+        updated.finishWindowStartedAt = now
+        updated.finishWindowDeadline = now.addingTimeInterval(180)
+        updated.finishWindowStarterID = starterID
+        return updated
+    }
+
+    private func stagePoints(for placement: Int) -> Int {
+        switch placement {
+        case 1: return 10
+        case 2: return 7
+        case 3: return 5
+        case 4: return 3
+        default: return 1
+        }
+    }
+
     private func finishPartyRoomIfReady(_ room: PartyRoom) -> PartyRoom {
         guard room.status == .inProgress,
               !room.players.isEmpty,
               room.players.allSatisfy({ player in
-                  guard let result = player.result else { return false }
-                  return isFinalPartyResult(result)
+                  isFinalPartyResult(player.result)
               }) else {
             return room
         }
@@ -1769,8 +2819,67 @@ final class FirestoreService {
         return resolved
     }
 
-    private func isFinalPartyResult(_ result: MatchPlayerResult) -> Bool {
+    private func startPartyFinishWindowIfNeeded(_ room: PartyRoom, starterID: String, result: MatchPlayerResult) -> PartyRoom {
+        guard room.status == .inProgress,
+              room.finishWindowDeadline == nil,
+              isSuccessfulPartyCompletion(result) else {
+            return room
+        }
+
+        var updated = room
+        let now = Date()
+        updated.finishWindowStartedAt = now
+        updated.finishWindowDeadline = now.addingTimeInterval(180)
+        updated.finishWindowStarterID = starterID
+        return updated
+    }
+
+    private func isSuccessfulPartyCompletion(_ result: MatchPlayerResult) -> Bool {
+        guard result.completed else { return false }
+        switch result.mode {
+        case .sudoku, .gridlock, .colorLink, .minesweeper:
+            return true
+        case .wordle:
+            return result.isFinalWordleResult
+        case .hangman:
+            return result.summary["final"] == "true" || result.solvedRounds >= 2
+        case .anagram, .wordHunt:
+            return false
+        }
+    }
+
+    private func partyTimeoutResult(for room: PartyRoom, userID: String) -> MatchPlayerResult {
+        MatchPlayerResult(
+            userID: userID,
+            mode: room.mode,
+            completed: false,
+            elapsedSeconds: max(0, Int(Date().timeIntervalSince(room.startedAt ?? Date()))),
+            score: 0,
+            progress: 0,
+            status: "Time expired",
+            summary: ["partyTimeout": "true"],
+            details: ["Party finish window expired."]
+        )
+    }
+
+    private func partyStageTimeoutResult(for round: PartyStageRound, room: PartyRoom, userID: String) -> MatchPlayerResult {
+        MatchPlayerResult(
+            userID: userID,
+            mode: round.mode,
+            completed: false,
+            elapsedSeconds: max(0, Int(Date().timeIntervalSince(round.startedAt ?? room.startedAt ?? Date()))),
+            score: 0,
+            progress: 0,
+            status: "Time expired",
+            summary: ["partyTimeout": "true"],
+            details: ["Party finish window expired."]
+        )
+    }
+
+    private func isFinalPartyResult(_ result: MatchPlayerResult?) -> Bool {
+        guard let result else { return false }
         if result.status == "Abandoned" { return true }
+        if result.summary["partyTimeout"] == "true" { return true }
         switch result.mode {
         case .wordle:
             return result.isFinalWordleResult

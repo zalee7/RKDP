@@ -1,0 +1,30 @@
+{
+  "score": 2,
+  "summary": "The new serverDailyChallenges entry rule denies every client write and requires authentication for summary reads. Private schedules, attempts and evidence remain under economyPrivate's deny-all rule. Whole-project rules remain prototype/beta because existing social and user-profile access is broader than production should allow. Compilation passed; emulator authorization testing has not run (Java unavailable).",
+  "findings": [
+    {
+      "check": "New projection authority and update bypass",
+      "severity": "minor",
+      "issue": "Static inspection found no overlapping broad allow for serverDailyChallenges or economyPrivate. Anonymous unauthenticated reads are denied; signed-in reads match the DailyChallengeService collection query. All create/update/delete operations are denied regardless of supplied UID, types, fields or ownership. These are reviewed expectations, not emulator results.",
+      "recommendation": "Before rollout, run owner/non-owner/unauthenticated get/list/create/update/delete, batched-write and private-subcollection tests in the emulator. Ensure only trusted functions write safe entry summaries."
+    },
+    {
+      "check": "Existing social authority",
+      "severity": "major",
+      "issue": "Existing sessions and partyRooms allow signed-in clients to author results and participants. They cannot be used as verified reward authority.",
+      "recommendation": "Migrate social issuance and finality to a trusted lifecycle before enabling friend/party shared-wallet daily rewards."
+    },
+    {
+      "check": "Existing mixed public/private user documents",
+      "severity": "moderate",
+      "issue": "Existing users rules permit signed-in reads of full user documents, which can include email. This pass does not resolve that pre-existing exposure.",
+      "recommendation": "Separate safe public profiles from private account data before broad release."
+    },
+    {
+      "check": "Resource exhaustion and query scale",
+      "severity": "moderate",
+      "issue": "Authenticated summary queries currently read the day's full collection; callables have instance bounds but no per-account rate limits or App Check enforcement yet.",
+      "recommendation": "Add pagination, scoped friend/global queries, App Check, per-account limits and operational alerts before enabling at scale."
+    }
+  ]
+}

@@ -66,17 +66,11 @@ struct PostMatchRewardSnapshot {
         )
     }
 
-    static func staticSnapshot(session: GameSession, user: AppUser) -> PostMatchRewardSnapshot {
+    static func staticSnapshot(session: GameSession, user: AppUser, recordedCoinReward: Int? = nil) -> PostMatchRewardSnapshot {
         let rank = user.rank(for: session.mode)
         let outcome = session.result(for: user.id) ?? .draw
-        let wager = session.players.first(where: { $0.userID == user.id })?.wager ?? 0
-        let opponentWager = session.players.first(where: { $0.userID != user.id })?.wager ?? wager
-        let coinDelta: Int
-        switch outcome {
-        case .win: coinDelta = session.isRanked ? opponentWager : 0
-        case .loss, .abandoned: coinDelta = session.isRanked ? -wager : 0
-        case .draw: coinDelta = 0
-        }
+        // Show only a committed reward, never a predicted payout after a failed save.
+        let coinDelta = recordedCoinReward ?? session.rankedCoinRewards?[user.id] ?? 0
         return PostMatchRewardSnapshot(
             sessionID: session.id,
             startingCoins: user.coins,
@@ -114,6 +108,7 @@ struct MatchPlayer: Codable {
     var rankPoints: Int = 0
     var isBot: Bool = false
     var avatarStyle: AvatarStyle = .default
+    var hasRankPointSnapshot = true
 
     init(userID: String, username: String, wager: Int, finishTime: Int? = nil, rankTier: RankTier, rankPoints: Int = 0, isBot: Bool = false, avatarStyle: AvatarStyle = .default) {
         self.userID = userID
@@ -137,7 +132,9 @@ struct MatchPlayer: Codable {
         wager = try c.decode(Int.self, forKey: .wager)
         finishTime = try c.decodeIfPresent(Int.self, forKey: .finishTime)
         rankTier = try c.decode(RankTier.self, forKey: .rankTier)
-        rankPoints = try c.decodeIfPresent(Int.self, forKey: .rankPoints) ?? 0
+        let savedRankPoints = try c.decodeIfPresent(Int.self, forKey: .rankPoints)
+        rankPoints = savedRankPoints ?? 0
+        hasRankPointSnapshot = savedRankPoints != nil
         isBot = try c.decodeIfPresent(Bool.self, forKey: .isBot) ?? false
         avatarStyle = try c.decodeIfPresent(AvatarStyle.self, forKey: .avatarStyle) ?? .default
     }
@@ -149,7 +146,7 @@ struct MatchPlayer: Codable {
         try c.encode(wager, forKey: .wager)
         try c.encodeIfPresent(finishTime, forKey: .finishTime)
         try c.encode(rankTier, forKey: .rankTier)
-        try c.encode(rankPoints, forKey: .rankPoints)
+        if hasRankPointSnapshot { try c.encode(rankPoints, forKey: .rankPoints) }
         try c.encode(isBot, forKey: .isBot)
         try c.encode(avatarStyle, forKey: .avatarStyle)
     }
@@ -165,6 +162,7 @@ struct MatchPlayerResult: Codable, Equatable {
     var status: String
     var summary: [String: String]
     var details: [String]
+    var rewardEvidenceJSON: String? = nil
 
     var longestWordLength: Int { Int(summary["longestWordLength"] ?? "0") ?? 0 }
     var wordCount: Int { Int(summary["wordCount"] ?? "0") ?? 0 }
@@ -174,10 +172,12 @@ struct MatchPlayerResult: Codable, Equatable {
     var wordleRoundCount: Int { Int(summary["roundCount"] ?? "0") ?? 0 }
     var isFinalWordleResult: Bool {
         guard mode == .wordle else { return true }
-        return summary["isFinal"] == "true" || solvedRounds >= 2 || failedRounds >= 2
+        if let explicitFinal = summary["isFinal"] { return explicitFinal == "true" }
+        return solvedRounds >= 2 || failedRounds >= 2
     }
     var hitMine: Bool { summary["hitMine"] == "true" }
     var moveCount: Int { Int(summary["moves"] ?? "0") ?? 0 }
+    var foundationCount: Int { Int(summary["foundationCount"] ?? "\(Int((progress * 52).rounded()))") ?? 0 }
     var solvedPairs: Int { Int(summary["solvedPairs"] ?? "0") ?? 0 }
     var wrongGuessCount: Int { Int(summary["wrongGuessCount"] ?? "0") ?? 0 }
     var revealedLetterCount: Int { Int(summary["revealedLetterCount"] ?? "\(score)") ?? score }
@@ -242,6 +242,12 @@ struct SoloResultStat: Identifiable, Equatable {
     var value: String
 }
 
+struct SoloResultSection: Identifiable, Equatable {
+    let id = UUID()
+    var title: String
+    var items: [String]
+}
+
 struct SoloGameResult: Identifiable, Equatable {
     let id = UUID()
     var mode: GameMode
@@ -254,8 +260,47 @@ struct SoloGameResult: Identifiable, Equatable {
     var progress: Double? = nil
     var moves: Int? = nil
     var guesses: Int? = nil
+    var wrongGuesses: Int? = nil
     var stats: [SoloResultStat]
     var details: [String] = []
+    var sections: [SoloResultSection] = []
+    var rewardEvidenceJSON: String? = nil
+}
+
+// A run-start snapshot keeps result comparisons stable after the user record updates.
+struct SoloRunProgress {
+    var previousBest: SoloPersonalBest?
+    var completedDifficulties: Set<Difficulty>
+
+    func newlyUnlockedDifficulty(for result: SoloGameResult) -> Difficulty? {
+        guard result.completed, !completedDifficulties.contains(result.difficulty),
+              let next = result.difficulty.next,
+              !completedDifficulties.contains(next) else { return nil }
+        return next
+    }
+
+    func bestComparison(for result: SoloGameResult) -> SoloBestComparison? {
+        guard let candidate = SoloPersonalBest(result: result) else { return nil }
+        return SoloBestComparison(current: candidate, previous: previousBest, mode: result.mode)
+    }
+}
+
+struct SoloBestComparison {
+    var current: SoloPersonalBest
+    var previous: SoloPersonalBest?
+    var mode: GameMode
+
+    var isNewBest: Bool {
+        guard let previous else { return true }
+        return current.isBetter(than: previous, mode: mode)
+    }
+
+    var title: String {
+        guard let previous else { return "First Personal Best" }
+        if !isNewBest && !previous.isBetter(than: current, mode: mode) { return "Personal Best Matched" }
+        return isNewBest ? "New Personal Best" : "Personal Best"
+    }
+
 }
 
 struct GameSession: Codable, Identifiable {
@@ -274,6 +319,16 @@ struct GameSession: Codable, Identifiable {
     var playerResults: [String: MatchPlayerResult]?
     var winnerReason: String?
     var matchKind: SessionKind = .ranked
+    var rankedCoinRewards: [String: Int]? = nil
+
+    var usesServerAuthority: Bool { id.hasPrefix("v1_") }
+    var usesVerifiedSocial: Bool { id.hasPrefix("sv1_") }
+    var usesVerifiedResults: Bool { usesServerAuthority || usesVerifiedSocial }
+
+    static func needsMatchEvidence(_ sessionID: String?) -> Bool {
+        guard let sessionID else { return false }
+        return sessionID.hasPrefix("v1_") || sessionID.hasPrefix("sv1_")
+    }
 
     var totalPot: Int { players.reduce(0) { $0 + $1.wager } }
     var isRanked: Bool { matchKind == .ranked }
@@ -307,7 +362,7 @@ struct GameSession: Codable, Identifiable {
 
 extension GameSession {
     enum CodingKeys: String, CodingKey {
-        case id, mode, difficulty, status, players, playerIDs, seed, puzzleData, createdAt, startedAt, finishedAt, winnerID, playerResults, winnerReason, matchKind
+        case id, mode, difficulty, status, players, playerIDs, seed, puzzleData, createdAt, startedAt, finishedAt, winnerID, playerResults, winnerReason, matchKind, rankedCoinRewards
     }
 
     init(from decoder: Decoder) throws {
@@ -327,6 +382,7 @@ extension GameSession {
         playerResults = try c.decodeIfPresent([String: MatchPlayerResult].self, forKey: .playerResults)
         winnerReason = try c.decodeIfPresent(String.self, forKey: .winnerReason)
         matchKind = (try? c.decode(SessionKind.self, forKey: .matchKind)) ?? .ranked
+        rankedCoinRewards = try c.decodeIfPresent([String: Int].self, forKey: .rankedCoinRewards)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -346,6 +402,85 @@ extension GameSession {
         try c.encodeIfPresent(playerResults, forKey: .playerResults)
         try c.encodeIfPresent(winnerReason, forKey: .winnerReason)
         try c.encode(matchKind, forKey: .matchKind)
+        try c.encodeIfPresent(rankedCoinRewards, forKey: .rankedCoinRewards)
+    }
+}
+
+extension RankedCoinRewards {
+    static func amount(in session: GameSession, for userID: String, botWinRewardAvailable: Bool) -> Int {
+        guard session.isRanked, session.status == .finished,
+              session.players.count == 2, Set(session.players.map(\.userID)).count == 2,
+              let player = session.players.first(where: { $0.userID == userID }), !player.isBot,
+              let results = session.playerResults, !results.isEmpty,
+              results.allSatisfy({ key, result in
+                  key == result.userID && result.mode == session.mode &&
+                  session.players.contains(where: { $0.userID == key })
+              }) else { return 0 }
+
+        // Synthetic forfeit results are not completed attempts, including the auto-win.
+        func isForfeit(_ result: MatchPlayerResult) -> Bool {
+            result.summary["forfeit"] == "true" || result.summary["forfeitWin"] == "true" ||
+            ["forfeit", "abandon"].contains(where: { result.status.lowercased().contains($0) })
+        }
+        if let local = results[userID], isForfeit(local) { return 0 }
+        let hasForfeit = results.values.contains(where: isForfeit) ||
+            ["forfeit", "abandon"].contains(where: { (session.winnerReason ?? "").lowercased().contains($0) })
+        if hasForfeit {
+            guard session.winnerID == userID, let local = results[userID],
+                  local.completed, MatchResolver.isFinalResult(local) else { return 0 }
+        } else {
+            guard MatchResolver.canResolve(session: session, results: results),
+                  MatchResolver.resolve(session: session, results: results).winnerID == session.winnerID else { return 0 }
+        }
+        if session.containsBot {
+            guard session.winnerID == userID, botWinRewardAvailable else { return 0 }
+        }
+        if session.winnerID == userID {
+            let tier = player.hasRankPointSnapshot ? RankTier.tier(for: player.rankPoints) : player.rankTier
+            return win(for: tier)
+        }
+        // A normal first-finisher race can end before the other player submits.
+        // That is a completed match, unlike a forfeit or abandoned attempt.
+        return session.winnerID == nil ? draw : loss
+    }
+}
+
+extension AppUser {
+    /// Credit only a real resolved human win, using the ranks captured in the session.
+    @discardableResult
+    mutating func recordCompetitiveBadgeWin(from session: GameSession) -> Bool {
+        guard session.status == .finished, session.winnerID == id,
+              session.isRanked || session.isExhibition,
+              session.players.count == 2, !session.containsBot,
+              let local = session.players.first(where: { $0.userID == id }),
+              let opponent = session.players.first(where: { $0.userID != id }),
+              !earnedShowcase.creditedWinSessionIDs.contains(session.id),
+              let results = session.playerResults, !results.isEmpty,
+              results.allSatisfy({ key, result in
+                  key == result.userID && result.mode == session.mode &&
+                  session.players.contains(where: { $0.userID == key }) &&
+                  result.summary["forfeit"] != "true" && result.summary["forfeitWin"] != "true" &&
+                  !["forfeit", "abandon"].contains(where: { result.status.lowercased().contains($0) })
+              }),
+              !(session.winnerReason ?? "").lowercased().contains("forfeit"),
+              MatchResolver.canResolve(session: session, results: results),
+              MatchResolver.resolve(session: session, results: results).winnerID == id else { return false }
+
+        let friendly = session.isExhibition && earnedShowcase.friendlyWins < 100
+        // Ignore inconsistent legacy snapshots rather than guessing an opponent's old division.
+        let validRanks = local.hasRankPointSnapshot && opponent.hasRankPointSnapshot &&
+            local.rankPoints >= 0 && opponent.rankPoints >= 0 &&
+            local.rankTier == RankTier.tier(for: local.rankPoints) &&
+            opponent.rankTier == RankTier.tier(for: opponent.rankPoints)
+        let localPosition = local.rankTier.rawValue * 3 + local.rankTier.division(for: local.rankPoints).index
+        let opponentPosition = opponent.rankTier.rawValue * 3 + opponent.rankTier.division(for: opponent.rankPoints).index
+        let underdog = session.isRanked && validRanks && opponentPosition > localPosition && earnedShowcase.underdogWins < 100
+        guard friendly || underdog else { return false }
+        if friendly { earnedShowcase.friendlyWins += 1 }
+        if underdog { earnedShowcase.underdogWins += 1 }
+        earnedShowcase.creditedWinSessionIDs.insert(session.id)
+        reconcileEarnedRewards()
+        return true
     }
 }
 
@@ -361,10 +496,10 @@ extension Difficulty {
             }
         case .gridlock:
             switch self {
-            case .easy: return 300
-            case .medium: return 420
-            case .hard: return 600
-            case .expert: return 780
+            case .easy: return 600
+            case .medium: return 720
+            case .hard: return 900
+            case .expert: return 1_080
             }
         case .colorLink:
             switch self {

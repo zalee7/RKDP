@@ -53,14 +53,14 @@ enum RankedAccessProduct {
     }
 
     static func fallbackPrice(for productID: String) -> String {
-        productID == allAccessProductID ? "$4.99" : "$0.99"
+        productID == allAccessProductID ? "$9.99" : "$2.99"
     }
 }
 
 struct RankedAccess: Codable, Equatable {
     static let freeEntriesPerModePerDay = 1
-    static let rewardedAdsPerModePerDay = 3
-    static let rewardedAdsTotalPerDay = 12
+    static let rewardedAdsPerModePerDay = 1
+    static let rewardedAdsTotalPerDay = 4
 
     var allModesUnlocked: Bool = false
     var unlockedModeIDs: Set<String> = []
@@ -71,6 +71,25 @@ struct RankedAccess: Codable, Equatable {
     var consumedSessionIDs: [String: Bool] = [:]
 
     static let empty = RankedAccess()
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case allModesUnlocked, unlockedModeIDs, dailyFreeUses, rewardedTickets
+        case dailyRewardedAdUses, totalRewardedAdUses, consumedSessionIDs
+    }
+
+    // Server-issued purchase grants may omit unused daily entry counters.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        allModesUnlocked = try c.decodeIfPresent(Bool.self, forKey: .allModesUnlocked) ?? false
+        unlockedModeIDs = try c.decodeIfPresent(Set<String>.self, forKey: .unlockedModeIDs) ?? []
+        dailyFreeUses = try c.decodeIfPresent([String: RankedDailyCounter].self, forKey: .dailyFreeUses) ?? [:]
+        rewardedTickets = try c.decodeIfPresent([String: Int].self, forKey: .rewardedTickets) ?? [:]
+        dailyRewardedAdUses = try c.decodeIfPresent([String: RankedDailyCounter].self, forKey: .dailyRewardedAdUses) ?? [:]
+        totalRewardedAdUses = try c.decodeIfPresent(RankedDailyCounter.self, forKey: .totalRewardedAdUses) ?? .empty
+        consumedSessionIDs = try c.decodeIfPresent([String: Bool].self, forKey: .consumedSessionIDs) ?? [:]
+    }
 
     static func todayKey(date: Date = Date()) -> String {
         var calendar = Calendar(identifier: .gregorian)

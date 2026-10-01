@@ -35,6 +35,20 @@ final class FirebaseAuthService: ObservableObject {
         currentUser = nil
     }
 
+    func deleteCurrentUser() async throws {
+        guard let user = Auth.auth().currentUser else { throw AuthError.userNotFound }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            user.delete { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+        currentUser = nil
+    }
+
     func resetPassword(email: String) async throws {
         try await Auth.auth().sendPasswordReset(withEmail: email)
     }

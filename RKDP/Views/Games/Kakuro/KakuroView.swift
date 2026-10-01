@@ -57,7 +57,8 @@ struct ColorLinkView: View {
                 ColorLinkBoardView(
                     board: vm.board,
                     paths: vm.paths,
-                    activePairID: vm.activePairID
+                    activePairID: vm.activePairID,
+                    solvedPairIDs: vm.solvedPairIDs
                 ) { row, col in
                     vm.beginDraw(row: row, col: col)
                 } onContinue: { row, col in
@@ -71,6 +72,14 @@ struct ColorLinkView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Text("\(vm.solvedPairCount) connected")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.teal)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(AppTheme.teal.opacity(0.16))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(AppTheme.teal.opacity(0.35), lineWidth: 1))
                     Button { vm.clearActivePath() } label: {
                         Label("Clear", systemImage: "eraser.fill")
                     }
@@ -84,6 +93,8 @@ struct ColorLinkView: View {
 
                 Spacer(minLength: 0)
             }
+            .disabled(vm.isComplete || didReportMatchResult)
+            .allowsHitTesting(!vm.isComplete && !didReportMatchResult)
 
             if let soloResult {
                 SoloResultOverlay(result: soloResult, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
@@ -91,6 +102,7 @@ struct ColorLinkView: View {
         }
         .navigationTitle("Color Link")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { vm.stop() }
         .onChange(of: vm.isComplete) { _, complete in
             if complete {
                 if sessionID == nil { showSoloResult() }
@@ -121,7 +133,12 @@ struct ColorLinkView: View {
                 SoloResultStat(label: "Pairs", value: "\(vm.solvedPairCount)/\(vm.board.pairs.count)"),
                 SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
                 SoloResultStat(label: "Difficulty", value: difficulty.displayName)
-            ]
+            ],
+            rewardEvidenceJSON: SoloCoinRewards.evidence([
+                "paths": Dictionary(uniqueKeysWithValues: vm.paths.map { pairID, path in
+                    (String(pairID), path.map { $0.row * vm.board.size + $0.col })
+                })
+            ])
         )
         soloResult = result
         onSoloResult(result)
@@ -130,6 +147,9 @@ struct ColorLinkView: View {
     private var activeStatus: String {
         if let activePairID = vm.activePairID {
             return "Color \(activePairID + 1) selected"
+        }
+        if vm.solvedPairCount > 0 {
+            return "\(vm.solvedPairCount) of \(vm.board.pairs.count) color links complete"
         }
         return "Drag from an endpoint to draw a path"
     }
@@ -159,7 +179,12 @@ struct ColorLinkView: View {
             details: [
                 "\(vm.filledCellCount) of \(vm.board.totalCells) cells filled",
                 "\(vm.solvedPairCount) of \(vm.board.pairs.count) color pairs connected"
-            ]
+            ],
+            rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence([
+                "paths": Dictionary(uniqueKeysWithValues: vm.paths.map { id, path in
+                    (String(id), path.map { $0.row * vm.board.size + $0.col })
+                })
+            ]) : nil
         ))
     }
     private func colorLinkBoardRows(board: ColorLinkBoard, paths: [Int: [ColorLinkPosition]]) -> String {
@@ -190,6 +215,7 @@ struct ColorLinkBoardView: View {
     let board: ColorLinkBoard
     let paths: [Int: [ColorLinkPosition]]
     let activePairID: Int?
+    let solvedPairIDs: Set<Int>
     let onBegin: (Int, Int) -> Void
     let onContinue: (Int, Int) -> Void
 
@@ -210,6 +236,7 @@ struct ColorLinkBoardView: View {
                             pairID: owner(of: position),
                             isEndpoint: board.pairID(at: position) != nil,
                             isActive: owner(of: position) == activePairID,
+                            isSolved: owner(of: position).map { solvedPairIDs.contains($0) } ?? false,
                             cellSize: cellSize
                         )
                         .offset(x: CGFloat(col) * cellSize, y: CGFloat(row) * cellSize)
@@ -248,6 +275,7 @@ private struct ColorLinkCellView: View {
     let pairID: Int?
     let isEndpoint: Bool
     let isActive: Bool
+    let isSolved: Bool
     let cellSize: CGFloat
     @Environment(\.boardCosmetics) private var cosmetics
 
@@ -268,16 +296,47 @@ private struct ColorLinkCellView: View {
                 RoundedRectangle(cornerRadius: isEndpoint ? cellSize * 0.28 : cellSize * 0.16)
                     .fill(color.gradient)
                     .frame(
-                        width: isEndpoint ? cellSize * 0.72 : cellSize * 0.58,
-                        height: isEndpoint ? cellSize * 0.72 : cellSize * 0.58
+                        width: isEndpoint ? cellSize * 0.74 : cellSize * 0.62,
+                        height: isEndpoint ? cellSize * 0.74 : cellSize * 0.62
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: isEndpoint ? cellSize * 0.28 : cellSize * 0.16)
-                            .stroke(isActive ? Color.white : Color.black.opacity(0.12), lineWidth: isActive ? 3 : 1)
+                            .stroke(borderColor, lineWidth: borderWidth)
                     )
-                    .shadow(color: isActive ? tile.shadow : .clear, radius: 5)
+                    .overlay(solvedOverlay)
+                    .shadow(color: isSolved || isActive ? color.opacity(0.45) : .clear, radius: isSolved ? 8 : 5)
+                    .scaleEffect(isSolved && isEndpoint ? 1.08 : 1)
             }
         }
         .frame(width: cellSize, height: cellSize)
+    }
+
+    private var borderColor: Color {
+        if isSolved { return Color.white }
+        if isActive { return Color.white }
+        return Color.black.opacity(0.12)
+    }
+
+    private var borderWidth: CGFloat {
+        if isSolved { return 3.5 }
+        if isActive { return 3 }
+        return 1
+    }
+
+    @ViewBuilder
+    private var solvedOverlay: some View {
+        if isSolved {
+            ZStack {
+                RoundedRectangle(cornerRadius: isEndpoint ? cellSize * 0.28 : cellSize * 0.16)
+                    .stroke(Color.white.opacity(0.7), lineWidth: 1)
+                    .padding(3)
+                if isEndpoint {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: max(10, cellSize * 0.26), weight: .black))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.22), radius: 2, x: 0, y: 1)
+                }
+            }
+        }
     }
 }

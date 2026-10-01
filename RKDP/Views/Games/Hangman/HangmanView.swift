@@ -53,9 +53,6 @@ struct HangmanView: View {
                     .padding(.horizontal)
                     .padding(.top, 12)
 
-                messageBanner
-                    .frame(height: 30)
-
                 categoryCard
                     .padding(.horizontal)
 
@@ -75,11 +72,21 @@ struct HangmanView: View {
                     .padding(.bottom, 18)
             }
 
+            VStack {
+                messageBanner
+                    .padding(.top, 60)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .allowsHitTesting(false)
+            .zIndex(1)
+
             if vm.isFinished && sessionID == nil {
                 SoloResultOverlay(result: soloResult, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
+                    .zIndex(2)
             }
         }
-        .navigationBarBackButtonHidden(sessionID != nil)
+        .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
         .onChange(of: vm.isFinished) { _, finished in
             guard finished else { return }
@@ -285,17 +292,32 @@ struct HangmanView: View {
             difficulty: vm.difficulty,
             completed: vm.game.isSolved,
             title: vm.game.isSolved ? "Puzzle Rescued" : "Lava Reached The Puzzle",
-            message: vm.game.isSolved ? "Solved \(vm.game.targetWord) with \(vm.game.wrongGuessCount) wrong letters." : "The word was \(vm.game.targetWord).",
+            message: vm.game.isSolved ? "Solved \(vm.game.targetWord) with \(vm.game.wrongGuessCount) wrong letter\(vm.game.wrongGuessCount == 1 ? "" : "s")." : "The word was \(vm.game.targetWord).",
             elapsedSeconds: vm.elapsedSeconds,
             score: vm.game.revealedUniqueCount,
             progress: vm.game.progress,
+            wrongGuesses: vm.game.wrongGuessCount,
             stats: [
-                SoloResultStat(label: "Category", value: vm.game.category),
-                SoloResultStat(label: "Word", value: vm.game.targetWord.capitalized),
+                SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
                 SoloResultStat(label: "Wrong", value: "\(vm.game.wrongGuessCount)/\(vm.game.maxWrongGuesses)"),
-                SoloResultStat(label: "Pattern", value: displayPattern(vm.game.revealedPattern)),
-                SoloResultStat(label: "Mode", value: "Untimed")
-            ]
+                SoloResultStat(label: "Word", value: vm.game.targetWord.capitalized),
+                SoloResultStat(label: "Category", value: vm.game.category)
+            ],
+            details: [
+                "Revealed \(vm.game.revealedUniqueCount) of \(Set(vm.game.targetWord).count) unique letters.",
+                vm.game.isSolved ? "The puzzle stayed above the lava." : "The lava reached the puzzle before the word was solved."
+            ],
+            sections: [
+                SoloResultSection(
+                    title: "Rescued Letters",
+                    items: sortedLetters(vm.game.correctLetters)
+                ),
+                SoloResultSection(
+                    title: "Wrong Letters",
+                    items: sortedLetters(vm.game.wrongLetters)
+                )
+            ],
+            rewardEvidenceJSON: SoloCoinRewards.evidence(["letters": vm.rewardGuessHistory])
         )
     }
 
@@ -377,9 +399,15 @@ private struct LavaRescueScene: View {
     let misses: Int
     let maxMisses: Int
     let isSolved: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(AppPreferenceKeys.reduceExtraAnimations) private var reduceExtraAnimations = false
 
     private var lavaProgress: Double {
         Double(misses) / Double(max(1, maxMisses))
+    }
+
+    private var motionDisabled: Bool {
+        reduceMotion || reduceExtraAnimations
     }
 
     var body: some View {
@@ -394,9 +422,11 @@ private struct LavaRescueScene: View {
                         .offset(y: -CGFloat(index) * geo.size.height / 7)
                 }
 
-                LavaWave()
-                    .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.26, blue: 0.16), Color(red: 1.0, green: 0.64, blue: 0.12)], startPoint: .bottom, endPoint: .top))
-                    .frame(height: max(18, geo.size.height * CGFloat(lavaProgress)))
+                AnimatedLavaSurface(
+                    progress: lavaProgress,
+                    sceneSize: geo.size,
+                    motionDisabled: motionDisabled
+                )
                     .shadow(color: AppTheme.danger.opacity(0.45), radius: 18)
 
                 PuzzleRescueMascot(misses: misses, maxMisses: maxMisses, isSolved: isSolved)
@@ -423,15 +453,103 @@ private struct LavaRescueScene: View {
 }
 
 private struct LavaWave: Shape {
+    var phase: Double
+    var amplitude: CGFloat
+    var frequency: Double
+
+    var animatableData: Double {
+        get { phase }
+        set { phase = newValue }
+    }
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
+        let surfaceBase = rect.minY + rect.height * 0.16
+        let step = max(3, rect.width / 42)
+
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.18))
-        path.addQuadCurve(to: CGPoint(x: rect.midX, y: rect.minY + rect.height * 0.10), control: CGPoint(x: rect.width * 0.25, y: rect.minY))
-        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.18), control: CGPoint(x: rect.width * 0.75, y: rect.minY + rect.height * 0.30))
+        path.addLine(to: CGPoint(x: rect.minX, y: yPosition(x: rect.minX, rect: rect, surfaceBase: surfaceBase)))
+
+        for x in stride(from: rect.minX, through: rect.maxX, by: step) {
+            path.addLine(to: CGPoint(x: x, y: yPosition(x: x, rect: rect, surfaceBase: surfaceBase)))
+        }
+
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         path.closeSubpath()
         return path
+    }
+
+    private func yPosition(x: CGFloat, rect: CGRect, surfaceBase: CGFloat) -> CGFloat {
+        guard rect.width > 0 else { return surfaceBase }
+        let progress = Double((x - rect.minX) / rect.width)
+        let wave = sin(progress * .pi * 2 * frequency + phase)
+        let ripple = sin(progress * .pi * 5.5 + phase * 0.68) * 0.35
+        return surfaceBase + CGFloat(wave + ripple) * amplitude
+    }
+}
+
+private struct AnimatedLavaSurface: View {
+    let progress: Double
+    let sceneSize: CGSize
+    let motionDisabled: Bool
+
+    private var lavaHeight: CGFloat {
+        max(18, sceneSize.height * CGFloat(progress))
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: motionDisabled ? 60 : 1.0 / 15.0)) { context in
+            let phase = motionDisabled ? 0 : context.date.timeIntervalSinceReferenceDate
+
+            ZStack(alignment: .bottom) {
+                LavaWave(phase: phase * 1.4, amplitude: 7, frequency: 1.35)
+                    .fill(LinearGradient(
+                        colors: [Color(red: 0.95, green: 0.12, blue: 0.10), Color(red: 1.0, green: 0.64, blue: 0.12)],
+                        startPoint: .bottom,
+                        endPoint: .top
+                    ))
+
+                LavaWave(phase: -phase * 1.8 + .pi * 0.35, amplitude: 4, frequency: 2.15)
+                    .fill(LinearGradient(
+                        colors: [Color.white.opacity(0.18), Color(red: 1.0, green: 0.92, blue: 0.28).opacity(0.28)],
+                        startPoint: .bottom,
+                        endPoint: .top
+                    ))
+                    .frame(height: max(12, lavaHeight * 0.72))
+                    .offset(y: -2)
+
+                LavaBubbleField(phase: phase, motionDisabled: motionDisabled)
+                    .frame(width: sceneSize.width, height: lavaHeight)
+            }
+            .frame(width: sceneSize.width, height: lavaHeight)
+        }
+    }
+}
+
+private struct LavaBubbleField: View {
+    let phase: Double
+    let motionDisabled: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(0..<10, id: \.self) { index in
+                let size = CGFloat(4 + (index % 4) * 3)
+                let horizontalSeed = CGFloat((Double(index) * 0.271).truncatingRemainder(dividingBy: 1))
+                let xDrift = motionDisabled ? 0 : CGFloat(sin(phase * (0.6 + Double(index) * 0.08))) * 6
+                let rise = motionDisabled ? 0 : CGFloat((phase * (0.10 + Double(index) * 0.017) + Double(index) * 0.13).truncatingRemainder(dividingBy: 1))
+                let baseY = geo.size.height * CGFloat((Double(index) * 0.193).truncatingRemainder(dividingBy: 1))
+                let y = geo.size.height - ((baseY + rise * geo.size.height).truncatingRemainder(dividingBy: max(1, geo.size.height)))
+
+                Circle()
+                    .fill(Color.white.opacity(0.12 + Double(index % 3) * 0.035))
+                    .frame(width: size, height: size)
+                    .position(
+                        x: geo.size.width * (0.08 + horizontalSeed * 0.84) + xDrift,
+                        y: y
+                    )
+            }
+        }
+        .clipped()
     }
 }
 
@@ -452,20 +570,152 @@ private struct PuzzleRescueMascot: View {
                 .overlay(PuzzlePieceShape().stroke(Color.white, lineWidth: 4))
                 .shadow(color: AppTheme.hotPink.opacity(0.35), radius: 12)
                 .opacity(max(0.42, 1 - Double(misses) / Double(max(1, maxMisses)) * 0.36))
-                .overlay(neutralFace)
+                .overlay(PuzzleMascotFace(expression: expression))
         }
     }
 
-    private var neutralFace: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 24) {
-                Circle().fill(Color.white).frame(width: 9, height: 9)
-                Circle().fill(Color.white).frame(width: 9, height: 9)
+    private var expression: PuzzleMascotExpression {
+        if isSolved { return .happy }
+        let danger = Double(misses) / Double(max(1, maxMisses))
+        if danger >= 1 { return .distressed }
+        if danger >= 0.7 { return .scared }
+        if danger >= 0.4 { return .nervous }
+        return .calm
+    }
+}
+
+private enum PuzzleMascotExpression {
+    case happy
+    case calm
+    case nervous
+    case scared
+    case distressed
+}
+
+private struct PuzzleMascotFace: View {
+    let expression: PuzzleMascotExpression
+
+    var body: some View {
+        VStack(spacing: verticalSpacing) {
+            ZStack {
+                HStack(spacing: eyeSpacing) {
+                    eye
+                    eye
+                }
+
+                brows
+                    .offset(y: -11)
             }
+
+            mouth
+        }
+    }
+
+    private var eyeSize: CGFloat {
+        switch expression {
+        case .happy, .calm: return 10
+        case .nervous: return 11
+        case .scared: return 13
+        case .distressed: return 14
+        }
+    }
+
+    private var eyeSpacing: CGFloat {
+        expression == .distressed ? 21 : 24
+    }
+
+    private var verticalSpacing: CGFloat {
+        expression == .scared || expression == .distressed ? 7 : 8
+    }
+
+    private var eye: some View {
+        Circle()
+            .fill(Color.white)
+            .frame(width: eyeSize, height: eyeSize)
+            .overlay {
+                Circle()
+                    .fill(Color.black.opacity(0.42))
+                    .frame(width: max(3, eyeSize * 0.36), height: max(3, eyeSize * 0.36))
+                    .offset(y: expression == .happy ? -1 : 1)
+            }
+    }
+
+    @ViewBuilder
+    private var brows: some View {
+        switch expression {
+        case .happy:
+            HStack(spacing: 22) {
+                brow(rotation: -12)
+                brow(rotation: 12)
+            }
+            .opacity(0.75)
+        case .calm:
+            EmptyView()
+        case .nervous:
+            HStack(spacing: 22) {
+                brow(rotation: 14)
+                brow(rotation: -14)
+            }
+        case .scared, .distressed:
+            HStack(spacing: 20) {
+                brow(rotation: -24)
+                brow(rotation: 24)
+            }
+        }
+    }
+
+    private func brow(rotation: Double) -> some View {
+        Capsule()
+            .fill(Color.white)
+            .frame(width: 16, height: 3)
+            .rotationEffect(.degrees(rotation))
+    }
+
+    @ViewBuilder
+    private var mouth: some View {
+        switch expression {
+        case .happy:
+            MascotMouth(curve: 9)
+                .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 32, height: 16)
+        case .calm:
             Capsule()
                 .fill(Color.white)
                 .frame(width: 30, height: 4)
+        case .nervous:
+            Capsule()
+                .fill(Color.white)
+                .frame(width: 27, height: 4)
+                .rotationEffect(.degrees(-6))
+        case .scared:
+            Circle()
+                .stroke(Color.white, lineWidth: 4)
+                .frame(width: 18, height: 19)
+        case .distressed:
+            MascotMouth(curve: -8)
+                .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 32, height: 16)
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(Color.white.opacity(0.9))
+                        .frame(width: 4, height: 4)
+                        .offset(x: 3, y: -2)
+                }
         }
+    }
+}
+
+private struct MascotMouth: Shape {
+    let curve: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + 2, y: rect.midY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - 2, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.midY + curve)
+        )
+        return path
     }
 }
 

@@ -14,7 +14,6 @@ struct MatchmakingView: View {
     var onMatchFinished: () -> Void
 
     @StateObject private var vm = MultiplayerViewModel()
-    @State private var selectedWager: WagerTier?
     @State private var showBreakdown = false
     @State private var didNotifyFinished = false
     @State private var inMatchMusicEnabled = true
@@ -43,33 +42,23 @@ struct MatchmakingView: View {
         self.onMatchFinished = onMatchFinished
     }
 
-    private var automaticWager: WagerTier {
-        Wager.fixed(for: user.rank(for: mode))
-    }
-
-    private var canAffordAutomaticWager: Bool {
-        user.coins >= automaticWager.amount
-    }
-
-    private var queueSettingTitle: String {
-        if mode == .wordle { return "Guesses" }
-        if mode == .anagram || mode == .hangman { return "Word length" }
-        return "Difficulty"
+    private var rankedWinReward: Int {
+        RankedCoinRewards.win(for: user.rank(for: mode).displayTier)
     }
 
     private var queueCriteriaHint: String {
         if isCasualFlow {
-            return "Casual pairs random players with the same mode and \(queueSettingTitle.lowercased()). Rank, division, wagers, and ranked entries do not matter."
+            return "Casual pairs random players in the same game. Rank, division, wagers, and ranked entries do not matter."
         }
         switch mode {
         case .wordle:
-            return "Wordle pairs players with the same guess count and rank tier."
+            return "Word Guess ranked uses the standard online format and your rank tier."
         case .anagram:
-            return "Anagrams pairs players with the same word length and rank tier."
+            return "Anagrams ranked uses the standard online format and your rank tier."
         case .hangman:
-            return "Lava Rescue pairs players with the same word length, category puzzle rules, and rank tier."
+            return "Lava Rescue ranked uses the standard online format and your rank tier."
         default:
-            return "Ranked pairs players with the same mode, difficulty, rank tier, and wager."
+            return "Ranked pairs players by game and rank tier. No coins are required to enter."
         }
     }
 
@@ -82,7 +71,10 @@ struct MatchmakingView: View {
         case .matchFound:
             return true
         case .inMatch(let session):
-            return !session.isAsyncExhibition
+            if session.isExhibition {
+                return !hasSubmittedLocalTurn(in: session)
+            }
+            return true
         default:
             return false
         }
@@ -101,6 +93,15 @@ struct MatchmakingView: View {
     private var activeInMatchSession: GameSession? {
         if case .inMatch(let session) = vm.state { return session }
         return nil
+    }
+
+    private func hasSubmittedLocalTurn(in session: GameSession) -> Bool {
+        guard let result = vm.playerResults[user.id] else { return false }
+        return shouldShowSubmittedOverlay(result: result, session: session)
+    }
+
+    private func shouldShowInMatchExitButton(for session: GameSession) -> Bool {
+        !session.isExhibition
     }
 
     private var leaveAlertTitle: String {
@@ -122,7 +123,7 @@ struct MatchmakingView: View {
         if activeInMatchSession?.isCasual == true {
             return "Leaving gives the other player the casual win. No rank, W/L, or wager coins are affected."
         }
-        return activeInMatchSession?.isExhibition == true ? "Leaving ends the exhibition for both players. No rank or coins are affected." : "Quitting now counts as a ranked loss and forfeits your wager."
+        return activeInMatchSession?.isExhibition == true ? "Leaving ends the exhibition for both players. No rank or coins are affected." : "Quitting counts as a ranked loss and earns no coins. Your existing coins are safe."
     }
 
     var body: some View {
@@ -131,7 +132,11 @@ struct MatchmakingView: View {
             VStack(spacing: 24) {
                 switch vm.state {
                 case .idle:
-                    wagerPicker
+                    if initialSession != nil {
+                        initialSessionLoadingView
+                    } else {
+                        matchPicker
+                    }
                 case .searching:
                     searchingView
                 case .matchFound(let session):
@@ -183,14 +188,32 @@ struct MatchmakingView: View {
         Task { await vm.startExhibition(user: user, session: initialSession) }
     }
 
-    // MARK: - Wager picker
+    private var initialSessionLoadingView: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .tint(AppTheme.hotPink)
+            Text(initialSession?.isAsyncExhibition == true ? "Loading Play Later..." : "Loading Exhibition...")
+                .font(.headline.bold())
+                .foregroundStyle(AppTheme.textPrimary)
+            Text("Getting the shared puzzle ready.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .padding(.horizontal)
+    }
 
-    private var wagerPicker: some View {
+    // MARK: - Match entry
+
+    private var matchPicker: some View {
         if isCasualFlow {
             return AnyView(casualPicker)
         }
 
-        let wager = automaticWager
         let rank = user.rank(for: mode)
 
         return AnyView(ScrollView {
@@ -199,7 +222,7 @@ struct MatchmakingView: View {
                     Image(systemName: mode.icon)
                         .font(.system(size: 40))
                         .foregroundStyle(mode.accentColor)
-                    Text("\(mode.displayName) · \(mode.difficultyLabel(difficulty))")
+                    Text(mode.displayName)
                         .font(.headline)
                     HStack {
                         Text("Your balance:")
@@ -209,22 +232,22 @@ struct MatchmakingView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                 }
 
-                queueCriteriaCard(wager: wager, includeHint: true)
+                queueCriteriaCard(includeHint: true)
                     .padding(.horizontal)
 
                 VStack(spacing: 12) {
                     HStack(spacing: 10) {
                         CoinIconView(size: 26)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Tier Wager")
+                            Text("Ranked Rewards")
                                 .font(.headline.bold())
                                 .foregroundStyle(AppTheme.textPrimary)
-                            Text("\(rank.displayTier.displayName) sets this match at \(wager.amount) coins.")
+                            Text("\(rank.displayTier.displayName) wins earn \(rankedWinReward) coins. No coins lost.")
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.textSecondary)
                         }
                         Spacer()
-                        CoinBadgeView(amount: wager.amount)
+                        CoinBadgeView(amount: rankedWinReward)
                     }
                     .padding()
                     .background(AppTheme.cardBackground)
@@ -232,44 +255,30 @@ struct MatchmakingView: View {
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
 
                     HStack(spacing: 10) {
-                        wagerOutcomeTile(title: "Win", value: "+\(wager.amount)", color: AppTheme.success)
-                        wagerOutcomeTile(title: "Loss", value: "-\(wager.amount)", color: AppTheme.danger)
+                        rewardOutcomeTile(title: "Win", value: "+\(rankedWinReward)", color: AppTheme.success)
+                        rewardOutcomeTile(title: "Loss", value: "+\(RankedCoinRewards.loss)", color: AppTheme.accentBright)
+                        rewardOutcomeTile(title: "Draw", value: "+\(RankedCoinRewards.draw)", color: AppTheme.accentBright)
                     }
+                    Text("Finish the match to earn coins. Quitting earns none. No daily coin cap against players; training bots reward only wins, up to 3 per day.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
                 .padding(.horizontal)
-
-                if !canAffordAutomaticWager {
-                    VStack(spacing: 6) {
-                        Text("Not enough coins for this tier wager.")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(AppTheme.warning)
-                        Text("Earn free coins or grab a coin pack from the Shop.")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(AppTheme.warning.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.warning.opacity(0.4), lineWidth: 1))
-                    .padding(.horizontal)
-                }
 
                 Button {
                     didNotifyFinished = false
                     rewardAnimationFinished = false
                     inMatchMusicEnabled = true
-                    Task { await vm.startSearch(user: user, mode: mode, difficulty: difficulty, wager: wager) }
+                    Task { await vm.startSearch(user: user, mode: mode, difficulty: difficulty) }
                 } label: {
-                    Text(canAffordAutomaticWager ? "Find Match" : "Need More Coins")
+                    Text("Find Match")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(canAffordAutomaticWager ? mode.accentColor : Color.gray)
+                        .background(mode.accentColor)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.horizontal)
-                .disabled(!canAffordAutomaticWager)
             }
             .padding(.vertical)
         })
@@ -282,21 +291,21 @@ struct MatchmakingView: View {
                     Image(systemName: mode.icon)
                         .font(.system(size: 40))
                         .foregroundStyle(mode.accentColor)
-                    Text("\(mode.displayName) · \(mode.difficultyLabel(difficulty))")
+                    Text(mode.displayName)
                         .font(.headline)
                     Text("Random casual online")
                         .font(.subheadline.bold())
                         .foregroundStyle(AppTheme.crownGold)
                 }
 
-                queueCriteriaCard(wager: nil, includeHint: true)
+                queueCriteriaCard(includeHint: true)
                     .padding(.horizontal)
 
                 VStack(alignment: .leading, spacing: 12) {
                     casualInfoRow(icon: "shield.slash.fill", title: "No rank at stake", detail: "Rank points, divisions, and ranked W/L stay untouched.")
                     casualInfoRow(icon: "circle.slash", title: "No wager", detail: "You never risk coins in casual matches.")
                     casualInfoRow(icon: "shuffle.circle.fill", title: "Same puzzle", detail: "Both players get the same seed and puzzle data.")
-                    casualInfoRow(icon: "centsign.circle.fill", title: "Small daily coins", detail: "Win +10, loss/draw +3, capped at 100 casual coins per day.")
+                    casualInfoRow(icon: "centsign.circle.fill", title: "Small daily coins", detail: "Win +\(CoinWallet.casualWinReward), loss/draw +\(CoinWallet.casualOtherReward), capped at \(CoinWallet.casualRewardDailyCap) casual coins per day.")
                 }
                 .padding()
                 .background(AppTheme.cardBackground)
@@ -340,7 +349,7 @@ struct MatchmakingView: View {
         }
     }
 
-    private func wagerOutcomeTile(title: String, value: String, color: Color) -> some View {
+    private func rewardOutcomeTile(title: String, value: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(title)
                 .font(.caption.bold())
@@ -358,7 +367,7 @@ struct MatchmakingView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.cardBorder, lineWidth: 1))
     }
 
-    private func queueCriteriaCard(wager: WagerTier?, includeHint: Bool) -> some View {
+    private func queueCriteriaCard(includeHint: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "line.3.horizontal.decrease.circle.fill")
@@ -368,12 +377,11 @@ struct MatchmakingView: View {
                 Spacer()
             }
             queueCriterionRow(title: "Mode", value: mode.displayName)
-            queueCriterionRow(title: queueSettingTitle, value: mode.difficultyLabel(difficulty))
             if isCasualFlow {
                 queueCriterionRow(title: "Queue type", value: "Random casual")
                 queueCriterionRow(title: "Stakes", value: "No rank · No wager")
             } else {
-                queueCriterionRow(title: "Tier wager", value: wager.map { "\($0.amount) coins" } ?? "Automatic")
+                queueCriterionRow(title: "Coin cost", value: "None")
                 queueCriterionRow(title: "Rank tier", value: rankTierForQueue.displayName)
             }
             if includeHint {
@@ -411,13 +419,13 @@ struct MatchmakingView: View {
                 .padding()
             Text("Finding a match…")
                 .font(.title3.bold())
-            Text("Searching for same settings")
+            Text("Searching for same game")
                 .font(.subheadline.bold())
                 .foregroundStyle(AppTheme.accentBright)
-            queueCriteriaCard(wager: vm.selectedWager, includeHint: false)
+            queueCriteriaCard(includeHint: false)
                 .padding(.horizontal)
             if showCompatibilityHint {
-                Text(isCasualFlow ? "Still searching? Casual only needs another player on the same \(mode.displayName) and \(queueSettingTitle.lowercased())." : "Still searching? Make sure both players chose the same \(mode.displayName), \(queueSettingTitle.lowercased()), rank tier, and wager.")
+                Text(isCasualFlow ? "Still searching? Casual only needs another player in \(mode.displayName)." : "Still searching? Ranked needs another player in \(mode.displayName) near your rank tier.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -448,63 +456,17 @@ struct MatchmakingView: View {
         let needsManualReady = session.isLiveExhibition && !isBotOpponent
         let didReady = vm.readySessionIDs.contains(session.id)
 
-        return VStack(spacing: 24) {
-            Spacer()
+        return ScrollView {
+            VStack(spacing: 20) {
 
             Text(isBotOpponent ? "Training Bot Found!" : (session.isCasual ? "Casual Match Found!" : (session.isExhibition ? "Exhibition Ready!" : "Match Found!")))
-                .font(.largeTitle.bold())
+                .font(.title2.bold())
                 .foregroundStyle(AppTheme.textPrimary)
 
-            // Opponent card
-            VStack(spacing: 12) {
-                StickDuelerAvatarView(
-                    style: oppUser?.cosmetics.avatarStyle ?? opponent?.avatarStyle ?? .default,
-                    size: 76,
-                    initials: opponent.map { String($0.username.prefix(1)) }
-                )
-
-                VStack(spacing: 4) {
-                    Text(opponent?.username ?? "Opponent")
-                        .font(.title3.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    if isBotOpponent {
-                        Text("Bronze Training Bot")
-                            .font(.caption.bold())
-                            .foregroundStyle(AppTheme.crownGold)
-                        Text("Limited ranked rewards")
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.textSecondary)
-                    } else {
-                        if let title = oppUser?.cosmetics.equippedTitle,
-                           let item = CosmeticCatalog.allTitles.first(where: { $0.id == title }) {
-                            Text(item.name)
-                                .font(.caption.italic())
-                                .foregroundStyle(AppTheme.accentBright)
-                        }
-
-                        if let opp = opponent {
-                            let liveRank = oppUser?.rank(for: mode)
-                            let oppRank = liveRank ?? RankInfo(points: opp.rankPoints, tier: RankTier.tier(for: opp.rankPoints),
-                                                               wins: 0, losses: 0, bestTime: nil, bestScore: nil)
-                            Text(oppRank.fullDisplayName)
-                                .font(.subheadline.bold())
-                                .foregroundStyle(oppRank.displayTier.color)
-                            RecordTextView(
-                                wins: liveRank?.wins,
-                                losses: liveRank?.losses,
-                                prefix: "W/L ",
-                                font: .caption.bold()
-                            )
-                        }
-                    }
-                }
+            HStack(alignment: .top, spacing: 12) {
+                PreMatchIdentityView(profile: user, player: session.players.first { $0.userID == user.id }, mode: mode, isLocal: true)
+                PreMatchIdentityView(profile: isBotOpponent ? nil : oppUser, player: opponent, mode: mode, isLocal: false)
             }
-            .padding(20)
-            .frame(maxWidth: .infinity)
-            .background(AppTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.cardBorder, lineWidth: 1))
             .padding(.horizontal)
 
             if needsManualReady {
@@ -569,7 +531,8 @@ struct MatchmakingView: View {
                     .foregroundStyle(.red)
             }
 
-            Spacer()
+            }
+            .padding(.vertical, 24)
         }
         .onAppear {
             SoundManager.shared.stopMatchmakingLoop()
@@ -580,7 +543,9 @@ struct MatchmakingView: View {
     // MARK: - In match
 
     private func inMatchView(session: GameSession) -> some View {
-        VStack(spacing: 0) {
+        let didSubmitTurn = hasSubmittedLocalTurn(in: session)
+
+        return VStack(spacing: 0) {
             // Opponent status bar
             HStack(spacing: 10) {
                 Label(session.containsBot ? "Training Bot" : "Opponent", systemImage: session.containsBot ? "cpu.fill" : "person.fill")
@@ -600,15 +565,17 @@ struct MatchmakingView: View {
                 }
                 .foregroundStyle(inMatchMusicEnabled ? AppTheme.accentBright : AppTheme.textSecondary)
 
-                Button {
-                    showForfeitWarning = true
-                } label: {
-                    Label(session.isAsyncExhibition ? "Leave" : ((session.isExhibition || session.isCasual) ? "Leave" : "Quit"), systemImage: session.isAsyncExhibition ? "xmark.circle.fill" : "flag.slash.fill")
-                        .labelStyle(.iconOnly)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
+                if shouldShowInMatchExitButton(for: session) {
+                    Button {
+                        showForfeitWarning = true
+                    } label: {
+                        Label(session.isAsyncExhibition ? "Leave" : ((session.isExhibition || session.isCasual) ? "Leave" : "Quit"), systemImage: session.isAsyncExhibition ? "xmark.circle.fill" : "flag.slash.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .foregroundStyle(AppTheme.danger)
                 }
-                .foregroundStyle(AppTheme.danger)
             }
             .font(.caption)
             .padding(.horizontal)
@@ -627,16 +594,39 @@ struct MatchmakingView: View {
                 ) { result in
                     Task { await vm.submitResult(result, session: session) }
                 }
+                .blur(radius: didSubmitTurn ? 3 : 0)
+                .opacity(didSubmitTurn ? 0.42 : 1)
+                .disabled(didSubmitTurn)
+                .allowsHitTesting(!didSubmitTurn)
 
-                if let myResult = vm.playerResults[user.id], session.mode != .wordle || myResult.isFinalWordleResult {
+                if let myResult = vm.playerResults[user.id], shouldShowSubmittedOverlay(result: myResult, session: session) {
+                    if didSubmitTurn {
+                        AppTheme.royalBlue.opacity(0.18)
+                            .contentShape(Rectangle())
+                            .onTapGesture {}
+                    }
+
                     VStack(spacing: 10) {
-                        ProgressView()
-                        Text(myResult.status)
+                        if session.isExhibition {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title.bold())
+                                .foregroundStyle(AppTheme.teal)
+                        } else {
+                            ProgressView()
+                        }
+                        Text(session.isExhibition ? "Turn submitted" : myResult.status)
                             .font(.headline.bold())
-                        Text(session.isAsyncExhibition ? "Saved. Waiting for your friend…" : "Waiting for opponent…")
+                            .foregroundStyle(AppTheme.textPrimary)
+                        Text(session.isExhibition ? "Waiting on friend" : "Waiting for opponent…")
                             .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
-                        if session.isAsyncExhibition {
+                        if session.usesVerifiedSocial, let message = vm.rewardErrorMessage {
+                            Text(message)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        if session.isExhibition {
                             Button {
                                 dismiss()
                             } label: {
@@ -656,8 +646,9 @@ struct MatchmakingView: View {
                         }
                     }
                     .padding(20)
-                    .background(.regularMaterial)
+                    .background(AppTheme.cardBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppTheme.cardBorder, lineWidth: 1))
                     .shadow(radius: 12)
                 }
             }
@@ -669,6 +660,20 @@ struct MatchmakingView: View {
             }
         }
         .onDisappear { SoundManager.shared.stopOnlineGameLoop() }
+    }
+
+    private func shouldShowSubmittedOverlay(result: MatchPlayerResult, session: GameSession) -> Bool {
+        if session.isAsyncExhibition {
+            return MatchResolver.isFinalResult(result)
+        }
+        switch session.mode {
+        case .wordle:
+            return result.isFinalWordleResult
+        case .hangman:
+            return MatchResolver.isFinalHangmanResult(result)
+        default:
+            return true
+        }
     }
 
     private func toggleInMatchMusic() {
@@ -782,6 +787,11 @@ struct MatchmakingView: View {
                 .padding(.horizontal)
             }
 
+            PostGameCoinBoostButton(user: user)
+                .padding(.horizontal)
+                .opacity(controlsReady ? 1 : 0.36)
+                .disabled(!controlsReady)
+
             Button { showBreakdown = true } label: {
                 Label("Match Breakdown", systemImage: "list.bullet.rectangle")
                     .font(.headline.bold())
@@ -796,7 +806,7 @@ struct MatchmakingView: View {
             .opacity(controlsReady ? 1 : 0.36)
             .disabled(!controlsReady)
 
-            if (session.isRanked || session.isExhibition) && !session.containsBot {
+            if (session.isRanked || session.isExhibition) && !session.containsBot && !session.usesVerifiedResults {
                 rematchControl(session: session, controlsReady: controlsReady)
             }
 
@@ -1299,7 +1309,7 @@ struct MatchBreakdownView: View {
                     Text(headerTitle)
                         .font(.title3.bold())
                         .foregroundStyle(AppTheme.textPrimary)
-                    Text("\(session.mode.displayName) · \(session.mode.difficultyLabel(session.difficulty))")
+                    Text(sessionFormatDisplay)
                         .font(.caption)
                         .foregroundStyle(AppTheme.textSecondary)
                 }
@@ -1315,6 +1325,13 @@ struct MatchBreakdownView: View {
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1.2))
+    }
+
+    private var sessionFormatDisplay: String {
+        if session.isRanked || session.isCasual {
+            return session.mode.displayName
+        }
+        return "\(session.mode.displayName) · \(session.mode.difficultyLabel(session.difficulty))"
     }
 
     private func playerBreakdownCard(_ player: MatchPlayer) -> some View {
@@ -1550,14 +1567,14 @@ struct MatchBreakdownView: View {
         ])
 
         if result.summary["isFinal"] != "true" {
-            Text("Not finished before clinch.")
+            Text("This turn ended before a final result was submitted.")
                 .font(.subheadline.bold())
                 .foregroundStyle(AppTheme.warning)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         if rounds.isEmpty {
-            detailLines(result.details.isEmpty ? ["No Wordle round details were stored for this match."] : result.details)
+            detailLines(result.details.isEmpty ? ["No Word Guess round details were stored for this match."] : result.details)
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(rounds) { round in
@@ -1639,16 +1656,12 @@ struct MatchBreakdownView: View {
                 }
             }
         case .gridlock:
-            let targetRows = snapshotRows(result.summary["targetRows"])
-            let rows = snapshotRows(result.summary["tileRows"])
-            if !targetRows.isEmpty {
-                snapshotCard(title: "Target") {
-                    colorGridSnapshot(rows: targetRows, cellSize: 18, showText: false)
-                }
-            }
-            if !rows.isEmpty {
-                snapshotCard(title: "Final Grid") {
-                    colorGridSnapshot(rows: rows, cellSize: 22, showText: false)
+            snapshotCard(title: "Solitaire") {
+                HStack(spacing: 8) {
+                    resultPill("Foundations", "\(result.foundationCount)/52", AppTheme.crownGold)
+                    resultPill("Moves", "\(result.moveCount)", AppTheme.teal)
+                    resultPill("Score", "\(result.score)", AppTheme.hotPink)
+                    resultPill("Draw", result.summary["drawCount"].map { "Draw \($0)" } ?? "-", AppTheme.royalBlue)
                 }
             }
         case .colorLink:
@@ -1741,6 +1754,24 @@ struct MatchBreakdownView: View {
         }
     }
 
+    private func resultPill(_ label: String, _ value: String, _ color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .black, design: .rounded))
+                .foregroundStyle(AppTheme.textSecondary)
+            Text(value)
+                .font(.caption.bold())
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(width: 74)
+        .padding(.vertical, 7)
+        .background(color.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(color.opacity(0.28), lineWidth: 1))
+    }
+
     private func minesweeperLabel(_ char: Character) -> String {
         switch char {
         case "H": return ""
@@ -1814,7 +1845,12 @@ struct MatchBreakdownView: View {
         case .sudoku:
             stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Progress", percent(result.progress))])
         case .gridlock:
-            stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Moves", "\(result.moveCount)"), ("Pattern", percent(result.progress))])
+            stats.append(contentsOf: [
+                ("Completed", result.completed ? "Yes" : "No"),
+                ("Foundations", "\(result.foundationCount)/52"),
+                ("Moves", "\(result.moveCount)"),
+                ("Score", "\(result.score)")
+            ])
         case .colorLink:
             stats.append(contentsOf: [("Completed", result.completed ? "Yes" : "No"), ("Board fill", percent(result.progress)), ("Pairs", "\(result.solvedPairs)")])
         }
@@ -1858,7 +1894,7 @@ struct MatchBreakdownView: View {
     }
 
     private var missingResultText: String {
-        session.mode == .wordle ? "Not finished before clinch." : "No result submitted yet."
+        "No final result submitted."
     }
 
     private func displayStatus(_ result: MatchPlayerResult, for player: MatchPlayer?) -> String {
@@ -1960,43 +1996,6 @@ private struct WordleBreakdownGuess: Identifiable {
     let word: [Character]
     let results: [Character]
 }
-
-// MARK: - Wager option row
-
-struct WagerOptionRow: View {
-    let option: WagerTier
-    let isSelected: Bool
-    let canAfford: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack {
-                HStack(spacing: 10) {
-                    CoinIconView(size: 28)
-                    Text("\(option.amount)")
-                        .font(.title3.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-                }
-                Spacer()
-                if !canAfford {
-                    Text("Insufficient coins").font(.caption).foregroundStyle(AppTheme.danger)
-                }
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(AppTheme.teal)
-                }
-            }
-            .padding()
-            .background(isSelected ? AppTheme.teal.opacity(0.16) : AppTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(isSelected ? AppTheme.teal : AppTheme.cardBorder, lineWidth: isSelected ? 2 : 1))
-        }
-        .disabled(!canAfford)
-        .opacity(canAfford ? 1 : 0.4)
-        .buttonStyle(.plain)
-    }
-}
-
 
 private struct FlexibleWordWrap: Layout {
     var spacing: CGFloat = 8

@@ -5,8 +5,35 @@ struct RankedAccessStoreView: View {
     let focusedMode: GameMode?
     var onUserChanged: () -> Void = {}
 
-    @StateObject private var vm: RankedAccessViewModel
     @Environment(\.dismiss) private var dismiss
+
+    init(user: AppUser, focusedMode: GameMode? = nil, onUserChanged: @escaping () -> Void = {}) {
+        self.user = user
+        self.focusedMode = focusedMode
+        self.onUserChanged = onUserChanged
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                RankedAccessStoreContent(user: user, focusedMode: focusedMode, onUserChanged: onUserChanged)
+                    .padding()
+            }
+            .background(AppTheme.arenaBackground.ignoresSafeArea())
+            .navigationTitle("Ranked Pass")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .tint(AppTheme.accentBright)
+        }
+    }
+}
+
+struct RankedAccessStoreContent: View {
+    let user: AppUser
+    let focusedMode: GameMode?
+    var onUserChanged: () -> Void = {}
+
+    @StateObject private var vm: RankedAccessViewModel
 
     init(user: AppUser, focusedMode: GameMode? = nil, onUserChanged: @escaping () -> Void = {}) {
         self.user = user
@@ -16,35 +43,25 @@ struct RankedAccessStoreView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    header
-                    allAccessCard
-                    if let focusedMode {
-                        modeUnlockCard(mode: focusedMode)
-                        rewardedAdCard(mode: focusedMode)
-                    } else {
-                        modeUnlockGrid
-                    }
-                    restoreButton
-                    policyNote
-                }
-                .padding()
+        VStack(spacing: 16) {
+            header
+            allAccessCard
+            if let focusedMode {
+                modeUnlockCard(mode: focusedMode)
+                rewardedAdCard(mode: focusedMode)
+            } else {
+                modeUnlockGrid
             }
-            .background(AppTheme.arenaBackground.ignoresSafeArea())
-            .navigationTitle("Ranked Pass")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-            .tint(AppTheme.accentBright)
-            .alert(
-                "Ranked access update failed",
-                isPresented: Binding(get: { vm.errorMessage != nil }, set: { if !$0 { vm.errorMessage = nil } })
-            ) {
-                Button("OK") { vm.errorMessage = nil }
-            } message: {
-                Text(vm.errorMessage ?? "")
-            }
+            restoreButton
+            policyNote
+        }
+        .alert(
+            "Ranked access update failed",
+            isPresented: Binding(get: { vm.errorMessage != nil }, set: { if !$0 { vm.errorMessage = nil } })
+        ) {
+            Button("OK") { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
         }
     }
 
@@ -204,7 +221,7 @@ struct RankedAccessStoreView: View {
     }
 
     private var policyNote: some View {
-        Text("Ranked passes unlock entry only. Coins, ranks, puzzles, wagers, and match rules stay fair for everyone.")
+        Text("Ranked passes unlock entry only. No coin balance is required to play. Passes do not boost rank points or coin rewards.")
             .font(.caption)
             .foregroundStyle(AppTheme.textSecondary)
             .multilineTextAlignment(.center)

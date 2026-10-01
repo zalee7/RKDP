@@ -1,0 +1,5 @@
+{
+  "firestore": {
+    "rules": "Tests/purchase-test.firestore.rules"
+  }
+}

@@ -28,6 +28,18 @@ struct TileThemeStyle {
     var cornerScale: CGFloat
 }
 
+struct CardThemeStyle {
+    var tableTint: Color
+    var frontFill: LinearGradient
+    var backFill: LinearGradient
+    var border: Color
+    var redSuit: Color
+    var blackSuit: Color
+    var accent: Color
+    var shadow: Color
+    var backSymbol: String
+}
+
 extension OwnedCosmetics {
     var themeStyle: BoardThemeStyle {
         switch equippedBoardTheme {
@@ -130,6 +142,105 @@ extension OwnedCosmetics {
                 tileGradient: LinearGradient(colors: [Color(hex: "FF4A7D"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
                 activeTraceColor: Color(hex: "FFD02E")
             )
+        case "theme_arcade_cabinet":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "171B43").opacity(0.2),
+                selectedCell: Color(hex: "39D5FF").opacity(0.4),
+                highlightedCell: Color(hex: "FF2F78").opacity(0.16),
+                invalidCell: Color.red.opacity(0.3),
+                gridLineMajor: Color(hex: "39D5FF"),
+                gridLineMinor: Color(hex: "FF2F78").opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "2D2A7F"), Color(hex: "39D5FF"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "39D5FF")
+            )
+        case "theme_bubblegum":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "FFF0FA").opacity(0.36),
+                selectedCell: Color(hex: "FF9ED1").opacity(0.5),
+                highlightedCell: Color(hex: "39D5FF").opacity(0.18),
+                invalidCell: Color.red.opacity(0.24),
+                gridLineMajor: Color(hex: "FF7FB7"),
+                gridLineMinor: Color(hex: "39D5FF").opacity(0.36),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF9ED1"), Color(hex: "39D5FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FF2F78")
+            )
+        case "theme_starlight":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "08142E").opacity(0.22),
+                selectedCell: Color(hex: "78D7FF").opacity(0.38),
+                highlightedCell: Color(hex: "B28CFF").opacity(0.2),
+                invalidCell: Color.red.opacity(0.28),
+                gridLineMajor: Color(hex: "78D7FF"),
+                gridLineMinor: Color.white.opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "08142E"), Color(hex: "78D7FF"), Color(hex: "B28CFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "E8F7FF")
+            )
+        case "theme_lava_rescue":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "301006").opacity(0.24),
+                selectedCell: Color(hex: "FF6B1A").opacity(0.44),
+                highlightedCell: Color(hex: "FFD02E").opacity(0.18),
+                invalidCell: Color(hex: "FF2F78").opacity(0.34),
+                gridLineMajor: Color(hex: "FF6B1A"),
+                gridLineMinor: Color(hex: "FFD02E").opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF6B1A"), Color(hex: "FFD02E"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
+            )
+        case "theme_crystal_cove":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "E8F7FF").opacity(0.24),
+                selectedCell: Color(hex: "78D7FF").opacity(0.46),
+                highlightedCell: Color(hex: "12C8A2").opacity(0.18),
+                invalidCell: Color.red.opacity(0.24),
+                gridLineMajor: Color(hex: "78D7FF"),
+                gridLineMinor: Color.white.opacity(0.58),
+                tileGradient: LinearGradient(colors: [Color(hex: "E8F7FF"), Color(hex: "78D7FF"), Color(hex: "12C8A2")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "12C8A2")
+            )
+        case "theme_midnight_mint":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "071D24").opacity(0.26),
+                selectedCell: Color(hex: "12C8A2").opacity(0.42),
+                highlightedCell: Color(hex: "8FFFE1").opacity(0.16),
+                invalidCell: Color.red.opacity(0.28),
+                gridLineMajor: Color(hex: "12C8A2"),
+                gridLineMinor: Color(hex: "8FFFE1").opacity(0.32),
+                tileGradient: LinearGradient(colors: [Color(hex: "071D24"), Color(hex: "12C8A2")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "8FFFE1")
+            )
+        case "theme_prism_party":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "291047").opacity(0.22),
+                selectedCell: Color(hex: "FF2F78").opacity(0.42),
+                highlightedCell: Color(hex: "12C8A2").opacity(0.18),
+                invalidCell: Color.red.opacity(0.3),
+                gridLineMajor: Color(hex: "FF2F78"),
+                gridLineMinor: Color(hex: "12C8A2").opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF"), Color(hex: "12C8A2"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
+            )
+        case "theme_royal_arcade":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "170A3A").opacity(0.24),
+                selectedCell: Color(hex: "FFD02E").opacity(0.44),
+                highlightedCell: Color(hex: "7B42FF").opacity(0.22),
+                invalidCell: Color.red.opacity(0.3),
+                gridLineMajor: Color(hex: "FFD02E"),
+                gridLineMinor: Color(hex: "FF2F78").opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "7B42FF"), Color(hex: "FF2F78"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
+            )
+        case "theme_cosmic_crown":
+            return BoardThemeStyle(
+                cellBackground: Color(hex: "050510").opacity(0.28),
+                selectedCell: Color(hex: "FFD02E").opacity(0.42),
+                highlightedCell: Color(hex: "78D7FF").opacity(0.2),
+                invalidCell: Color.red.opacity(0.3),
+                gridLineMajor: Color(hex: "FFD02E"),
+                gridLineMinor: Color(hex: "78D7FF").opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "050510"), Color(hex: "256BFF"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
+            )
         default: // theme_classic
             return BoardThemeStyle(
                 cellBackground: .clear,
@@ -205,6 +316,106 @@ extension OwnedCosmetics {
                 shadow: Color(hex: "78D7FF").opacity(0.38),
                 cornerScale: 0.18
             )
+        case "tile_bubblegum":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FF9ED1"), Color(hex: "39D5FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "FFF0FA").opacity(0.74),
+                border: Color(hex: "FF7FB7").opacity(0.76),
+                textColor: Color(hex: "4B2140"),
+                accent: Color(hex: "FF2F78"),
+                shadow: Color(hex: "FF9ED1").opacity(0.28),
+                cornerScale: 0.28
+            )
+        case "tile_arcade_buttons":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "39D5FF"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "151A40").opacity(0.72),
+                border: Color.white.opacity(0.74),
+                textColor: .white,
+                accent: Color(hex: "39D5FF"),
+                shadow: Color(hex: "39D5FF").opacity(0.32),
+                cornerScale: 0.5
+            )
+        case "tile_royal_blue":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "71C8FF"), Color(hex: "256BFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "0A163A").opacity(0.72),
+                border: Color(hex: "A7D8FF").opacity(0.8),
+                textColor: .white,
+                accent: Color(hex: "71C8FF"),
+                shadow: Color(hex: "256BFF").opacity(0.34),
+                cornerScale: 0.2
+            )
+        case "tile_starlight":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "E8F7FF"), Color(hex: "78D7FF"), Color(hex: "B28CFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "08142E").opacity(0.74),
+                border: Color.white.opacity(0.86),
+                textColor: Color(hex: "12203D"),
+                accent: Color(hex: "E8F7FF"),
+                shadow: Color(hex: "78D7FF").opacity(0.34),
+                cornerScale: 0.18
+            )
+        case "tile_prism_pop":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF"), Color(hex: "12C8A2")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "291047").opacity(0.72),
+                border: Color(hex: "FFD02E").opacity(0.72),
+                textColor: .white,
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FF2F78").opacity(0.36),
+                cornerScale: 0.24
+            )
+        case "tile_crystal":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "E8F7FF"), Color(hex: "12C8A2")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "092B36").opacity(0.7),
+                border: Color.white.opacity(0.84),
+                textColor: Color(hex: "07333B"),
+                accent: Color(hex: "12C8A2"),
+                shadow: Color(hex: "12C8A2").opacity(0.34),
+                cornerScale: 0.14
+            )
+        case "tile_midnight_mint":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "071D24"), Color(hex: "12C8A2")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "061318").opacity(0.78),
+                border: Color(hex: "8FFFE1").opacity(0.76),
+                textColor: .white,
+                accent: Color(hex: "8FFFE1"),
+                shadow: Color(hex: "12C8A2").opacity(0.34),
+                cornerScale: 0.24
+            )
+        case "tile_plasma":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FF6B1A"), Color(hex: "FF2F78"), Color(hex: "7B42FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "25071A").opacity(0.74),
+                border: Color(hex: "FFD02E").opacity(0.78),
+                textColor: .white,
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FF2F78").opacity(0.38),
+                cornerScale: 0.22
+            )
+        case "tile_cosmic":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "050510"), Color(hex: "256BFF"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "050510").opacity(0.82),
+                border: Color(hex: "FFD02E").opacity(0.88),
+                textColor: .white,
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FFD02E").opacity(0.42),
+                cornerScale: 0.18
+            )
+        case "tile_royal_crown":
+            return TileThemeStyle(
+                fill: LinearGradient(colors: [Color(hex: "FFD02E"), Color(hex: "FF2F78")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "2A1B05").opacity(0.76),
+                border: Color(hex: "FFF0A3").opacity(0.9),
+                textColor: Color(hex: "231200"),
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FFD02E").opacity(0.44),
+                cornerScale: 0.2
+            )
         default:
             return TileThemeStyle(
                 fill: themeStyle.tileGradient,
@@ -214,6 +425,71 @@ extension OwnedCosmetics {
                 accent: themeStyle.activeTraceColor,
                 shadow: Color.black.opacity(0.22),
                 cornerScale: 0.22
+            )
+        }
+    }
+
+    var cardThemeStyle: CardThemeStyle {
+        switch equippedCardTheme {
+        case "card_crown_casino":
+            return CardThemeStyle(
+                tableTint: Color(hex: "173C5F"),
+                frontFill: LinearGradient(colors: [Color(hex: "FFF9E8"), Color(hex: "FFEAB0")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                backFill: LinearGradient(colors: [Color(hex: "123A7A"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                border: Color(hex: "FFD02E"),
+                redSuit: Color(hex: "D81B60"),
+                blackSuit: Color(hex: "123A7A"),
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FFD02E").opacity(0.34),
+                backSymbol: "crown.fill"
+            )
+        case "card_arcade_pink":
+            return CardThemeStyle(
+                tableTint: Color(hex: "321047"),
+                frontFill: LinearGradient(colors: [Color.white, Color(hex: "FFE6F2")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                backFill: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF"), Color(hex: "39D5FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                border: Color(hex: "FF2F78"),
+                redSuit: Color(hex: "FF2F78"),
+                blackSuit: Color(hex: "256BFF"),
+                accent: Color(hex: "39D5FF"),
+                shadow: Color(hex: "FF2F78").opacity(0.32),
+                backSymbol: "sparkles"
+            )
+        case "card_royal_blue":
+            return CardThemeStyle(
+                tableTint: Color(hex: "0B1A40"),
+                frontFill: LinearGradient(colors: [Color(hex: "F4FAFF"), Color(hex: "D9ECFF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                backFill: LinearGradient(colors: [Color(hex: "071D55"), Color(hex: "256BFF"), Color(hex: "71C8FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                border: Color(hex: "71C8FF"),
+                redSuit: Color(hex: "D81B60"),
+                blackSuit: Color(hex: "123A7A"),
+                accent: Color(hex: "71C8FF"),
+                shadow: Color(hex: "256BFF").opacity(0.34),
+                backSymbol: "diamond.fill"
+            )
+        case "card_cosmic_gold":
+            return CardThemeStyle(
+                tableTint: Color(hex: "050510"),
+                frontFill: LinearGradient(colors: [Color(hex: "FFF8DC"), Color(hex: "E8F7FF")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                backFill: LinearGradient(colors: [Color(hex: "050510"), Color(hex: "256BFF"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                border: Color(hex: "FFD02E"),
+                redSuit: Color(hex: "FF2F78"),
+                blackSuit: Color(hex: "050510"),
+                accent: Color(hex: "FFD02E"),
+                shadow: Color(hex: "FFD02E").opacity(0.42),
+                backSymbol: "star.fill"
+            )
+        default:
+            return CardThemeStyle(
+                tableTint: Color(hex: "153C33"),
+                frontFill: LinearGradient(colors: [Color.white, Color(hex: "F6F8FB")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                backFill: LinearGradient(colors: [AppTheme.royalBlue, AppTheme.hotPink], startPoint: .topLeading, endPoint: .bottomTrailing),
+                border: Color.black.opacity(0.16),
+                redSuit: AppTheme.hotPink,
+                blackSuit: AppTheme.royalBlue,
+                accent: AppTheme.teal,
+                shadow: Color.black.opacity(0.16),
+                backSymbol: "sparkles"
             )
         }
     }
@@ -238,6 +514,7 @@ enum CosmeticCategory: String, Codable, CaseIterable {
     case title        = "Name Titles"
     case boardTheme   = "Board / Background Themes"
     case tileTheme    = "Tile Themes"
+    case cardTheme    = "Card Themes"
     case numberFont   = "Number Style"
     case cellBorder   = "Cell Border"
     case avatarHead   = "Avatar Head"
@@ -275,6 +552,16 @@ enum CosmeticRarity: String, CaseIterable {
         }
     }
 
+    var duplicateRefund: Int {
+        switch self {
+        case .free: return 0
+        case .common: return 100
+        case .rare: return 250
+        case .epic: return 600
+        case .legendary: return 1_000
+        }
+    }
+
     var badgeColor: Color {
         switch self {
         case .free: return Color.white.opacity(0.42)
@@ -302,6 +589,90 @@ struct CosmeticItem: Identifiable, Codable {
     var description: String
 
     var rarity: CosmeticRarity { CosmeticRarity.forPrice(price) }
+}
+
+extension CosmeticItem {
+    var isLaunchCatalogVisible: Bool {
+        switch category {
+        case .avatarHead:
+            return CosmeticCatalog.launchHeadIDs.contains(id)
+        case .avatarFace:
+            return CosmeticCatalog.launchExpressionIDs.contains(id)
+        case .avatarAura:
+            return CosmeticCatalog.launchAuraIDs.contains(id)
+        case .avatarOutfit:
+            return CosmeticCatalog.launchBodyIDs.contains(id)
+        default:
+            return true
+        }
+    }
+}
+
+enum CosmeticPackKind: String, CaseIterable, Identifiable, Codable {
+    case avatar
+    case theme
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .avatar: return "Puzzle Avatar Pack"
+        case .theme: return "Puzzle Theme Pack"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .avatar: return "Unlocks one avatar cosmetic."
+        case .theme: return "Unlocks one board or tile theme."
+        }
+    }
+
+    var price: Int {
+        switch self {
+        case .avatar: return 1_250
+        case .theme: return 950
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .avatar: return "face.smiling.fill"
+        case .theme: return "paintpalette.fill"
+        }
+    }
+
+    var eligibleCategories: [CosmeticCategory] {
+        switch self {
+        case .avatar:
+            return [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura]
+        case .theme:
+            return [.boardTheme, .tileTheme]
+        }
+    }
+
+    var odds: [(rarity: CosmeticRarity, percent: Int)] {
+        [
+            (.common, 55),
+            (.rare, 30),
+            (.epic, 12),
+            (.legendary, 3)
+        ]
+    }
+}
+
+struct CosmeticPackOpenResult {
+    var kind: CosmeticPackKind
+    var item: CosmeticItem
+    var coinsSpent: Int
+    var rolledRarity: CosmeticRarity
+    var isDuplicate: Bool
+    var duplicateRefund: Int
+}
+
+struct CosmeticPackOpenResponse {
+    var user: AppUser
+    var result: CosmeticPackOpenResult
 }
 
 struct AvatarStyle: Codable, Equatable {
@@ -362,6 +733,7 @@ struct OwnedCosmetics: Codable {
     var equippedTitle: String
     var equippedBoardTheme: String
     var equippedTileTheme: String
+    var equippedCardTheme: String
     var equippedNumberFont: String
     var equippedCellBorder: String
     var equippedAvatarHead: String
@@ -372,7 +744,7 @@ struct OwnedCosmetics: Codable {
     var customAvatarBodyHex: String
 
     static let defaultPurchasedIDs: Set<String> = [
-        "title_puzzler", "theme_classic", "tile_classic", "font_default", "border_default",
+        "title_puzzler", "theme_classic", "tile_classic", "card_classic", "font_default", "border_default",
         "avatar_head_none", "avatar_face_smile", "avatar_outfit_basic", "avatar_aura_none", "avatar_pose_neutral", "avatar_pose_jump"
     ]
 
@@ -381,6 +753,7 @@ struct OwnedCosmetics: Codable {
         equippedTitle: "title_puzzler",
         equippedBoardTheme: "theme_classic",
         equippedTileTheme: "tile_classic",
+        equippedCardTheme: "card_classic",
         equippedNumberFont: "font_default",
         equippedCellBorder: "border_default",
         equippedAvatarHead: AvatarStyle.default.head,
@@ -404,6 +777,7 @@ struct OwnedCosmetics: Codable {
 
     enum CodingKeys: String, CodingKey {
         case purchasedIDs, equippedTitle, equippedBoardTheme, equippedTileTheme, equippedNumberFont, equippedCellBorder
+        case equippedCardTheme
         case equippedAvatarHead, equippedAvatarFace, equippedAvatarOutfit, equippedAvatarAura, equippedAvatarPose, customAvatarBodyHex
     }
 
@@ -412,6 +786,7 @@ struct OwnedCosmetics: Codable {
         equippedTitle: String,
         equippedBoardTheme: String,
         equippedTileTheme: String = "tile_classic",
+        equippedCardTheme: String = "card_classic",
         equippedNumberFont: String,
         equippedCellBorder: String,
         equippedAvatarHead: String,
@@ -425,6 +800,7 @@ struct OwnedCosmetics: Codable {
         self.equippedTitle = equippedTitle
         self.equippedBoardTheme = equippedBoardTheme
         self.equippedTileTheme = equippedTileTheme
+        self.equippedCardTheme = equippedCardTheme
         self.equippedNumberFont = equippedNumberFont
         self.equippedCellBorder = equippedCellBorder
         self.equippedAvatarHead = equippedAvatarHead
@@ -442,6 +818,7 @@ struct OwnedCosmetics: Codable {
         equippedTitle = try c.decodeIfPresent(String.self, forKey: .equippedTitle) ?? defaults.equippedTitle
         equippedBoardTheme = try c.decodeIfPresent(String.self, forKey: .equippedBoardTheme) ?? defaults.equippedBoardTheme
         equippedTileTheme = try c.decodeIfPresent(String.self, forKey: .equippedTileTheme) ?? defaults.equippedTileTheme
+        equippedCardTheme = try c.decodeIfPresent(String.self, forKey: .equippedCardTheme) ?? defaults.equippedCardTheme
         equippedNumberFont = try c.decodeIfPresent(String.self, forKey: .equippedNumberFont) ?? defaults.equippedNumberFont
         equippedCellBorder = try c.decodeIfPresent(String.self, forKey: .equippedCellBorder) ?? defaults.equippedCellBorder
         equippedAvatarHead = try c.decodeIfPresent(String.self, forKey: .equippedAvatarHead) ?? defaults.equippedAvatarHead
@@ -458,6 +835,7 @@ struct OwnedCosmetics: Codable {
         try c.encode(equippedTitle, forKey: .equippedTitle)
         try c.encode(equippedBoardTheme, forKey: .equippedBoardTheme)
         try c.encode(equippedTileTheme, forKey: .equippedTileTheme)
+        try c.encode(equippedCardTheme, forKey: .equippedCardTheme)
         try c.encode(equippedNumberFont, forKey: .equippedNumberFont)
         try c.encode(equippedCellBorder, forKey: .equippedCellBorder)
         try c.encode(equippedAvatarHead, forKey: .equippedAvatarHead)
@@ -491,6 +869,7 @@ struct OwnedCosmetics: Codable {
         case .title:        equippedTitle = item.id
         case .boardTheme:   equippedBoardTheme = item.id
         case .tileTheme:    equippedTileTheme = item.id
+        case .cardTheme:    equippedCardTheme = item.id
         case .numberFont:   equippedNumberFont = item.id
         case .cellBorder:   equippedCellBorder = item.id
         case .avatarHead:   equippedAvatarHead = item.id
@@ -513,10 +892,18 @@ struct DailyRotation {
         availableItems(for: .title, ownedIDs: [])
     }
 
+    static func todaysAvatarShopItems(ownedIDs: Set<String>) -> [CosmeticItem] {
+        availableItems(for: [.avatarHead, .avatarFace, .avatarOutfit, .avatarAura], ownedIDs: ownedIDs, key: "avatar_shop")
+    }
+
+    static func todaysThemeShopItems(ownedIDs: Set<String>) -> [CosmeticItem] {
+        availableItems(for: [.boardTheme, .tileTheme], ownedIDs: ownedIDs, key: "theme_shop")
+    }
+
     static func availableItems(for category: CosmeticCategory, ownedIDs: Set<String>) -> [CosmeticItem] {
         let day = Int(Date().timeIntervalSince1970 / 86400)
         let pool = catalogItems(for: category).filter { item in
-            item.price > 0 && !ownedIDs.contains(item.id)
+            item.price > 0 && item.isLaunchCatalogVisible && !ownedIDs.contains(item.id)
         }
         guard !pool.isEmpty else { return [] }
 
@@ -544,9 +931,36 @@ struct DailyRotation {
         }
 
         return selected.sorted { lhs, rhs in
-            if lhs.rarity != rhs.rarity {
-                return rarityRank(lhs.rarity) < rarityRank(rhs.rarity)
+            if lhs.rarity != rhs.rarity { return rarityRank(lhs.rarity) < rarityRank(rhs.rarity) }
+            if lhs.price != rhs.price { return lhs.price < rhs.price }
+            return lhs.name < rhs.name
+        }
+    }
+
+    static func availableItems(for categories: [CosmeticCategory], ownedIDs: Set<String>, key: String) -> [CosmeticItem] {
+        let day = Int(Date().timeIntervalSince1970 / 86400)
+        let pool = categories.flatMap { catalogItems(for: $0) }.filter { item in
+            item.price > 0 && item.isLaunchCatalogVisible && !ownedIDs.contains(item.id)
+        }
+        guard !pool.isEmpty else { return [] }
+
+        var selected: [CosmeticItem] = []
+        appendRotatedSlot(.common, from: pool, into: &selected, seed: seed(day: day, key: key, slot: 0))
+        appendRotatedSlot(.rare, from: pool, into: &selected, seed: seed(day: day, key: key, slot: 1))
+        appendRotatedSlot(.epic, from: pool, into: &selected, seed: seed(day: day, key: key, slot: 2))
+        appendRotatedSlot(.legendary, from: pool, into: &selected, seed: seed(day: day, key: key, slot: 3))
+
+        if selected.count < dailySlots {
+            let fallback = seededShuffle(pool, seed: seed(day: day, key: key, slot: 99))
+            for item in fallback where !selected.contains(where: { $0.id == item.id }) {
+                selected.append(item)
+                if selected.count == dailySlots { break }
             }
+        }
+
+        return selected.sorted { lhs, rhs in
+            if lhs.category != rhs.category { return lhs.category.rawValue < rhs.category.rawValue }
+            if lhs.rarity != rhs.rarity { return rarityRank(lhs.rarity) < rarityRank(rhs.rarity) }
             if lhs.price != rhs.price { return lhs.price < rhs.price }
             return lhs.name < rhs.name
         }
@@ -578,6 +992,25 @@ struct DailyRotation {
         }
     }
 
+    private static func appendRotatedSlot(
+        _ preferredRarity: CosmeticRarity,
+        from pool: [CosmeticItem],
+        into selected: inout [CosmeticItem],
+        seed: Int
+    ) {
+        let rarityOrder = nearbyRarities(for: preferredRarity)
+        for rarity in rarityOrder {
+            let candidates = pool.filter { item in
+                item.rarity == rarity && !selected.contains(where: { $0.id == item.id })
+            }
+            guard !candidates.isEmpty else { continue }
+            if let item = seededShuffle(candidates, seed: seed).first {
+                selected.append(item)
+                return
+            }
+        }
+    }
+
     private static func nearbyRarities(for rarity: CosmeticRarity) -> [CosmeticRarity] {
         switch rarity {
         case .free: return [.common, .rare, .epic, .legendary]
@@ -603,10 +1036,11 @@ struct DailyRotation {
         case .title: return CosmeticCatalog.allTitles
         case .boardTheme: return CosmeticCatalog.boardThemes
         case .tileTheme: return CosmeticCatalog.tileThemes
+        case .cardTheme: return CosmeticCatalog.cardThemes
         case .numberFont: return CosmeticCatalog.numberFonts
         case .cellBorder: return CosmeticCatalog.cellBorders
         case .avatarHead: return CosmeticCatalog.avatarHeads
-        case .avatarFace: return CosmeticCatalog.avatarFaces
+        case .avatarFace: return CosmeticCatalog.launchAvatarFaces
         case .avatarOutfit: return CosmeticCatalog.avatarOutfits
         case .avatarAura: return CosmeticCatalog.avatarAuras
         case .avatarPose: return CosmeticCatalog.avatarPoses
@@ -616,6 +1050,14 @@ struct DailyRotation {
     private static func seed(day: Int, category: CosmeticCategory, slot: Int) -> Int {
         var value = day &* 1_103 &+ slot &* 97
         for scalar in category.rawValue.unicodeScalars {
+            value = value &* 31 &+ Int(scalar.value)
+        }
+        return value
+    }
+
+    private static func seed(day: Int, key: String, slot: Int) -> Int {
+        var value = day &* 1_103 &+ slot &* 97
+        for scalar in key.unicodeScalars {
             value = value &* 31 &+ Int(scalar.value)
         }
         return value
@@ -636,7 +1078,56 @@ struct DailyRotation {
 // MARK: - Catalog
 
 struct CosmeticCatalog {
-    static let all: [CosmeticItem] = allTitles + boardThemes + tileThemes + avatarHeads + avatarFaces + avatarOutfits + avatarAuras
+    static let all: [CosmeticItem] = allTitles + boardThemes + tileThemes + cardThemes + avatarHeads + avatarFaces + avatarOutfits + avatarAuras
+    static let launchHeadIDs: Set<String> = [
+        "avatar_head_party_hat",
+        "avatar_head_headphones",
+        "avatar_head_pixel_cap",
+        "avatar_head_prize_ribbon",
+        "avatar_head_neon_visor",
+        "avatar_head_wizard",
+        "avatar_head_crown",
+        "avatar_head_lightning",
+        "avatar_head_puzzle_crown",
+        "avatar_head_halo",
+        "avatar_head_cosmic_halo"
+    ]
+    static let launchExpressionIDs: Set<String> = [
+        "avatar_face_smile",
+        "avatar_face_wink",
+        "avatar_face_laugh",
+        "avatar_face_determined",
+        "avatar_face_shades",
+        "avatar_face_star",
+        "avatar_face_lava",
+        "avatar_face_heart",
+        "avatar_face_rainbow"
+    ]
+    static let launchBodyIDs: Set<String> = [
+        "avatar_outfit_basic",
+        "avatar_outfit_hoodie",
+        "avatar_outfit_frost",
+        "avatar_outfit_candy",
+        "avatar_outfit_lava",
+        "avatar_outfit_prism",
+        "avatar_outfit_armor",
+        "avatar_outfit_royal_velvet",
+        "avatar_outfit_starlight",
+        "avatar_outfit_obsidian"
+    ]
+    static let launchAuraIDs: Set<String> = [
+        "avatar_aura_teal",
+        "avatar_aura_pink",
+        "avatar_aura_lava",
+        "avatar_aura_pixel",
+        "avatar_aura_star",
+        "avatar_aura_crown",
+        "avatar_aura_storm",
+        "avatar_aura_cosmic"
+    ]
+    static var launchAvatarFaces: [CosmeticItem] {
+        avatarFaces.filter { launchExpressionIDs.contains($0.id) }
+    }
 
     // Full title pool — only `dailySlots` of the paid ones appear in the shop each day
     static let allTitles: [CosmeticItem] = [
@@ -683,20 +1174,26 @@ struct CosmeticCatalog {
         CosmeticItem(id: "title_arcade_oracle", name: "Arcade Oracle",   category: .title, price: 3_200, previewImageName: "", description: "Reads the arena before it happens."),
         CosmeticItem(id: "title_puzzle_royalty", name: "Puzzle Royalty", category: .title, price: 3_500, previewImageName: "", description: "A title with crown-level presence."),
         CosmeticItem(id: "title_untouchable", name: "Untouchable",       category: .title, price: 4_000, previewImageName: "", description: "Good luck catching this score."),
+        CosmeticItem(id: "title_daily_spark", name: "Daily Spark",       category: .title, price: 300,  previewImageName: "", description: "Shows up, plays today, keeps the glow alive."),
+        CosmeticItem(id: "title_streak_starter", name: "Streak Starter", category: .title, price: 350,  previewImageName: "", description: "The first day of something bigger."),
+        CosmeticItem(id: "title_tile_tamer", name: "Tile Tamer",         category: .title, price: 450,  previewImageName: "", description: "Keeps every tile under control."),
+        CosmeticItem(id: "title_lobby_legend", name: "Lobby Legend",     category: .title, price: 650,  previewImageName: "", description: "Everyone notices when they join."),
+        CosmeticItem(id: "title_stage_star", name: "Stage Star",         category: .title, price: 1_200, previewImageName: "", description: "Built for party-room spotlight moments."),
+        CosmeticItem(id: "title_prism_mind", name: "Prism Mind",         category: .title, price: 1_350, previewImageName: "", description: "Sees every angle at once."),
+        CosmeticItem(id: "title_rare_find", name: "Rare Find",           category: .title, price: 1_300, previewImageName: "", description: "A clean pull from the prize pool."),
+        CosmeticItem(id: "title_combo_king", name: "Combo King",         category: .title, price: 1_800, previewImageName: "", description: "Stacks smart moves into big wins."),
+        CosmeticItem(id: "title_crown_piece", name: "Crown Piece",       category: .title, price: 3_200, previewImageName: "", description: "A royal fit for the final slot."),
+        CosmeticItem(id: "title_party_champion", name: "Party Champion", category: .title, price: 4_000, previewImageName: "", description: "Tops the room when the last round ends."),
     ]
 
     static let boardThemes: [CosmeticItem] = [
         CosmeticItem(id: "theme_classic",    name: "Classic",     category: .boardTheme, price: 0,    previewImageName: "theme_classic",    description: "The default clean look."),
         CosmeticItem(id: "theme_dark",       name: "Dark Mode",   category: .boardTheme, price: 200,  previewImageName: "theme_dark",       description: "Sleek dark panels for focused puzzle runs."),
-        CosmeticItem(id: "theme_ocean",      name: "Ocean",       category: .boardTheme, price: 350,  previewImageName: "theme_ocean",      description: "Cool blues for calm grid solving."),
-        CosmeticItem(id: "theme_forest",     name: "Forest",      category: .boardTheme, price: 350,  previewImageName: "theme_forest",     description: "Earthy greens for quiet board play."),
-        CosmeticItem(id: "theme_neon",       name: "Neon",        category: .boardTheme, price: 600,  previewImageName: "theme_neon",       description: "Arcade glow for fast ranked matches."),
-        CosmeticItem(id: "theme_gold",       name: "Gold Edition", category: .boardTheme, price: 1_800, previewImageName: "theme_gold",       description: "Premium gold-leaf styling for top ranks."),
         CosmeticItem(id: "theme_color_link", name: "Color Link",  category: .boardTheme, price: 700,  previewImageName: "theme_color_link", description: "Teal, pink, and blue path energy."),
-        CosmeticItem(id: "theme_grid_duel",  name: "Grid Duel",   category: .boardTheme, price: 700,  previewImageName: "theme_grid_duel",  description: "Gold and blue target-board shine."),
-        CosmeticItem(id: "theme_word_neon",  name: "Word Neon",   category: .boardTheme, price: 650,  previewImageName: "theme_word_neon",  description: "Hot word-game glow with electric accents."),
-        CosmeticItem(id: "theme_mine_pulse", name: "Mine Pulse",  category: .boardTheme, price: 650,  previewImageName: "theme_mine_pulse", description: "Pink and gold hazard-board contrast."),
-        CosmeticItem(id: "theme_crown_gold", name: "Crown Gold",  category: .boardTheme, price: 2_500, previewImageName: "theme_crown_gold", description: "Icon-inspired crown gold with jewel pink."),
+        CosmeticItem(id: "theme_grid_duel",  name: "Card Table",  category: .boardTheme, price: 700,  previewImageName: "theme_grid_duel",  description: "Gold and blue tabletop shine."),
+        CosmeticItem(id: "theme_lava_rescue", name: "Lava Rescue", category: .boardTheme, price: 1_200, previewImageName: "theme_lava_rescue", description: "Molten orange pressure with crown-gold heat."),
+        CosmeticItem(id: "theme_prism_party", name: "Prism Party", category: .boardTheme, price: 2_200, previewImageName: "theme_prism_party", description: "A vivid mix of pink, teal, purple, and gold."),
+        CosmeticItem(id: "theme_cosmic_crown", name: "Cosmic Crown", category: .boardTheme, price: 3_200, previewImageName: "theme_cosmic_crown", description: "Legendary deep-space blue with gold shine."),
     ]
 
     static let tileThemes: [CosmeticItem] = [
@@ -705,7 +1202,18 @@ struct CosmeticCatalog {
         CosmeticItem(id: "tile_mint_glass", name: "Mint Glass", category: .tileTheme, price: 700, previewImageName: "tile_mint_glass", description: "Cool mint tiles with a glassy glow."),
         CosmeticItem(id: "tile_lava_core", name: "Lava Core", category: .tileTheme, price: 1_250, previewImageName: "tile_lava_core", description: "Hot lava tiles for high-pressure games."),
         CosmeticItem(id: "tile_crown_gold", name: "Crown Gold", category: .tileTheme, price: 1_900, previewImageName: "tile_crown_gold", description: "Gold tiles inspired by the Puzzle Party crown."),
-        CosmeticItem(id: "tile_diamond", name: "Diamond Shine", category: .tileTheme, price: 3_000, previewImageName: "tile_diamond", description: "Legendary bright tiles with a diamond sheen."),
+        CosmeticItem(id: "tile_starlight", name: "Starlight", category: .tileTheme, price: 1_100, previewImageName: "tile_starlight", description: "Night-sky tiles with icy highlights."),
+        CosmeticItem(id: "tile_prism_pop", name: "Prism Pop", category: .tileTheme, price: 1_400, previewImageName: "tile_prism_pop", description: "Pink, teal, and purple arcade prisms."),
+        CosmeticItem(id: "tile_crystal", name: "Crystal", category: .tileTheme, price: 1_700, previewImageName: "tile_crystal", description: "Clear teal crystal tiles with sharp polish."),
+        CosmeticItem(id: "tile_cosmic", name: "Cosmic", category: .tileTheme, price: 2_600, previewImageName: "tile_cosmic", description: "Legendary space-black tiles with gold edges."),
+    ]
+
+    static let cardThemes: [CosmeticItem] = [
+        CosmeticItem(id: "card_classic", name: "Classic Cards", category: .cardTheme, price: 0, previewImageName: "card_classic", description: "Clean red and blue playing cards."),
+        CosmeticItem(id: "card_crown_casino", name: "Crown Casino", category: .cardTheme, price: 800, previewImageName: "card_crown_casino", description: "Blue-and-gold cards with a crown back."),
+        CosmeticItem(id: "card_arcade_pink", name: "Arcade Pink", category: .cardTheme, price: 1_100, previewImageName: "card_arcade_pink", description: "Hot-pink arcade cards with teal shine."),
+        CosmeticItem(id: "card_royal_blue", name: "Royal Blue", category: .cardTheme, price: 1_600, previewImageName: "card_royal_blue", description: "Polished blue cards with bright icy edges."),
+        CosmeticItem(id: "card_cosmic_gold", name: "Cosmic Gold", category: .cardTheme, price: 2_800, previewImageName: "card_cosmic_gold", description: "Legendary space-black backs with gold stars.")
     ]
 
     static let numberFonts: [CosmeticItem] = [
@@ -724,17 +1232,25 @@ struct CosmeticCatalog {
 
     static let avatarHeads: [CosmeticItem] = [
         CosmeticItem(id: "avatar_head_none",       name: "Clean",          category: .avatarHead, price: 0,     previewImageName: "", description: "Classic puzzle-piece look."),
-        CosmeticItem(id: "avatar_head_crown",      name: "Crown",          category: .avatarHead, price: 1_200, previewImageName: "", description: "A tiny champion crown."),
+        CosmeticItem(id: "avatar_head_crown",      name: "Champion Crown", category: .avatarHead, price: 1_200, previewImageName: "", description: "A clean gold crown with a pink champion gem."),
         CosmeticItem(id: "avatar_head_headphones", name: "Headphones",     category: .avatarHead, price: 700,   previewImageName: "", description: "Locked-in puzzle focus."),
         CosmeticItem(id: "avatar_head_wizard",     name: "Wizard Hat",     category: .avatarHead, price: 1_500, previewImageName: "", description: "For strange grid magic."),
         CosmeticItem(id: "avatar_head_lightning",  name: "Lightning Hair", category: .avatarHead, price: 2_500, previewImageName: "", description: "Fast solve energy."),
-        CosmeticItem(id: "avatar_head_halo",       name: "Halo",           category: .avatarHead, price: 4_000, previewImageName: "", description: "Legendary clean-play glow."),
-        CosmeticItem(id: "avatar_head_puzzle_crown", name: "Puzzle Crown", category: .avatarHead, price: 1_800, previewImageName: "", description: "A crown shaped for the puzzle arena."),
+        CosmeticItem(id: "avatar_head_halo",       name: "Golden Halo",    category: .avatarHead, price: 4_000, previewImageName: "", description: "Legendary warm halo light."),
+        CosmeticItem(id: "avatar_head_puzzle_crown", name: "Flame Crown", category: .avatarHead, price: 2_800, previewImageName: "", description: "Living amber flames above a golden band."),
         CosmeticItem(id: "avatar_head_neon_visor", name: "Neon Visor", category: .avatarHead, price: 1_300, previewImageName: "", description: "A bright visor for fast reads."),
-        CosmeticItem(id: "avatar_head_star_clip", name: "Star Clip", category: .avatarHead, price: 650, previewImageName: "", description: "A tiny star for a sharp little mascot."),
+        CosmeticItem(id: "avatar_head_star_clip", name: "Star Clip", category: .avatarHead, price: 1_200, previewImageName: "", description: "An animated star clip with bright arcade twinkle."),
         CosmeticItem(id: "avatar_head_lava_helmet", name: "Lava Helmet", category: .avatarHead, price: 2_600, previewImageName: "", description: "Heat-proof gear for rescue runs."),
-        CosmeticItem(id: "avatar_head_pixel_cap", name: "Pixel Cap", category: .avatarHead, price: 850, previewImageName: "", description: "Retro arcade headwear."),
-        CosmeticItem(id: "avatar_head_mini_crown", name: "Mini Crown", category: .avatarHead, price: 500, previewImageName: "", description: "Small crown, big confidence.")
+        CosmeticItem(id: "avatar_head_pixel_cap", name: "Arcade Cap", category: .avatarHead, price: 850, previewImageName: "", description: "A clean retro cap with pixel-panel shine."),
+        CosmeticItem(id: "avatar_head_mini_crown", name: "Gold Charm", category: .avatarHead, price: 500, previewImageName: "", description: "A small crown charm clipped to the side."),
+        CosmeticItem(id: "avatar_head_party_hat", name: "Party Hat", category: .avatarHead, price: 450, previewImageName: "", description: "A bright hat for lobby wins."),
+        CosmeticItem(id: "avatar_head_bubble_crown", name: "Bubble Tiara", category: .avatarHead, price: 650, previewImageName: "", description: "A soft glossy tiara with playful shine."),
+        CosmeticItem(id: "avatar_head_arcade_antenna", name: "Arcade Antenna", category: .avatarHead, price: 900, previewImageName: "", description: "Tiny arcade signal for fast matchups."),
+        CosmeticItem(id: "avatar_head_prize_ribbon", name: "Top Hat", category: .avatarHead, price: 1_100, previewImageName: "", description: "A clean party top hat with crown-gold trim."),
+        CosmeticItem(id: "avatar_head_royal_headband", name: "Royal Headband", category: .avatarHead, price: 1_400, previewImageName: "", description: "Pink-and-gold headwear for ranked focus."),
+        CosmeticItem(id: "avatar_head_crystal_spikes", name: "Crystal Spikes", category: .avatarHead, price: 1_700, previewImageName: "", description: "Bright crystal points with teal shine."),
+        CosmeticItem(id: "avatar_head_gem_crown", name: "Gem Crown", category: .avatarHead, price: 2_200, previewImageName: "", description: "A jewel crown for epic pulls."),
+        CosmeticItem(id: "avatar_head_cosmic_halo", name: "Orbit Halo", category: .avatarHead, price: 3_200, previewImageName: "", description: "Legendary deep-space orbit light.")
     ]
 
     static let avatarFaces: [CosmeticItem] = [
@@ -756,22 +1272,31 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_face_lava", name: "Lava Eyes", category: .avatarFace, price: 1_700, previewImageName: "", description: "Hot rescue-run intensity."),
         CosmeticItem(id: "avatar_face_crown", name: "Crown Eyes", category: .avatarFace, price: 2_600, previewImageName: "", description: "Legendary golden eye shine."),
         CosmeticItem(id: "avatar_face_masked", name: "Masked", category: .avatarFace, price: 1_400, previewImageName: "", description: "A mysterious puzzle-party mask."),
-        CosmeticItem(id: "avatar_face_heart", name: "Heart Eyes", category: .avatarFace, price: 1_900, previewImageName: "", description: "Cute heart-eyed party energy.")
+        CosmeticItem(id: "avatar_face_heart", name: "Heart Eyes", category: .avatarFace, price: 1_900, previewImageName: "", description: "Cute heart-eyed party energy."),
+        CosmeticItem(id: "avatar_face_chill", name: "Chill", category: .avatarFace, price: 550, previewImageName: "", description: "Relaxed eyes for calm clears."),
+        CosmeticItem(id: "avatar_face_prize", name: "Prize Smile", category: .avatarFace, price: 750, previewImageName: "", description: "A big smile for a fresh unlock."),
+        CosmeticItem(id: "avatar_face_glitter", name: "Glitter Eyes", category: .avatarFace, price: 1_200, previewImageName: "", description: "Sparkly eyes for epic reveals."),
+        CosmeticItem(id: "avatar_face_focus_laser", name: "Focus Laser", category: .avatarFace, price: 1_600, previewImageName: "", description: "Sharp neon focus under pressure."),
+        CosmeticItem(id: "avatar_face_rainbow", name: "Rainbow Eyes", category: .avatarFace, price: 1_900, previewImageName: "", description: "Colorful party energy across both eyes."),
+        CosmeticItem(id: "avatar_face_gold_smile", name: "Gold Smile", category: .avatarFace, price: 2_600, previewImageName: "", description: "Legendary golden confidence."),
+        CosmeticItem(id: "avatar_face_cosmic", name: "Cosmic Eyes", category: .avatarFace, price: 2_800, previewImageName: "", description: "A tiny starfield stare.")
     ]
 
     static let avatarOutfits: [CosmeticItem] = [
         CosmeticItem(id: "avatar_outfit_basic", name: "Custom Solid", category: .avatarOutfit, price: 0,     previewImageName: "", description: "Pick any solid puzzle-piece color."),
-        CosmeticItem(id: "avatar_outfit_hoodie", name: "Teal Piece",  category: .avatarOutfit, price: 900,   previewImageName: "", description: "Fresh teal puzzle body."),
+        CosmeticItem(id: "avatar_outfit_hoodie", name: "Teal Piece",  category: .avatarOutfit, price: 900,   previewImageName: "", description: "Polished teal enamel with mint edge details."),
         CosmeticItem(id: "avatar_outfit_cape",   name: "Diamond Pink", category: .avatarOutfit, price: 1_400, previewImageName: "", description: "A glossy jewel-pink premium body."),
-        CosmeticItem(id: "avatar_outfit_armor",  name: "Royal Blue",  category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Royal-blue ranked body with shield detail."),
-        CosmeticItem(id: "avatar_outfit_neon",   name: "Neon Piece", category: .avatarOutfit, price: 3_200, previewImageName: "", description: "Purple arcade puzzle body with neon trim."),
+        CosmeticItem(id: "avatar_outfit_armor",  name: "Royal Blue",  category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Blue armor panels with silver trim and a small shield."),
         CosmeticItem(id: "avatar_outfit_royal",  name: "Crown Gold", category: .avatarOutfit, price: 4_500, previewImageName: "", description: "Legendary crown-gold puzzle body."),
-        CosmeticItem(id: "avatar_outfit_lava", name: "Lava Core", category: .avatarOutfit, price: 1_800, previewImageName: "", description: "Molten orange with arena heat."),
+        CosmeticItem(id: "avatar_outfit_lava", name: "Lava Core", category: .avatarOutfit, price: 1_800, previewImageName: "", description: "Dark volcanic rock with glowing molten seams."),
         CosmeticItem(id: "avatar_outfit_frost", name: "Frost Piece", category: .avatarOutfit, price: 1_200, previewImageName: "", description: "Cool blue ice-gloss body."),
-        CosmeticItem(id: "avatar_outfit_galaxy", name: "Galaxy Piece", category: .avatarOutfit, price: 3_800, previewImageName: "", description: "A tiny night sky in puzzle form."),
         CosmeticItem(id: "avatar_outfit_mint", name: "Mint Glow", category: .avatarOutfit, price: 900, previewImageName: "", description: "Soft mint with bright white trim."),
-        CosmeticItem(id: "avatar_outfit_candy", name: "Candy Piece", category: .avatarOutfit, price: 1_600, previewImageName: "", description: "Pink and blue candy arcade shine."),
-        CosmeticItem(id: "avatar_outfit_obsidian", name: "Obsidian Piece", category: .avatarOutfit, price: 4_200, previewImageName: "", description: "Dark glass for legendary style.")
+        CosmeticItem(id: "avatar_outfit_candy", name: "Candy Piece", category: .avatarOutfit, price: 1_600, previewImageName: "", description: "Glossy pink candy stripes with mint accents."),
+        CosmeticItem(id: "avatar_outfit_obsidian", name: "Obsidian Piece", category: .avatarOutfit, price: 4_200, previewImageName: "", description: "Dark glass for legendary style."),
+        CosmeticItem(id: "avatar_outfit_prism", name: "Prism Piece", category: .avatarOutfit, price: 2_200, previewImageName: "", description: "Epic prism colors across the puzzle body."),
+        CosmeticItem(id: "avatar_outfit_crystal", name: "Crystal Piece", category: .avatarOutfit, price: 2_400, previewImageName: "", description: "Sharp glassy shine for epic unlocks."),
+        CosmeticItem(id: "avatar_outfit_royal_velvet", name: "Royal Velvet", category: .avatarOutfit, price: 2_800, previewImageName: "", description: "Deep velvet with gold piping and a glinting jewel."),
+        CosmeticItem(id: "avatar_outfit_starlight", name: "Starlight Piece", category: .avatarOutfit, price: 3_300, previewImageName: "", description: "Legendary night-sky puzzle body.")
     ]
 
     static let avatarAuras: [CosmeticItem] = [
@@ -779,12 +1304,16 @@ struct CosmeticCatalog {
         CosmeticItem(id: "avatar_aura_teal",  name: "Teal Glow",   category: .avatarAura, price: 900,   previewImageName: "", description: "Soft Color Link energy."),
         CosmeticItem(id: "avatar_aura_pink",  name: "Pink Spark",  category: .avatarAura, price: 1_200, previewImageName: "", description: "Hot-pink victory sparks."),
         CosmeticItem(id: "avatar_aura_crown", name: "Crown Shine", category: .avatarAura, price: 2_500, previewImageName: "", description: "Gold rank radiance."),
-        CosmeticItem(id: "avatar_aura_storm", name: "Storm Ring",  category: .avatarAura, price: 4_000, previewImageName: "", description: "Legendary arena energy."),
+        CosmeticItem(id: "avatar_aura_storm", name: "Storm Cloud", category: .avatarAura, price: 4_000, previewImageName: "", description: "A legendary cloud aura with soft lightning and rain."),
         CosmeticItem(id: "avatar_aura_lava", name: "Lava Bubble", category: .avatarAura, price: 1_600, previewImageName: "", description: "Warm rescue-run bubbles."),
         CosmeticItem(id: "avatar_aura_star", name: "Star Burst", category: .avatarAura, price: 2_200, previewImageName: "", description: "A burst of tiny arcade stars."),
         CosmeticItem(id: "avatar_aura_pixel", name: "Pixel Ring", category: .avatarAura, price: 1_100, previewImageName: "", description: "Retro square energy."),
-        CosmeticItem(id: "avatar_aura_mint", name: "Mint Mist", category: .avatarAura, price: 900, previewImageName: "", description: "Soft mint glow around the piece."),
-        CosmeticItem(id: "avatar_aura_royal", name: "Royal Pulse", category: .avatarAura, price: 3_200, previewImageName: "", description: "Gold and pink rank energy.")
+        CosmeticItem(id: "avatar_aura_confetti", name: "Confetti Pop", category: .avatarAura, price: 700, previewImageName: "", description: "Tiny party flecks around the piece."),
+        CosmeticItem(id: "avatar_aura_stage_light", name: "Stage Light", category: .avatarAura, price: 1_100, previewImageName: "", description: "A spotlight for party-stage moments."),
+        CosmeticItem(id: "avatar_aura_prism", name: "Prism Ring", category: .avatarAura, price: 1_700, previewImageName: "", description: "A bright multicolor aura loop."),
+        CosmeticItem(id: "avatar_aura_crystal", name: "Crystal Shine", category: .avatarAura, price: 2_200, previewImageName: "", description: "Sharp teal-white crystalline shine."),
+        CosmeticItem(id: "avatar_aura_gold_crown", name: "Gold Crown Aura", category: .avatarAura, price: 2_800, previewImageName: "", description: "Legendary crown-gold radiance."),
+        CosmeticItem(id: "avatar_aura_cosmic", name: "Cosmic Aura", category: .avatarAura, price: 3_300, previewImageName: "", description: "Legendary deep-space glow.")
     ]
 
     static let avatarPoses: [CosmeticItem] = [

@@ -54,9 +54,6 @@ struct AnagramView: View {
                     .padding(.horizontal)
                     .padding(.top, 12)
 
-                resultBanner
-                    .padding(.top, 6)
-
                 wordStatsDashboard
                     .padding(.top, 8)
                     .padding(.horizontal)
@@ -81,8 +78,21 @@ struct AnagramView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 28)
             }
+            .disabled(vm.isFinished)
 
-            if vm.isFinished && sessionID == nil { finishedOverlay }
+            VStack {
+                resultBanner
+                    .padding(.top, 60)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .allowsHitTesting(false)
+            .zIndex(1)
+
+            if vm.isFinished && sessionID == nil {
+                finishedOverlay
+                    .zIndex(2)
+            }
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
@@ -316,17 +326,19 @@ struct AnagramView: View {
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
                 } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                    GeometryReader { geo in
+                        let tileSize = fittedPlacedTileSize(width: geo.size.width)
+
+                        HStack(spacing: placedTileSpacing) {
                             ForEach(vm.placed, id: \.id) { tile in
-                                LetterTile(letter: tile.letter, size: 52)
+                                LetterTile(letter: tile.letter, size: tileSize)
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.25)) { vm.returnToBank(id: tile.id) }
                                     }
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, placedHorizontalPadding)
                     }
                 }
             }
@@ -357,28 +369,75 @@ struct AnagramView: View {
         .animation(.easeInOut(duration: 0.15), value: vm.placed.count)
     }
 
-    // MARK: - Bank (horizontal scroll)
+    // MARK: - Bank
 
     private var bankSection: some View {
-        VStack(spacing: 6) {
-            Text("Your Letters")
-                .font(.caption.bold())
-                .foregroundStyle(AppTheme.textSecondary)
-                .tracking(1)
+        GeometryReader { geo in
+            let columns = bankColumnCount
+            let tileSize = fittedBankTileSize(width: geo.size.width, columns: columns)
+            let gridColumns = Array(
+                repeating: GridItem(.fixed(tileSize), spacing: bankTileSpacing),
+                count: columns
+            )
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+            VStack(spacing: 6) {
+                Text("Your Letters")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .tracking(1)
+
+                LazyVGrid(columns: gridColumns, spacing: bankTileSpacing) {
                     ForEach(vm.bank, id: \.id) { tile in
-                        LetterTile(letter: tile.letter, size: 62)
+                        LetterTile(letter: tile.letter, size: tileSize)
                             .onTapGesture {
                                 withAnimation(.spring(response: 0.25)) { vm.pickFromBank(id: tile.id) }
                             }
                     }
                 }
-                .padding(.horizontal)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, bankHorizontalPadding)
                 .padding(.vertical, 4)
             }
         }
+        .frame(height: bankSectionHeight)
+    }
+
+    private var totalLetterCount: Int {
+        max(1, vm.game.letters.count)
+    }
+
+    private var bankColumnCount: Int {
+        if totalLetterCount <= 5 { return totalLetterCount }
+        return Int(ceil(Double(totalLetterCount) / 2))
+    }
+
+    private var bankRowCount: Int {
+        Int(ceil(Double(totalLetterCount) / Double(max(1, bankColumnCount))))
+    }
+
+    private var bankSectionHeight: CGFloat {
+        let rows = CGFloat(bankRowCount)
+        return 28 + rows * 76 + max(0, rows - 1) * bankTileSpacing + 8
+    }
+
+    private var bankTileSpacing: CGFloat { 10 }
+
+    private var bankHorizontalPadding: CGFloat { 16 }
+
+    private func fittedBankTileSize(width: CGFloat, columns: Int) -> CGFloat {
+        guard columns > 0 else { return 76 }
+        let available = width - bankHorizontalPadding * 2 - bankTileSpacing * CGFloat(columns - 1)
+        return min(76, max(48, floor(available / CGFloat(columns))))
+    }
+
+    private var placedTileSpacing: CGFloat { 7 }
+
+    private var placedHorizontalPadding: CGFloat { 12 }
+
+    private func fittedPlacedTileSize(width: CGFloat) -> CGFloat {
+        let count = max(1, totalLetterCount)
+        let available = width - placedHorizontalPadding * 2 - placedTileSpacing * CGFloat(count - 1)
+        return min(58, max(30, floor(available / CGFloat(count))))
     }
 
     // MARK: - Controls
@@ -457,23 +516,51 @@ struct AnagramView: View {
 
     private func makeSoloResult() -> SoloGameResult {
         let longest = vm.foundWords.map(\.count).max() ?? 0
+        let totalWords = max(1, vm.game.validWords.count)
+        let completion = Double(vm.foundWords.count) / Double(totalWords)
+        let foundByScore = vm.sortedFoundWords
+        let missedByScore = vm.missedWords.sorted {
+            if AnagramGame.score(for: $0) == AnagramGame.score(for: $1) {
+                return $0 < $1
+            }
+            return AnagramGame.score(for: $0) > AnagramGame.score(for: $1)
+        }
+        let topFound = foundByScore.first ?? "-"
+        let bestMissed = missedByScore.first ?? "-"
+
         return SoloGameResult(
             mode: .anagram,
             difficulty: vm.difficulty,
             completed: vm.score > 0,
             title: "Time's Up",
-            message: vm.score > 0 ? "Nice word haul." : "Find at least one word to unlock the next level.",
+            message: vm.score > 0 ? "You found \(vm.foundWords.count) of \(vm.game.validWords.count) possible words." : "Find at least one word to unlock the next level.",
             elapsedSeconds: vm.elapsedSeconds,
             score: vm.score,
-            progress: Double(vm.score),
+            progress: completion,
             stats: [
                 SoloResultStat(label: "Points", value: "\(vm.score)"),
-                SoloResultStat(label: "Words", value: "\(vm.foundWords.count)"),
+                SoloResultStat(label: "Words", value: "\(vm.foundWords.count)/\(vm.game.validWords.count)"),
                 SoloResultStat(label: "Longest", value: longest > 0 ? "\(longest)" : "-"),
                 SoloResultStat(label: "Avg Len", value: averageWordText),
                 SoloResultStat(label: "Missed", value: "\(vm.missedWords.count)")
             ],
-            details: vm.sortedFoundWords.prefix(30).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
+            details: [
+                "Base letters: \(String(vm.game.letters).uppercased())",
+                "Best word found: \(topFound.capitalized)",
+                "Best missed word: \(bestMissed.capitalized)",
+                "Completion: \(Int((completion * 100).rounded()))% of possible words"
+            ],
+            sections: [
+                SoloResultSection(
+                    title: "Found Words",
+                    items: foundByScore.map { "\($0.capitalized) +\(AnagramGame.score(for: $0))" }
+                ),
+                SoloResultSection(
+                    title: "Missed Words",
+                    items: missedByScore.map { "\($0.capitalized) +\(AnagramGame.score(for: $0))" }
+                )
+            ],
+            rewardEvidenceJSON: SoloCoinRewards.evidence(["words": vm.foundWords])
         )
     }
 
@@ -504,7 +591,8 @@ struct AnagramView: View {
                 "foundWords": encodedFoundWords,
                 "missedWords": "\(vm.missedWords.count)"
             ],
-            details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" }
+            details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" },
+            rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence(["words": vm.foundWords]) : nil
         ))
     }
 

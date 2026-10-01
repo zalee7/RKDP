@@ -78,8 +78,12 @@ struct WordHuntView: View {
             }
             .padding(.horizontal)
             .allowsHitTesting(false)
+            .zIndex(1)
 
-            if vm.isFinished && sessionID == nil { finishedOverlay }
+            if vm.isFinished && sessionID == nil {
+                finishedOverlay
+                    .zIndex(2)
+            }
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
@@ -271,6 +275,7 @@ struct WordHuntView: View {
             .frame(width: geo.size.width, height: geo.size.width)
             .contentShape(Rectangle())
             .gesture(dragGesture(cellSize: cellSize))
+            .allowsHitTesting(!vm.isFinished)
         }
         .aspectRatio(1, contentMode: .fit)
     }
@@ -278,42 +283,27 @@ struct WordHuntView: View {
     private func dragGesture(cellSize: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
-                let loc = value.location
+                guard !vm.isFinished else { return }
                 if vm.currentPath.isEmpty {
-                    let (r, c) = floorCell(loc, cellSize: cellSize)
-                    vm.startPath(row: r, col: c)
-                } else {
-                    snapExtend(to: loc, cellSize: cellSize)
+                    guard let cell = WordHuntTraceGeometry.cell(at: value.startLocation, cellSize: cellSize, size: vm.game.size) else { return }
+                    vm.startPath(row: cell.row, col: cell.col)
                 }
-                lastDragLocation = loc
+                extendTrace(from: lastDragLocation ?? value.startLocation, to: value.location, cellSize: cellSize)
+                lastDragLocation = value.location
             }
-            .onEnded { _ in
+            .onEnded { value in
+                if !vm.isFinished, !vm.currentPath.isEmpty {
+                    extendTrace(from: lastDragLocation ?? value.startLocation, to: value.location, cellSize: cellSize)
+                }
                 vm.submitPath()
                 lastDragLocation = nil
             }
     }
 
-    /// Floor-division mapping: point → (row, col).
-    private func floorCell(_ p: CGPoint, cellSize: CGFloat) -> (Int, Int) {
-        let col = max(0, min(vm.game.size - 1, Int(p.x / cellSize)))
-        let row = max(0, min(vm.game.size - 1, Int(p.y / cellSize)))
-        return (row, col)
-    }
-
-    /// Extend by at most one forward cell per drag update. Diagonals are based on
-    /// the cell under the finger, which avoids recursive "catch up" jumps.
-    private func snapExtend(to point: CGPoint, cellSize: CGFloat) {
-        guard let last = vm.currentPath.last else { return }
-        let target = floorCell(point, cellSize: cellSize)
-        let rowDelta = target.0 - last.row
-        let colDelta = target.1 - last.col
-        guard rowDelta != 0 || colDelta != 0 else { return }
-
-        let nextRow = last.row + rowDelta.signum()
-        let nextCol = last.col + colDelta.signum()
-        guard !vm.isInPath(row: nextRow, col: nextCol) else { return }
-
-        vm.extendPath(row: nextRow, col: nextCol)
+    private func extendTrace(from start: CGPoint, to end: CGPoint, cellSize: CGFloat) {
+        for cell in WordHuntTraceGeometry.crossedCells(from: start, to: end, cellSize: cellSize, size: vm.game.size) {
+            vm.extendPath(row: cell.row, col: cell.col)
+        }
     }
 
     // MARK: - Current word display
@@ -325,11 +315,11 @@ struct WordHuntView: View {
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.textSecondary)
             } else {
-                ForEach(Array(vm.currentWord.enumerated()), id: \.offset) { _, char in
-                    Text(String(char))
-                        .font(.title3.bold())
-                        .foregroundStyle(AppTheme.textPrimary)
-                }
+                Text(vm.currentWord)
+                    .font(.title3.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
             }
         }
         .frame(height: 36)
@@ -411,23 +401,51 @@ struct WordHuntView: View {
 
     private func makeSoloResult() -> SoloGameResult {
         let longest = vm.foundWords.map(\.count).max() ?? 0
+        let totalWords = max(1, vm.game.validWords.count)
+        let completion = Double(vm.foundWords.count) / Double(totalWords)
+        let foundByScore = vm.sortedFoundWords
+        let missedByScore = vm.missedWords.sorted {
+            if WordHuntGame.score(for: $0) == WordHuntGame.score(for: $1) {
+                return $0 < $1
+            }
+            return WordHuntGame.score(for: $0) > WordHuntGame.score(for: $1)
+        }
+        let topFound = foundByScore.first ?? "-"
+        let bestMissed = missedByScore.first ?? "-"
+
         return SoloGameResult(
             mode: .wordHunt,
             difficulty: vm.difficulty,
             completed: vm.score > 0,
             title: "Time's Up",
-            message: vm.score > 0 ? "You found \(vm.foundWords.count) words." : "Find at least one word to unlock the next level.",
+            message: vm.score > 0 ? "You found \(vm.foundWords.count) of \(vm.game.validWords.count) possible words." : "Find at least one word to unlock the next level.",
             elapsedSeconds: vm.elapsedSeconds,
             score: vm.score,
-            progress: Double(vm.score),
+            progress: completion,
             stats: [
                 SoloResultStat(label: "Points", value: "\(vm.score)"),
-                SoloResultStat(label: "Words", value: "\(vm.foundWords.count)"),
+                SoloResultStat(label: "Words", value: "\(vm.foundWords.count)/\(vm.game.validWords.count)"),
                 SoloResultStat(label: "Longest", value: longest > 0 ? "\(longest)" : "-"),
                 SoloResultStat(label: "Avg Len", value: averageWordText),
                 SoloResultStat(label: "Missed", value: "\(vm.missedWords.count)")
             ],
-            details: vm.sortedFoundWords.prefix(30).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
+            details: [
+                "Grid: \(vm.game.size)x\(vm.game.size)",
+                "Best word found: \(topFound.capitalized)",
+                "Best missed word: \(bestMissed.capitalized)",
+                "Completion: \(Int((completion * 100).rounded()))% of possible words"
+            ],
+            sections: [
+                SoloResultSection(
+                    title: "Found Words",
+                    items: foundByScore.map { "\($0.capitalized) +\(WordHuntGame.score(for: $0))" }
+                ),
+                SoloResultSection(
+                    title: "Missed Words",
+                    items: missedByScore.map { "\($0.capitalized) +\(WordHuntGame.score(for: $0))" }
+                )
+            ],
+            rewardEvidenceJSON: SoloCoinRewards.evidence(["words": vm.foundWords])
         )
     }
 
@@ -458,7 +476,8 @@ struct WordHuntView: View {
                 "foundWords": encodedFoundWords,
                 "missedWords": "\(vm.missedWords.count)"
             ],
-            details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" }
+            details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(WordHuntGame.score(for: $0)))" },
+            rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence(["words": vm.foundWords]) : nil
         ))
     }
 }

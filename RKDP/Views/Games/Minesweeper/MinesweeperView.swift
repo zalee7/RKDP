@@ -59,14 +59,6 @@ struct MinesweeperView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
 
-                if vm.status == .won {
-                    Text(sessionID == nil ? "Board Cleared" : "Board Cleared")
-                        .font(.title.bold()).foregroundStyle(.green).padding()
-                } else if vm.status == .lost {
-                    Text(sessionID == nil ? "Mine Hit" : "Mine Hit")
-                        .font(.title.bold()).foregroundStyle(.red).padding()
-                }
-
                 // Board
                 ScrollView([.horizontal, .vertical]) {
                     MinesweeperGridView(board: vm.board) { row, col in
@@ -77,6 +69,8 @@ struct MinesweeperView: View {
                     .padding(8)
                 }
             }
+            .disabled(vm.isFinished || didReportMatchResult)
+            .allowsHitTesting(!vm.isFinished && !didReportMatchResult)
 
             if let soloResult {
                 SoloResultOverlay(result: soloResult, onPlayAgain: onPlayAgain, onChangeDifficulty: onChangeDifficulty, onTryRanked: onTryRanked, onHome: onHome)
@@ -84,6 +78,7 @@ struct MinesweeperView: View {
         }
         .navigationTitle("Minesweeper")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { vm.stop() }
         .onChange(of: vm.status) { _, status in
             if status == .won || status == .lost {
                 if sessionID == nil { showSoloResult() }
@@ -122,7 +117,14 @@ struct MinesweeperView: View {
             details: [
                 "\(vm.board.revealedCount) of \(vm.board.safeCells) safe cells revealed",
                 hitMine ? "Mine hit" : (completed ? "Board cleared" : "No mine hit")
-            ]
+            ],
+            rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence([
+                "firstCell": vm.firstCell ?? -1,
+                "revealed": vm.board.cells.filter { cell in
+                    if case .revealed = cell.state { return !cell.hasMine }
+                    return false
+                }.map(\.id)
+            ].merging(vm.board.cells.first(where: { $0.state == .exploded }).map { ["explodedCell": $0.id] } ?? [:]) { _, new in new }) : nil
         ))
     }
 
@@ -145,7 +147,14 @@ struct MinesweeperView: View {
                 SoloResultStat(label: "Progress", value: "\(Int((progress * 100).rounded()))%"),
                 SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
                 SoloResultStat(label: "Result", value: completed ? "Clear" : "Lost")
-            ]
+            ],
+            rewardEvidenceJSON: SoloCoinRewards.evidence([
+                "firstCell": vm.firstCell ?? -1,
+                "revealed": vm.board.cells.filter { cell in
+                    if case .revealed = cell.state { return !cell.hasMine }
+                    return false
+                }.map(\.id)
+            ].merging(vm.board.cells.first(where: { $0.state == .exploded }).map { ["explodedCell": $0.id] } ?? [:]) { _, new in new })
         )
         soloResult = result
         onSoloResult(result)

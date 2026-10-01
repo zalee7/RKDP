@@ -27,6 +27,9 @@ final class ColorLinkViewModel: ObservableObject {
     var filledCellCount: Int { occupiedPositions.count }
     var fillProgress: Double { Double(filledCellCount) / Double(max(1, board.totalCells)) }
     var solvedPairCount: Int { board.pairs.filter { isPairConnected($0.id) }.count }
+    var solvedPairIDs: Set<Int> {
+        Set(board.pairs.filter { isPairConnected($0.id) }.map(\.id))
+    }
 
     init(difficulty: Difficulty, seed: Int? = nil) {
         self.difficulty = difficulty
@@ -57,7 +60,7 @@ final class ColorLinkViewModel: ObservableObject {
     }
 
     func clearActivePath() {
-        guard let activePairID else { return }
+        guard !isComplete, let activePairID else { return }
         paths[activePairID] = nil
     }
 

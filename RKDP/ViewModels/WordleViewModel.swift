@@ -38,7 +38,7 @@ final class WordleViewModel: ObservableObject {
     // Config
     let difficulty: Difficulty
     let maxGuesses: Int
-    let totalRounds: Int    // 3 for solo, 1 for multiplayer context (MatchmakingView wraps)
+    let totalRounds: Int    // One solo word; up to three shared online words.
     private let baseSeed: Int
     private let targetWords: [String]?
 
@@ -112,6 +112,14 @@ final class WordleViewModel: ObservableObject {
         withAnimation { guesses.append(guess) }
         currentInput = ""
         updateLetterStates(guess: guess)
+
+        // Final reveal animations should not inflate the recorded solve time.
+        let threshold = (totalRounds / 2) + 1
+        let wins = playerWins + (didSolveRound ? 1 : 0)
+        let losses = roundResults.filter { !$0.solved }.count + (isRoundOver && !didSolveRound ? 1 : 0)
+        if isRoundOver && (wins >= threshold || losses >= threshold || currentRound + 1 >= totalRounds) {
+            timer?.cancel()
+        }
 
         // Brief reveal delay so flip animation plays before we move on
         revealingRow = rowIndex

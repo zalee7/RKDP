@@ -60,13 +60,14 @@ struct MinesweeperBoard {
 
     // First reveal seeds mines away from firstTap and its neighbours
     mutating func firstReveal(row: Int, col: Int) {
+        guard status == .idle, contains(row: row, col: col), cells[row * config.cols + col].state == .hidden else { return }
         placeMines(avoiding: neighbours(row: row, col: col) + [row * config.cols + col], seed: seed)
         status = .playing
         reveal(row: row, col: col)
     }
 
     mutating func reveal(row: Int, col: Int) {
-        guard status == .playing else { return }
+        guard status == .playing, contains(row: row, col: col) else { return }
         let idx = row * config.cols + col
         guard case .hidden = cells[idx].state else { return }
 
@@ -91,7 +92,7 @@ struct MinesweeperBoard {
     }
 
     mutating func toggleFlag(row: Int, col: Int) {
-        guard status == .playing else { return }
+        guard (status == .idle || status == .playing), contains(row: row, col: col) else { return }
         let idx = row * config.cols + col
         switch cells[idx].state {
         case .hidden:
@@ -106,6 +107,7 @@ struct MinesweeperBoard {
 
     // Chord-reveal: if cell is revealed and flag count == adj mines, reveal all hidden neighbours
     mutating func chord(row: Int, col: Int) {
+        guard status == .playing, contains(row: row, col: col) else { return }
         let idx = row * config.cols + col
         guard case .revealed(let adj) = cells[idx].state else { return }
         let nbrs = neighbours(row: row, col: col)
@@ -114,6 +116,10 @@ struct MinesweeperBoard {
         for nIdx in nbrs {
             if case .hidden = cells[nIdx].state { reveal(row: nIdx / config.cols, col: nIdx % config.cols) }
         }
+    }
+
+    private func contains(row: Int, col: Int) -> Bool {
+        (0..<config.rows).contains(row) && (0..<config.cols).contains(col)
     }
 
     private mutating func placeMines(avoiding excluded: [Int], seed: Int?) {

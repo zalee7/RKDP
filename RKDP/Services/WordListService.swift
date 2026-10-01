@@ -19,7 +19,7 @@ enum WordListService {
     static let wordHuntValidWords: Set<String> = Set(loadList(named: "word_hunt_valid_words", minimumLength: 3, fallback: Array(anagramValidWords)))
 
     static let hangmanWordEntries: [HangmanWordEntry] = loadCategorizedList(named: "hangman_words", minimumLength: 5, fallback: [
-        HangmanWordEntry(category: "Grid Duel", word: "CROWN"),
+        HangmanWordEntry(category: "Solitaire", word: "CROWN"),
         HangmanWordEntry(category: "Puzzle", word: "PUZZLE"),
         HangmanWordEntry(category: "Competition", word: "VICTORY"),
         HangmanWordEntry(category: "Adventure", word: "ADVENTURE")

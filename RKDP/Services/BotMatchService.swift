@@ -64,7 +64,7 @@ enum BotMatchService {
         case .sudoku:
             return completionResult(mode: .sudoku, bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .gridlock:
-            return gridDuelResult(bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
+            return solitaireResult(bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .colorLink:
             return colorLinkResult(bot: bot, strongBot: strongBot, elapsedSeconds: elapsedSeconds, rng: &rng)
         case .minesweeper:
@@ -336,20 +336,22 @@ enum BotMatchService {
         )
     }
 
-    private static func gridDuelResult(bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
+    private static func solitaireResult(bot: MatchPlayer, strongBot: Bool, elapsedSeconds: Int, rng: inout SeededRNG) -> MatchPlayerResult {
         let completed = strongBot
-        let progress = completed ? 1.0 : Double(int(in: 45...84, rng: &rng)) / 100.0
-        let moves = completed ? int(in: 18...42, rng: &rng) : int(in: 24...58, rng: &rng)
+        let foundationCount = completed ? 52 : int(in: 16...40, rng: &rng)
+        let progress = Double(foundationCount) / 52.0
+        let moves = completed ? int(in: 92...168, rng: &rng) : int(in: 54...132, rng: &rng)
+        let score = max(0, foundationCount * 10 + int(in: 12...38, rng: &rng) - moves)
         return MatchPlayerResult(
             userID: bot.userID,
             mode: .gridlock,
             completed: completed,
             elapsedSeconds: elapsedSeconds,
-            score: Int((progress * 100).rounded()),
+            score: score,
             progress: progress,
-            status: completed ? "Pattern matched" : "\(Int(progress * 100))% pattern match",
-            summary: ["moves": "\(moves)", "botResult": "true"],
-            details: ["Moves: \(moves)", "Pattern: \(Int(progress * 100))%"]
+            status: completed ? "Cleared Solitaire" : "\(foundationCount)/52 foundations",
+            summary: ["moves": "\(moves)", "foundationCount": "\(foundationCount)", "botResult": "true"],
+            details: ["Foundations: \(foundationCount)/52", "Moves: \(moves)", "Score: \(score)"]
         )
     }
 
@@ -427,7 +429,8 @@ enum BotMatchService {
     private static func sessionLikeTimeout(mode: GameMode) -> Int {
         switch mode {
         case .sudoku: return 720
-        case .gridlock, .colorLink: return 300
+        case .gridlock: return 720
+        case .colorLink: return 300
         case .minesweeper: return 240
         case .wordle, .anagram, .wordHunt: return 75
         case .hangman: return 90

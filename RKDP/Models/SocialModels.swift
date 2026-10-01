@@ -93,6 +93,54 @@ enum PartyRoomStatus: String, Codable {
     case expired
 }
 
+enum PartyStageRoundStatus: String, Codable {
+    case waiting
+    case inProgress
+    case finished
+}
+
+struct PartyStageRoundConfiguration: Codable, Identifiable, Equatable {
+    var id: Int { index }
+    var index: Int
+    var mode: GameMode
+    var difficulty: Difficulty
+
+    static var quickStage: [PartyStageRoundConfiguration] {
+        [
+            PartyStageRoundConfiguration(index: 0, mode: .colorLink, difficulty: .medium),
+            PartyStageRoundConfiguration(index: 1, mode: .wordle, difficulty: .medium),
+            PartyStageRoundConfiguration(index: 2, mode: .hangman, difficulty: .medium)
+        ]
+    }
+}
+
+struct PartyStageRoundScore: Codable, Identifiable, Equatable {
+    var id: String { userID }
+    var userID: String
+    var username: String
+    var placement: Int
+    var roundPoints: Int
+    var cumulativePoints: Int
+    var resultSummary: String
+}
+
+struct PartyStageRound: Codable, Identifiable, Equatable {
+    var id: Int { index }
+    var index: Int
+    var mode: GameMode
+    var difficulty: Difficulty
+    var seed: Int
+    var puzzleData: String
+    var status: PartyStageRoundStatus
+    var startedAt: Date?
+    var finishedAt: Date?
+    var finishWindowStartedAt: Date?
+    var finishWindowDeadline: Date?
+    var finishWindowStarterID: String?
+    var results: [String: MatchPlayerResult]
+    var scoreRows: [PartyStageRoundScore]?
+}
+
 struct PartyPlayer: Codable, Identifiable, Equatable {
     var id: String { userID }
     var userID: String
@@ -135,6 +183,13 @@ struct PartyRoom: Codable, Identifiable, Equatable {
     var winnerID: String?
     var winnerReason: String?
     var readyPlayerIDs: [String]?
+    var finishWindowStartedAt: Date?
+    var finishWindowDeadline: Date?
+    var finishWindowStarterID: String?
+    var stageRounds: [PartyStageRound]?
+    var currentStageRoundIndex: Int?
+    var stageScores: [String: Int]?
+    var isStageRoom: Bool?
     var maxPlayers: Int
 
     var isExpired: Bool {
@@ -147,6 +202,16 @@ struct PartyRoom: Codable, Identifiable, Equatable {
 
     func isHost(_ userID: String) -> Bool {
         hostID == userID
+    }
+
+    var activeStageRound: PartyStageRound? {
+        guard isStageRoom == true,
+              let rounds = stageRounds,
+              let index = currentStageRoundIndex,
+              rounds.indices.contains(index) else {
+            return nil
+        }
+        return rounds[index]
     }
 
     var readyIDs: Set<String> {
@@ -218,6 +283,7 @@ enum PartyScoring {
     static func summary(for result: MatchPlayerResult?, mode: GameMode) -> String {
         guard let result else { return "Waiting for result" }
         if result.status == "Abandoned" { return "Abandoned" }
+        if result.summary["partyTimeout"] == "true" { return "Time expired" }
         switch mode {
         case .wordle:
             return "\(result.solvedRounds) rounds · \(result.totalGuesses) guesses · \(timeText(result.elapsedSeconds))"
@@ -228,7 +294,7 @@ enum PartyScoring {
                 ? "Rescued · \(result.wrongGuessCount) wrong · \(timeText(result.elapsedSeconds))"
                 : "\(result.revealedLetterCount) letters · \(result.wrongGuessCount) wrong"
         case .gridlock:
-            return "\(percent(result.progress)) match · \(result.moveCount) moves · \(timeText(result.elapsedSeconds))"
+            return "\(result.foundationCount)/52 foundations · \(result.moveCount) moves · \(timeText(result.elapsedSeconds))"
         case .colorLink:
             return "\(percent(result.progress)) fill · \(result.solvedPairs) pairs · \(timeText(result.elapsedSeconds))"
         case .minesweeper:
@@ -255,10 +321,15 @@ enum PartyScoring {
     }
 
     private static func compareResults(_ lhs: MatchPlayerResult, _ rhs: MatchPlayerResult, mode: GameMode) -> Int {
+        let leftMissing = lhs.summary["partyTimeout"] == "true" || lhs.summary["abandoned"] == "true"
+        let rightMissing = rhs.summary["partyTimeout"] == "true" || rhs.summary["abandoned"] == "true"
+        if leftMissing != rightMissing { return leftMissing ? 1 : -1 }
+        if leftMissing { return 0 }
         switch mode {
         case .wordle:
+            if lhs.solvedRounds != rhs.solvedRounds { return rhs.solvedRounds - lhs.solvedRounds }
+            guard lhs.solvedRounds > 0 else { return 0 }
             return compareValues([
-                rhs.solvedRounds - lhs.solvedRounds,
                 lhs.totalGuesses - rhs.totalGuesses,
                 lhs.elapsedSeconds - rhs.elapsedSeconds
             ])
@@ -270,6 +341,7 @@ enum PartyScoring {
                 lhs.elapsedSeconds - rhs.elapsedSeconds
             ])
         case .hangman:
+            if lhs.solvedRounds != rhs.solvedRounds { return rhs.solvedRounds - lhs.solvedRounds }
             if lhs.completed != rhs.completed { return lhs.completed ? -1 : 1 }
             if lhs.completed {
                 return compareValues([
@@ -291,6 +363,8 @@ enum PartyScoring {
                 ])
             }
             return compareValues([
+                rhs.foundationCount - lhs.foundationCount,
+                rhs.score - lhs.score,
                 progressCompare(lhs.progress, rhs.progress),
                 lhs.moveCount - rhs.moveCount,
                 lhs.elapsedSeconds - rhs.elapsedSeconds
@@ -336,7 +410,7 @@ enum PartyScoring {
     private static func winnerReason(for mode: GameMode) -> String {
         switch mode {
         case .wordle:
-            return "Best Wordle result"
+            return "Best Word Guess result"
         case .anagram:
             return "Highest Anagrams score"
         case .wordHunt:
@@ -344,7 +418,7 @@ enum PartyScoring {
         case .hangman:
             return "Best Lava Rescue result"
         case .gridlock:
-            return "Best Grid Duel pattern match"
+            return "Best Solitaire result"
         case .colorLink:
             return "Best Color Link result"
         case .minesweeper:

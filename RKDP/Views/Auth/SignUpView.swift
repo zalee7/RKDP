@@ -39,7 +39,7 @@ struct SignUpView: View {
                         Text("🎁").font(.title3)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("New players start with 500 coins!").font(.callout.bold()).foregroundStyle(AppTheme.textPrimary)
-                            Text("Wager in matches and unlock titles from the daily shop.").font(.caption).foregroundStyle(AppTheme.textSecondary)
+                            Text("Earn coins in matches and unlock cosmetics from the daily shop.").font(.caption).foregroundStyle(AppTheme.textSecondary)
                         }
                     }
                     .padding()

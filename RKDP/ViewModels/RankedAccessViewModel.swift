@@ -30,8 +30,7 @@ final class RankedAccessViewModel: ObservableObject {
         isWorking = true
         defer { isWorking = false }
         do {
-            let productIDs = try await storeKit.purchase(productID: productID)
-            user = try await store.syncRankedAccessEntitlements(userID: user.id, productIDs: productIDs)
+            user = try await storeKit.purchase(productID: productID, userID: user.id)
             return true
         } catch RankedStoreKitError.cancelled {
             return false
@@ -47,8 +46,7 @@ final class RankedAccessViewModel: ObservableObject {
         isWorking = true
         defer { isWorking = false }
         do {
-            let productIDs = try await storeKit.currentEntitlementProductIDs()
-            user = try await store.syncRankedAccessEntitlements(userID: user.id, productIDs: productIDs)
+            user = try await storeKit.syncPurchases(userID: user.id, restoring: true)
             return true
         } catch {
             errorMessage = error.localizedDescription

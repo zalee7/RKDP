@@ -28,9 +28,19 @@ struct LoginView: View {
                         Text("Puzzle Party")
                             .font(.system(size: 36, weight: .black))
                             .foregroundStyle(AppTheme.textPrimary)
+                        #if PP_RANKED_SANDBOX
+                        Text("Ranked / Casual Test: puzzlepartytest")
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.accentBright)
+                        #elseif PP_SOCIAL_SANDBOX
+                        Text("Friend / Party Test: puzzlepartytest")
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.accentBright)
+                        #else
                         Text("Solo, Ranked, Casual")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.accentBright)
+                        #endif
                     }
 
                     // Fields
@@ -60,9 +70,11 @@ struct LoginView: View {
                     .padding(.horizontal)
                     .disabled(auth.isLoading)
 
+                    #if !PP_SOCIAL_SANDBOX
                     Button("Don't have an account? Sign Up") { showSignUp = true }
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.accentBright)
+                    #endif
 
                     Spacer()
                 }

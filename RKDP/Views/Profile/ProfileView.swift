@@ -1,4 +1,378 @@
 import SwiftUI
+import UIKit
+
+// MARK: - Shared earned identity views
+
+extension EarnedReward {
+    var tint: Color {
+        switch requirement {
+        case .modeMastery(let mode): return mode.accentColor
+        case .rank(let tier): return tier.color
+        case .firstFinish: return AppTheme.teal
+        case .allRounder: return AppTheme.crownGold
+        case .allSoloMastery: return AppTheme.crownGold
+        case .rankedWins(let wins):
+            if wins >= 1000 { return AppTheme.crownGold }
+            if wins >= 500 { return AppTheme.hotPink }
+            if wins >= 250 { return Color(hex: "8849D8") }
+            return wins >= 100 ? AppTheme.crownGold : Color(hex: "266EDD")
+        case .modeRankedWins(let mode, _): return mode.accentColor
+        case .rankedVariety(_, let modes): return modes >= 8 ? AppTheme.crownGold : (modes >= 5 ? AppTheme.hotPink : AppTheme.teal)
+        case .friendlyWins: return AppTheme.hotPink
+        case .underdogWins: return Color(hex: "266EDD")
+        case .streak(let days): return days >= 30 ? AppTheme.crownGold : (days >= 14 ? AppTheme.teal : AppTheme.hotPink)
+        }
+    }
+
+    var emblemShape: String {
+        guard slot == .badge else { return "seal" }
+        switch requirement {
+        case .modeMastery: return "shield"
+        case .rankedWins: return "hexagon"
+        case .modeRankedWins: return "seal"
+        case .rankedVariety: return "diamond"
+        case .friendlyWins: return "seal"
+        case .underdogWins: return "shield"
+        case .streak: return "circle"
+        default: return "seal"
+        }
+    }
+
+    var milestoneNumber: Int? {
+        switch requirement {
+        case .streak(let days): return days
+        case .rankedWins(let wins): return wins
+        case .modeRankedWins(_, let wins): return wins
+        case .rankedVariety(_, let modes): return modes
+        case .allSoloMastery: return 32
+        default: return nil
+        }
+    }
+}
+
+struct EarnedRewardEmblem: View {
+    let reward: EarnedReward
+    var size: CGFloat = 44
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "\(reward.emblemShape).fill")
+                .resizable().scaledToFit()
+                .foregroundStyle(reward.tint.opacity(0.14))
+            Image(systemName: reward.emblemShape)
+                .resizable().scaledToFit()
+                .foregroundStyle(reward.tint.opacity(0.65))
+            if let tier = reward.tierLevel, tier >= 3 {
+                Image(systemName: reward.emblemShape)
+                    .resizable().scaledToFit().padding(size * 0.08)
+                    .foregroundStyle(reward.tint.opacity(0.4))
+            }
+            Image(systemName: reward.symbol)
+                .font(.system(size: size * 0.38, weight: .bold))
+                .foregroundStyle(reward.tint)
+        }
+        .frame(width: size, height: size)
+        .overlay(alignment: .bottomTrailing) {
+            if let tier = reward.tierLevel {
+                Text("\(tier)")
+                    .font(.system(size: size >= 36 ? 10 : 8, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: size >= 36 ? 15 : 11)
+                    .padding(.vertical, 1)
+                    .background(reward.tint, in: Capsule())
+            } else if size >= 36, let milestone = reward.milestoneNumber {
+                Text("\(milestone)")
+                    .font(.system(size: 9, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 3).padding(.vertical, 1)
+                    .background(reward.tint, in: Capsule())
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+struct EarnedAvatarView: View {
+    let style: AvatarStyle
+    var frame: EarnedReward?
+    var size: CGFloat = 84
+    var allowsMotion = true
+
+    var body: some View {
+        ZStack {
+            StickDuelerAvatarView(style: style, size: size * 0.83, allowsMotion: allowsMotion)
+            if let frame {
+                Circle()
+                    .strokeBorder(LinearGradient(colors: [frame.tint, frame.tint.opacity(0.4), frame.tint],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 3)
+                Circle().inset(by: 5).strokeBorder(frame.tint.opacity(0.4), lineWidth: 1)
+                VStack {
+                    Spacer()
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: size * 0.13, weight: .black))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(frame.tint, in: Capsule())
+                }
+                .offset(y: 4)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(frame.map { "Avatar, \($0.name) earned frame" } ?? "Avatar")
+    }
+}
+
+struct EarnedBadgeLabel: View {
+    let reward: EarnedReward
+    var body: some View {
+        HStack(spacing: 6) {
+            EarnedRewardEmblem(reward: reward, size: 24)
+            Text(reward.displayName).font(.caption.bold()).fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(reward.tint)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(reward.displayName), earned badge. \(reward.requirementText)")
+    }
+}
+
+struct EarnedTrophyShelf: View {
+    let user: AppUser
+    @State private var selectedReward: EarnedReward?
+
+    var body: some View {
+        Group {
+        if user.earnedRewards.isEmpty {
+            Label("Complete a solo difficulty to earn First Finish.", systemImage: "flag.checkered")
+                .font(.subheadline).foregroundStyle(AppTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), alignment: .top)], spacing: 14) {
+                ForEach(user.earnedRewards) { reward in
+                    Button { selectedReward = reward } label: {
+                    VStack(spacing: 6) {
+                        EarnedRewardEmblem(reward: reward)
+                        Text(reward.displayName)
+                            .font(.caption.bold()).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(AppTheme.textPrimary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(reward.displayName). \(reward.requirementText)")
+                }
+            }
+        }
+        }
+        .alert(selectedReward?.displayName ?? "Earned Reward", isPresented: Binding(get: { selectedReward != nil }, set: { if !$0 { selectedReward = nil } })) {
+            Button("OK") { selectedReward = nil }
+        } message: { Text(selectedReward?.requirementText ?? "") }
+    }
+}
+
+struct EarnedCollectionView: View {
+    let user: AppUser
+    let onEquip: (String?, EarnedRewardSlot) async throws -> Void
+    @State private var slot: EarnedRewardSlot = .title
+    @State private var unlockedOnly = false
+    @State private var isSaving = false
+    @State private var saveError: String?
+
+    private var rewards: [EarnedReward] {
+        user.collectionRewards.filter { $0.slot == slot && (!unlockedOnly || user.hasEarned($0)) }
+    }
+
+    var body: some View {
+        ZStack {
+            AppTheme.arenaBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack(spacing: 16) {
+                        EarnedAvatarView(style: user.cosmetics.avatarStyle, frame: user.equippedEarnedReward(in: .frame))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(user.username).font(.headline)
+                            Text(user.displayedTitle).font(.subheadline).foregroundStyle(AppTheme.hotPink)
+                            if let badge = user.equippedEarnedReward(in: .badge) { EarnedBadgeLabel(reward: badge) }
+                            Text("\(user.earnedRewards.count) of \(EarnedRewardCatalog.collectionCount) earned")
+                                .font(.caption).foregroundStyle(AppTheme.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Picker("Reward category", selection: $slot) {
+                        ForEach(EarnedRewardSlot.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Unlocked only", isOn: $unlockedOnly).tint(AppTheme.teal)
+
+                    if let equipped = user.equippedEarnedReward(in: slot) {
+                        Button {
+                            save(nil)
+                        } label: {
+                            Label("Remove \(equipped.displayName)", systemImage: "minus.circle")
+                                .font(.subheadline)
+                        }
+                        .disabled(isSaving)
+                    }
+
+                    if rewards.isEmpty {
+                        Text("No \(slot.rawValue.lowercased()) earned yet.")
+                            .foregroundStyle(AppTheme.textSecondary).padding(.vertical)
+                    }
+                    LazyVStack(spacing: 12) {
+                        ForEach(rewards, id: \.collectionID) { reward in rewardRow(reward) }
+                    }
+                }
+                .padding()
+            }
+        }
+        .foregroundStyle(AppTheme.textPrimary)
+        .navigationTitle("Earned Collection")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Could not save showcase", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+            Button("OK") { saveError = nil }
+        } message: { Text(saveError ?? "") }
+    }
+
+    private func rewardRow(_ reward: EarnedReward) -> some View {
+        let unlocked = user.hasEarned(reward)
+        let equipped = user.equippedEarnedReward(in: slot)?.id == reward.id
+        let nextTier = unlocked ? user.nextTier(after: reward) : nil
+        let progressReward = nextTier ?? reward
+        let progress = progressReward.progress(for: user)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                if reward.slot == .frame {
+                    EarnedAvatarView(style: user.cosmetics.avatarStyle, frame: reward, size: 48, allowsMotion: false)
+                } else {
+                    EarnedRewardEmblem(reward: reward, size: 48)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(reward.displayName).font(.headline)
+                    Text(reward.requirementText)
+                        .font(.caption).foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            if unlocked {
+                HStack {
+                    Label("Earned", systemImage: "checkmark.seal.fill")
+                        .font(.caption.bold()).foregroundStyle(reward.tint)
+                    Spacer()
+                    Button { save(reward.id) } label: {
+                        Label(equipped ? "Equipped" : "Equip", systemImage: equipped ? "checkmark.circle.fill" : "plus.circle")
+                            .font(.subheadline.bold()).padding(.vertical, 6)
+                    }
+                    .disabled(equipped || isSaving)
+                    .accessibilityLabel("\(equipped ? "Equipped" : "Equip") \(reward.displayName)")
+                }
+            }
+            if let nextTier {
+                Text("Next: Tier \(nextTier.tierLevel ?? 1)").font(.caption.bold())
+                Text(nextTier.requirementText).font(.caption).foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !unlocked || nextTier != nil {
+                ProgressView(value: Double(progress.current), total: Double(max(1, progress.target)))
+                    .tint(reward.tint)
+                    .accessibilityLabel("\(progressReward.displayName) progress")
+                HStack {
+                    Label(unlocked ? "Next tier" : "Locked", systemImage: unlocked ? "arrow.up.circle" : "lock.fill")
+                    Spacer()
+                    Text("\(progress.current) / \(progress.target)").monospacedDigit()
+                }
+                .font(.caption).foregroundStyle(AppTheme.textSecondary)
+            }
+            if reward.familyID != nil {
+                DisclosureGroup("All Tiers") {
+                    VStack(spacing: 8) {
+                        ForEach(EarnedRewardCatalog.tiers(for: reward)) { tier in
+                            HStack {
+                                Text("Tier \(tier.tierLevel ?? 1)")
+                                Spacer()
+                                Text(tier.tierTargetLabel)
+                                Image(systemName: user.hasEarned(tier) ? "checkmark.circle.fill" : "lock.fill")
+                            }
+                            .font(.caption).foregroundStyle(user.hasEarned(tier) ? reward.tint : AppTheme.textMuted)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(tier.displayName). \(tier.requirementText). \(user.hasEarned(tier) ? "Earned" : "Locked")")
+                        }
+                    }.padding(.top, 8)
+                }
+                .font(.caption.bold()).tint(reward.tint)
+                if unlocked && nextTier == nil {
+                    Text("Highest tier earned").font(.caption.bold()).foregroundStyle(reward.tint)
+                }
+            }
+        }
+        .padding(16)
+        .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(reward.tint.opacity(equipped ? 0.85 : 0.25), lineWidth: equipped ? 2 : 1))
+    }
+
+    private func save(_ id: String?) {
+        guard !isSaving else { return }
+        let selectedSlot = slot
+        isSaving = true
+        Task { @MainActor in
+            defer { isSaving = false }
+            do { try await onEquip(id, selectedSlot) }
+            catch { saveError = error.localizedDescription }
+        }
+    }
+}
+
+struct PreMatchIdentityView: View {
+    let profile: AppUser?
+    let player: MatchPlayer?
+    let mode: GameMode
+    let isLocal: Bool
+
+    private var rank: RankInfo {
+        profile?.rank(for: mode) ?? RankInfo(points: player?.rankPoints ?? 0,
+            tier: RankTier.tier(for: player?.rankPoints ?? 0), wins: 0, losses: 0, bestTime: nil, bestScore: nil)
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(isLocal ? "YOU" : "OPPONENT")
+                .font(.caption2.bold()).foregroundStyle(AppTheme.textSecondary)
+            EarnedAvatarView(style: profile?.cosmetics.avatarStyle ?? player?.avatarStyle ?? .default,
+                             frame: profile?.equippedEarnedReward(in: .frame), size: 80, allowsMotion: false)
+            Text(profile?.username ?? player?.username ?? "Opponent")
+                .font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.75)
+                .frame(height: 38)
+            Text(player?.isBot == true ? "Training Bot" : (profile?.displayedTitle ?? "Puzzler"))
+                .font(.caption.bold()).foregroundStyle(AppTheme.hotPink)
+                .lineLimit(2).minimumScaleFactor(0.85).frame(height: 32)
+            if let badge = profile?.equippedEarnedReward(in: .badge) {
+                EarnedBadgeLabel(reward: badge).frame(minHeight: 32)
+            } else {
+                Color.clear.frame(height: 32).accessibilityHidden(true)
+            }
+            Text(rank.fullDisplayName)
+                .font(.subheadline.bold()).foregroundStyle(rank.displayTier.color)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Text(mode.displayName).font(.caption2).foregroundStyle(AppTheme.textSecondary)
+            if player?.isBot == true {
+                Text("Limited ranked rewards").font(.caption2).foregroundStyle(AppTheme.textSecondary)
+            } else {
+                RecordTextView(wins: profile?.rank(for: mode).wins, losses: profile?.rank(for: mode).losses,
+                               prefix: "W/L ", font: .caption2)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .foregroundStyle(AppTheme.textPrimary)
+        .padding(.horizontal, 10).padding(.vertical, 16)
+        .frame(maxWidth: .infinity)
+        .background(AppTheme.cardBackground, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(isLocal ? AppTheme.teal.opacity(0.4) : AppTheme.hotPink.opacity(0.4), lineWidth: 1))
+    }
+}
+
+// MARK: - Profile
 
 struct ProfileView: View {
     let user: AppUser
@@ -8,14 +382,17 @@ struct ProfileView: View {
     @StateObject private var shop: ShopViewModel
     @State private var isGrantingTesterAccess = false
     @State private var selectedOwnedCategory: CosmeticCategory = .title
-    @State private var showAvatarEditor = false
-    @State private var showGameCustomizer = false
     @State private var recentGames: [GameSession] = []
     @State private var onlineStatGames: [GameSession] = []
     @State private var isLoadingRecentGames = false
     @State private var recentGamesError: String?
     @State private var selectedRecentGame: GameSession?
     @State private var showAllRecentGames = false
+
+    private var currentUser: AppUser {
+        if let refreshed = auth.user, refreshed.id == user.id { return refreshed }
+        return user
+    }
 
     init(user: AppUser, onDone: (() -> Void)? = nil) {
         self.user = user
@@ -32,36 +409,55 @@ struct ProfileView: View {
                     VStack(spacing: 20) {
                         // Avatar header card
                         VStack(spacing: 12) {
-                            StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 96)
+                            EarnedAvatarView(style: currentUser.cosmetics.avatarStyle, frame: currentUser.equippedEarnedReward(in: .frame), size: 108)
 
-                            HStack(spacing: 10) {
-                                Button { showAvatarEditor = true } label: {
-                                    Label("Customize Profile", systemImage: "sparkles")
-                                        .font(.caption.bold())
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(AppTheme.hotPink.opacity(0.18))
-                                        .foregroundStyle(AppTheme.hotPink)
-                                        .clipShape(Capsule())
-                                        .overlay(Capsule().stroke(AppTheme.hotPink.opacity(0.45), lineWidth: 1))
+                            VStack(spacing: 10) {
+                                HStack(spacing: 10) {
+                                    NavigationLink(value: ProfileRoute.customizeProfile) {
+                                        Label("Customize Profile", systemImage: "sparkles")
+                                            .font(.caption.bold())
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(AppTheme.hotPink.opacity(0.18))
+                                            .foregroundStyle(AppTheme.hotPink)
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().stroke(AppTheme.hotPink.opacity(0.45), lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    NavigationLink(value: ProfileRoute.gameCustomization) {
+                                        Label("Game Customization", systemImage: "paintpalette.fill")
+                                            .font(.caption.bold())
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(AppTheme.teal.opacity(0.18))
+                                            .foregroundStyle(AppTheme.teal)
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().stroke(AppTheme.teal.opacity(0.45), lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
 
-                                Button { showGameCustomizer = true } label: {
-                                    Label("Game Customization", systemImage: "paintpalette.fill")
+                                NavigationLink(value: ProfileRoute.settings) {
+                                    Label("Settings", systemImage: "gearshape.fill")
                                         .font(.caption.bold())
-                                        .padding(.horizontal, 12)
+                                        .padding(.horizontal, 14)
                                         .padding(.vertical, 8)
-                                        .background(AppTheme.teal.opacity(0.18))
-                                        .foregroundStyle(AppTheme.teal)
+                                        .background(AppTheme.controlBackground)
+                                        .foregroundStyle(AppTheme.textPrimary)
                                         .clipShape(Capsule())
-                                        .overlay(Capsule().stroke(AppTheme.teal.opacity(0.45), lineWidth: 1))
+                                        .overlay(Capsule().stroke(AppTheme.controlBorder, lineWidth: 1))
                                 }
+                                .buttonStyle(.plain)
                             }
 
                             Text(user.username).font(.title2.bold()).foregroundStyle(AppTheme.textPrimary)
-                            Text(shop.equippedTitleName)
+                            Text(currentUser.displayedTitle)
                                 .font(.subheadline.italic())
                                 .foregroundStyle(AppTheme.accentBright)
+                            if let badge = currentUser.equippedEarnedReward(in: .badge) {
+                                EarnedBadgeLabel(reward: badge)
+                            }
                             Text(user.email).font(.caption).foregroundStyle(AppTheme.textSecondary)
                             CoinBadgeView(amount: user.coins)
 
@@ -69,26 +465,45 @@ struct ProfileView: View {
                             Button {
                                 Task {
                                     isGrantingTesterAccess = true
-                                    await auth.grantTesterRankedAccess()
+                                    await auth.setTesterRankedAccess(enabled: auth.user?.rankedAccess.allModesUnlocked != true)
                                     isGrantingTesterAccess = false
                                 }
                             } label: {
                                 Label(
-                                    auth.user?.rankedAccess.allModesUnlocked == true ? "Tester Ranked Access On" : "Enable Tester Ranked Access",
+                                    auth.user?.rankedAccess.allModesUnlocked == true ? "Unlimited Rank Test On" : "Enable Unlimited Rank Test",
                                     systemImage: auth.user?.rankedAccess.allModesUnlocked == true ? "checkmark.seal.fill" : "hammer.fill"
                                 )
                                 .font(.caption.bold())
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(AppTheme.crownGold.opacity(0.2))
-                                .foregroundStyle(AppTheme.crownGold)
+                                .background((auth.user?.rankedAccess.allModesUnlocked == true ? AppTheme.teal : AppTheme.crownGold).opacity(0.2))
+                                .foregroundStyle(auth.user?.rankedAccess.allModesUnlocked == true ? AppTheme.teal : AppTheme.crownGold)
                                 .clipShape(Capsule())
-                                .overlay(Capsule().stroke(AppTheme.crownGold.opacity(0.45), lineWidth: 1))
+                                .overlay(Capsule().stroke((auth.user?.rankedAccess.allModesUnlocked == true ? AppTheme.teal : AppTheme.crownGold).opacity(0.45), lineWidth: 1))
                             }
-                            .disabled(isGrantingTesterAccess || auth.user?.rankedAccess.allModesUnlocked == true)
+                            .disabled(isGrantingTesterAccess)
                             #endif
                         }
                         .padding(.top, 24)
+
+                        VStack(alignment: .leading, spacing: 14) {
+                            NavigationLink(value: ProfileRoute.earned) {
+                                HStack {
+                                    Label("Earned Collection", systemImage: "medal.fill")
+                                        .font(.headline)
+                                    Spacer()
+                                    Text("\(currentUser.earnedRewards.count) / \(EarnedRewardCatalog.all.count)")
+                                        .font(.subheadline.monospacedDigit())
+                                    Image(systemName: "chevron.right")
+                                }
+                                .foregroundStyle(AppTheme.hotPink)
+                                .padding(.vertical, 8)
+                            }
+                            EarnedTrophyShelf(user: currentUser)
+                        }
+                        .padding(.horizontal)
+
+                        dailyProgressSection
 
                         // Per-mode ranks
                         sectionCard(title: "Rankings") {
@@ -134,14 +549,24 @@ struct ProfileView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showAvatarEditor) {
-                AvatarEditorView(shop: shop) {
-                    await auth.refreshUser()
-                }
-            }
-            .sheet(isPresented: $showGameCustomizer) {
-                GameCustomizationView(shop: shop) {
-                    await auth.refreshUser()
+            .navigationDestination(for: ProfileRoute.self) { route in
+                switch route {
+                case .customizeProfile:
+                    AvatarEditorView(shop: shop) {
+                        await auth.refreshUser()
+                    }
+                case .gameCustomization:
+                    GameCustomizationView(shop: shop) {
+                        await auth.refreshUser()
+                    }
+                case .settings:
+                    SettingsView(user: auth.user ?? user)
+                        .environmentObject(auth)
+                case .earned:
+                    EarnedCollectionView(user: currentUser) { id, slot in
+                        try await auth.equipEarnedReward(id, in: slot)
+                        shop.refreshIdentity(from: currentUser)
+                    }
                 }
             }
             .sheet(item: $selectedRecentGame) { session in
@@ -157,7 +582,81 @@ struct ProfileView: View {
             .task {
                 await loadRecentGames()
             }
+            .onAppear {
+                shop.refreshIdentity(from: currentUser)
+                Task { await loadRecentGames() }
+            }
+            .onChange(of: currentUser.cosmetics.equippedTitle) { _, _ in
+                shop.refreshIdentity(from: currentUser)
+            }
         }
+    }
+
+    private var dailyProgressSection: some View {
+        sectionCard(title: "Daily Play Streak") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Submit or finish any game each day to keep your streak.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    profileMetric(
+                        icon: "flame.fill",
+                        title: "Streak",
+                        value: user.playProgress.hasPlayedToday ? "\(max(1, user.playProgress.currentStreak)) days" : "Play today",
+                        color: AppTheme.hotPink
+                    )
+                    profileMetric(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: "Best",
+                        value: "\(user.playProgress.longestStreak) days",
+                        color: AppTheme.crownGold
+                    )
+                }
+                HStack(spacing: 10) {
+                    profileMetric(
+                        icon: "gamecontroller.fill",
+                        title: "Games Played",
+                        value: "\(user.playProgress.totalGamesPlayed)",
+                        color: AppTheme.teal
+                    )
+                    profileMetric(
+                        icon: "gift.fill",
+                        title: "Daily Bonus",
+                        value: user.playProgress.canEarnDailyBonusToday ? "+\(CoinWallet.dailyPlayReward) ready" : "Claimed Today",
+                        color: AppTheme.accentBright
+                    )
+                }
+            }
+        }
+    }
+
+    private func profileMetric(icon: String, title: String, value: String, color: Color) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.caption.bold())
+                .foregroundStyle(color)
+                .frame(width: 27, height: 27)
+                .background(color.opacity(0.15))
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(value)
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .background(AppTheme.controlBackground.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.controlBorder, lineWidth: 1))
     }
 
     private var recentGamesSection: some View {
@@ -216,16 +715,27 @@ struct ProfileView: View {
 
     @MainActor
     private func loadRecentGames() async {
+        let currentUserID = auth.user?.id ?? user.id
         isLoadingRecentGames = true
         recentGamesError = nil
+
         do {
-            async let recent = FirestoreService.shared.fetchRecentFinishedSessions(for: user.id, limit: 20)
-            async let cumulative = FirestoreService.shared.fetchFinishedOnlineSessions(for: user.id)
-            recentGames = try await recent
-            onlineStatGames = try await cumulative
+            recentGames = try await FirestoreService.shared.fetchRecentFinishedSessions(for: currentUserID, limit: 20)
         } catch {
+            #if DEBUG
+            print("Recent games fetch failed for \(currentUserID): \(error)")
+            #endif
             recentGamesError = "Could not load recent games right now."
         }
+
+        do {
+            onlineStatGames = try await FirestoreService.shared.fetchFinishedOnlineSessions(for: currentUserID)
+        } catch {
+            #if DEBUG
+            print("Online stats fetch failed for \(currentUserID): \(error)")
+            #endif
+        }
+
         isLoadingRecentGames = false
     }
 
@@ -244,16 +754,22 @@ struct ProfileView: View {
     }
 }
 
+private enum ProfileRoute: Hashable {
+    case customizeProfile
+    case gameCustomization
+    case settings
+    case earned
+}
+
 
 private struct AvatarEditorView: View {
     @ObservedObject var shop: ShopViewModel
     var onChanged: () async -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var selectedCategory: CosmeticCategory = .avatarHead
     @State private var bodyHexInput: String
     @State private var bodyHexError: String?
 
-    private let categories: [CosmeticCategory] = [.title, .avatarHead, .avatarFace, .avatarOutfit, .avatarAura]
+    private let categories: [CosmeticCategory] = [.title, .avatarHead, .avatarOutfit, .avatarAura, .avatarFace]
 
     init(shop: ShopViewModel, onChanged: @escaping () async -> Void) {
         self.shop = shop
@@ -262,61 +778,67 @@ private struct AvatarEditorView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppTheme.arenaBackground.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 18) {
-                        StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 150)
-                            .padding(.top, 18)
-                        Text("Puzzle Profile")
-                            .font(.title2.bold())
-                            .foregroundStyle(AppTheme.textPrimary)
-                        Text("Equip owned avatar parts and name titles here. Buy new cosmetics in the Shop.")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
+        ZStack {
+            AppTheme.arenaBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 18) {
+                    StickDuelerAvatarView(style: shop.ownedCosmetics.avatarStyle, size: 150)
+                        .padding(.top, 18)
+                    Text("Puzzle Profile")
+                        .font(.title2.bold())
+                    NavigationLink(value: ProfileRoute.earned) {
+                        Label("Earned Titles, Badges & Frames", systemImage: "medal.fill")
+                            .font(.subheadline.bold()).foregroundStyle(AppTheme.hotPink)
+                    }
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("Equip owned titles, bodies, headwear, auras, and bold expressions here. Buy new cosmetics in the Shop.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
 
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(categories, id: \.self) { category in
-                                    Button { selectedCategory = category } label: {
-                                        Text(label(for: category))
-                                            .font(.caption.bold())
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            .background(selectedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
-                                            .foregroundStyle(selectedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
-                                            .clipShape(Capsule())
-                                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(categories, id: \.self) { category in
+                                Button { selectedCategory = category } label: {
+                                    Text(label(for: category))
+                                        .font(.system(size: 12, weight: .black, design: .rounded))
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 9)
+                                        .background(selectedCategory == category ? AppTheme.hotPink : AppTheme.controlBackground)
+                                        .foregroundStyle(selectedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(selectedCategory == category ? Color.white.opacity(0.6) : AppTheme.controlBorder, lineWidth: 1)
+                                        )
+                                        .shadow(color: selectedCategory == category ? AppTheme.hotPink.opacity(0.24) : .clear, radius: 7, x: 0, y: 3)
                                 }
                             }
-                            .padding(.horizontal)
                         }
-
-                        if selectedCategory == .avatarOutfit {
-                            bodyColorEditor
-                                .padding(.horizontal)
-                        }
-
-                        avatarItemsSection
-                            .padding(.horizontal)
-                        .padding(.bottom, 24)
+                        .padding(.horizontal)
                     }
+
+                    if selectedCategory == .avatarOutfit {
+                        bodyColorEditor
+                            .padding(.horizontal)
+                    }
+
+                    avatarItemsSection
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
                 }
             }
-            .navigationTitle("Customize Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-            .alert(
-                "Profile update failed",
-                isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
-            ) {
-                Button("OK") { shop.errorMessage = nil }
-            } message: {
-                Text(shop.errorMessage ?? "")
-            }
+        }
+        .navigationTitle("Customize Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Profile update failed",
+            isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
+        ) {
+            Button("OK") { shop.errorMessage = nil }
+        } message: {
+            Text(shop.errorMessage ?? "")
         }
     }
 
@@ -391,7 +913,7 @@ private struct AvatarEditorView: View {
         return VStack(alignment: .leading, spacing: 18) {
             if !ownedItems.isEmpty {
                 avatarItemGroup(
-                    title: "Owned",
+                    title: ownedTitle(for: selectedCategory),
                     subtitle: selectedCategory == .title ? "Equip your saved name title." : "Equip the parts you already unlocked.",
                     items: ownedItems,
                     tint: AppTheme.teal
@@ -441,12 +963,24 @@ private struct AvatarEditorView: View {
         switch category {
         case .title: return "Title"
         case .avatarHead: return "Head"
-        case .avatarFace: return "Face"
+        case .avatarFace: return "Expression"
         case .avatarOutfit: return "Body"
         case .avatarAura: return "Aura"
         case .avatarPose: return "Pose"
         case .tileTheme: return "Tile"
+        case .cardTheme: return "Card"
         default: return category.rawValue
+        }
+    }
+
+    private func ownedTitle(for category: CosmeticCategory) -> String {
+        switch category {
+        case .title: return "Owned Titles"
+        case .avatarHead: return "Owned Heads"
+        case .avatarFace: return "Owned Expressions"
+        case .avatarOutfit: return "Owned Bodies"
+        case .avatarAura: return "Owned Auras"
+        default: return "Owned"
         }
     }
 
@@ -466,59 +1000,55 @@ private struct AvatarEditorView: View {
 private struct GameCustomizationView: View {
     @ObservedObject var shop: ShopViewModel
     var onChanged: () async -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var selectedCategory: CosmeticCategory = .boardTheme
 
-    private let categories: [CosmeticCategory] = [.boardTheme, .tileTheme]
+    private let categories: [CosmeticCategory] = [.boardTheme, .tileTheme, .cardTheme]
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppTheme.arenaBackground.ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text("Tune how boards and tiles look across your games.")
-                            .font(.subheadline)
-                            .foregroundStyle(AppTheme.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 18)
-                            .padding(.horizontal)
+        ZStack {
+            AppTheme.arenaBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Tune how boards, tiles, and Solitaire cards look across your games.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 18)
+                        .padding(.horizontal)
 
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(categories, id: \.self) { category in
-                                    Button { selectedCategory = category } label: {
-                                        Text(label(for: category))
-                                            .font(.caption.bold())
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            .background(selectedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
-                                            .foregroundStyle(selectedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
-                                            .clipShape(Capsule())
-                                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(categories, id: \.self) { category in
+                                Button { selectedCategory = category } label: {
+                                    Text(label(for: category))
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(selectedCategory == category ? AppTheme.hotPink : AppTheme.cardBackground)
+                                        .foregroundStyle(selectedCategory == category ? AppTheme.textOnColor : AppTheme.textSecondary)
+                                        .clipShape(Capsule())
                                 }
                             }
-                            .padding(.horizontal)
                         }
-
-                        ownedGameItems
-                            .padding(.horizontal)
-                            .padding(.bottom, 24)
+                        .padding(.horizontal)
                     }
+
+                    ownedGameItems
+                        .padding(.horizontal)
+                        .padding(.bottom, 24)
                 }
             }
-            .navigationTitle("Game Customization")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-            .alert(
-                "Customization failed",
-                isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
-            ) {
-                Button("OK") { shop.errorMessage = nil }
-            } message: {
-                Text(shop.errorMessage ?? "")
-            }
+        }
+        .navigationTitle("Game Customization")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Customization failed",
+            isPresented: Binding(get: { shop.errorMessage != nil }, set: { if !$0 { shop.errorMessage = nil } })
+        ) {
+            Button("OK") { shop.errorMessage = nil }
+        } message: {
+            Text(shop.errorMessage ?? "")
         }
     }
 
@@ -571,8 +1101,438 @@ private struct GameCustomizationView: View {
         switch category {
         case .boardTheme: return "Board / Background Themes"
         case .tileTheme: return "Tile Themes"
+        case .cardTheme: return "Card Themes"
         default: return category.rawValue
         }
+    }
+}
+
+private struct SettingsView: View {
+    let user: AppUser
+
+    @EnvironmentObject private var auth: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(AppPreferenceKeys.soundEffectsEnabled) private var soundEffectsEnabled = true
+    @AppStorage(AppPreferenceKeys.musicEnabled) private var musicEnabled = true
+    @AppStorage(AppPreferenceKeys.hapticsEnabled) private var hapticsEnabled = true
+    @AppStorage(AppPreferenceKeys.reduceExtraAnimations) private var reduceExtraAnimations = false
+
+    @State private var notificationSettings: NotificationSettings
+    @State private var statusMessage: String?
+    @State private var isWorking = false
+    @State private var showDeleteConfirmation = false
+
+    init(user: AppUser) {
+        self.user = user
+        _notificationSettings = State(initialValue: user.notificationSettings)
+    }
+
+    var body: some View {
+        ZStack {
+            AppTheme.arenaBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 16) {
+                    accountSection
+                    notificationSection
+                    audioSection
+                    gameplaySection
+                    supportSection
+                    legalSection
+                    appInfoSection
+                    dangerSection
+                }
+                .padding()
+            }
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "Delete this account?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                Task { await deleteAccount() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This anonymizes your profile, removes notification tokens, cancels pending social invites where possible, and deletes your sign-in account. This cannot be undone.")
+        }
+    }
+
+    private var accountSection: some View {
+        settingsCard("Account", icon: "person.crop.circle.fill", color: AppTheme.hotPink) {
+            SettingsInfoRow(title: user.username, detail: user.email, icon: "person.fill")
+            Button {
+                auth.signOut()
+                dismiss()
+            } label: {
+                SettingsActionRow(title: "Sign Out", detail: "Leave this device signed out.", icon: "rectangle.portrait.and.arrow.right", color: AppTheme.danger)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var notificationSection: some View {
+        settingsCard("Notifications", icon: "bell.badge.fill", color: AppTheme.teal) {
+            ForEach(NotificationPreferenceType.allCases) { type in
+                Toggle(isOn: notificationBinding(for: type)) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(type.title)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+                        Text(type.detail)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                }
+                .tint(AppTheme.hotPink)
+                Divider().overlay(AppTheme.cardBorder)
+            }
+
+            Button {
+                openSystemSettings()
+            } label: {
+                SettingsActionRow(title: "Manage iOS Notification Permission", detail: "Open Apple Settings for app-level permissions.", icon: "gearshape.fill", color: AppTheme.crownGold)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var audioSection: some View {
+        settingsCard("Audio & Haptics", icon: "speaker.wave.2.fill", color: AppTheme.crownGold) {
+            Toggle("Sound Effects", isOn: $soundEffectsEnabled)
+                .tint(AppTheme.hotPink)
+            Toggle("Music Loops", isOn: Binding {
+                musicEnabled
+            } set: { isEnabled in
+                musicEnabled = isEnabled
+                if !isEnabled {
+                    SoundManager.shared.stopAllLoops()
+                }
+            })
+                .tint(AppTheme.hotPink)
+            Toggle("Haptics", isOn: $hapticsEnabled)
+                .tint(AppTheme.hotPink)
+        }
+    }
+
+    private var gameplaySection: some View {
+        settingsCard("Gameplay & Accessibility", icon: "accessibility.fill", color: AppTheme.royalBlue) {
+            SettingsInfoRow(title: "Appearance", detail: "Puzzle Party Theme", icon: "paintpalette.fill")
+            Toggle("Reduce Extra Animations", isOn: $reduceExtraAnimations)
+                .tint(AppTheme.hotPink)
+            Text("This calms app-only decorative motion without changing your iPhone accessibility settings.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+    }
+
+    private var supportSection: some View {
+        settingsCard("Support", icon: "lifepreserver.fill", color: AppTheme.teal) {
+            Button {
+                openMail(subject: "Puzzle Party Support")
+            } label: {
+                SettingsActionRow(title: "Contact Support", detail: "Send an email about your account or purchases.", icon: "envelope.fill", color: AppTheme.teal)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                openMail(subject: "Puzzle Party Bug Report")
+            } label: {
+                SettingsActionRow(title: "Report a Problem", detail: "Share bugs, screenshots, or confusing game flow.", icon: "exclamationmark.bubble.fill", color: AppTheme.hotPink)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Task { await restorePurchases() }
+            } label: {
+                SettingsActionRow(title: "Restore Purchases", detail: "Restore ranked access purchases from your Apple account.", icon: "arrow.clockwise.circle.fill", color: AppTheme.crownGold)
+            }
+            .buttonStyle(.plain)
+            .disabled(isWorking)
+
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+    }
+
+    private var legalSection: some View {
+        settingsCard("Legal", icon: "doc.text.fill", color: AppTheme.hotPink) {
+            ForEach(SettingsLegalPage.allCases) { page in
+                NavigationLink {
+                    LegalTextView(page: page)
+                } label: {
+                    SettingsActionRow(title: page.title, detail: page.subtitle, icon: page.icon, color: AppTheme.hotPink)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var appInfoSection: some View {
+        settingsCard("App Info", icon: "info.circle.fill", color: AppTheme.royalBlue) {
+            SettingsInfoRow(title: "Puzzle Party", detail: "Solo, Ranked, Casual", icon: "puzzlepiece.extension.fill")
+            SettingsInfoRow(title: "Version", detail: appVersionText, icon: "number.circle.fill")
+            SettingsInfoRow(title: "Theme", detail: "Light pastel Puzzle Party", icon: "sparkles")
+        }
+    }
+
+    private var dangerSection: some View {
+        settingsCard("Danger Zone", icon: "exclamationmark.triangle.fill", color: AppTheme.danger) {
+            Button(role: .destructive) {
+                showDeleteConfirmation = true
+            } label: {
+                SettingsActionRow(title: "Delete Account", detail: "Anonymize your profile and delete sign-in access.", icon: "trash.fill", color: AppTheme.danger)
+            }
+            .buttonStyle(.plain)
+            .disabled(isWorking || auth.isLoading)
+        }
+    }
+
+    private func notificationBinding(for type: NotificationPreferenceType) -> Binding<Bool> {
+        Binding {
+            notificationSettings.enabled(for: type)
+        } set: { isEnabled in
+            var updated = notificationSettings
+            updated.set(isEnabled, for: type)
+            notificationSettings = updated
+            Task { await saveNotificationSettings(updated) }
+        }
+    }
+
+    private func saveNotificationSettings(_ settings: NotificationSettings) async {
+        guard !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        if await auth.updateNotificationSettings(settings) {
+            statusMessage = "Notification settings saved."
+        } else {
+            statusMessage = auth.errorMessage ?? "Could not save notification settings."
+        }
+    }
+
+    private func restorePurchases() async {
+        guard !isWorking else { return }
+        isWorking = true
+        statusMessage = nil
+        defer { isWorking = false }
+        if await auth.restorePurchases() {
+            statusMessage = "Purchases restored."
+        } else {
+            statusMessage = auth.errorMessage ?? "No purchases were restored."
+        }
+    }
+
+    private func deleteAccount() async {
+        guard !isWorking else { return }
+        isWorking = true
+        statusMessage = nil
+        defer { isWorking = false }
+        if await auth.deleteAccount() {
+            dismiss()
+        } else {
+            statusMessage = auth.errorMessage ?? "Could not delete account."
+        }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func openMail(subject: String) {
+        let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
+        guard let url = URL(string: "mailto:support@puzzleparty.app?subject=\(encodedSubject)") else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private var appVersionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
+    }
+
+    private func settingsCard<Content: View>(_ title: String, icon: String, color: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.headline.bold())
+                .foregroundStyle(color)
+            content()
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+        .shadow(color: AppTheme.softShadow.opacity(0.24), radius: 8, x: 0, y: 4)
+    }
+}
+
+private struct SettingsInfoRow: View {
+    let title: String
+    let detail: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .frame(width: 28, height: 28)
+                .foregroundStyle(AppTheme.accentBright)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Spacer()
+        }
+    }
+}
+
+private struct SettingsActionRow: View {
+    let title: String
+    let detail: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .frame(width: 28, height: 28)
+                .foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private enum SettingsLegalPage: String, CaseIterable, Identifiable {
+    case terms
+    case privacy
+    case community
+    case coins
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .terms: return "Terms of Service"
+        case .privacy: return "Privacy Policy"
+        case .community: return "Community Guidelines"
+        case .coins: return "Coin & Purchase Policy"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .terms: return "Prototype rules for using Puzzle Party."
+        case .privacy: return "What account and gameplay data is used."
+        case .community: return "Friendly play and username expectations."
+        case .coins: return "Virtual coins, purchases, and ranked access."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .terms: return "doc.plaintext.fill"
+        case .privacy: return "lock.shield.fill"
+        case .community: return "person.2.fill"
+        case .coins: return "crown.fill"
+        }
+    }
+
+    var sections: [(String, String)] {
+        switch self {
+        case .terms:
+            return [
+                ("Prototype Notice", "Puzzle Party is an in-development game. Features, prices, rewards, modes, and availability may change while testing continues."),
+                ("Accounts", "Players are responsible for keeping sign-in access secure and using usernames that are appropriate for a friendly puzzle game."),
+                ("Fair Play", "Do not exploit bugs, automate games, harass other players, or interfere with matchmaking, friends, parties, daily challenges, or leaderboards."),
+                ("Virtual Items", "Coins, cosmetics, ranked access, and other in-app items are for use inside Puzzle Party only and have no cash value."),
+                ("Service Changes", "Online features may be adjusted, paused, or removed as the app is balanced and prepared for release.")
+            ]
+        case .privacy:
+            return [
+                ("Data We Use", "Puzzle Party stores account details, username, email, cosmetics, coins, ranks, match results, friends, invites, party rooms, notification tokens, and purchase entitlement state."),
+                ("Why We Use It", "This data powers sign-in, matchmaking, fair puzzles, friends, notifications, purchases, leaderboards, recent games, and support."),
+                ("Notifications", "If enabled, Firebase Cloud Messaging tokens are stored so the app can send friend, invite, party, turn, and rematch notifications."),
+                ("Sharing", "Your username, avatar, ranks, and match results can be visible to opponents, friends, party members, and leaderboard viewers."),
+                ("Deletion", "Deleting an account anonymizes profile data where practical and removes notification tokens. Some completed match records may remain for opponent history and game integrity.")
+            ]
+        case .community:
+            return [
+                ("Be Friendly", "Use respectful usernames and messages. Puzzle Party is meant to feel playful, social, and welcoming."),
+                ("No Harassment", "Do not target, threaten, spam, impersonate, or pressure other players through friends, invites, parties, or rematches."),
+                ("Fair Competition", "Play the puzzles yourself. Do not abuse exploits, external automation, or intentional disconnects to manipulate results."),
+                ("Reporting", "Use Report a Problem or Contact Support if a player, match, or invite flow feels abusive or broken.")
+            ]
+        case .coins:
+            return [
+                ("Virtual Currency", "Coins are virtual only. They cannot be cashed out, transferred for money, redeemed for real prizes, or converted back into currency."),
+                ("Purchases", "Coin packs and ranked access are handled through Apple in-app purchase. Cosmetic items do not affect puzzle generation, matchmaking, rank rules, or timers."),
+                ("Ranked Rewards", "Ranked matches award virtual coins for eligible results. Losing does not deduct coins, and coins are not required to enter. Ranked access rules still apply."),
+                ("Rewards", "Daily challenge, ranked, and multiplayer rewards are virtual only. There are no real-money prizes or cash-equivalent rewards."),
+                ("Restores", "Use Restore Purchases for ranked access entitlements. Consumable coin packs are granted when processed and are not restored like permanent unlocks.")
+            ]
+        }
+    }
+}
+
+private struct LegalTextView: View {
+    let page: SettingsLegalPage
+
+    var body: some View {
+        ZStack {
+            AppTheme.arenaBackground.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Draft policy for testing. Final App Store legal copy should be reviewed before launch.")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.crownGold)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppTheme.crownGold.opacity(0.14))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    ForEach(page.sections, id: \.0) { section in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(section.0)
+                                .font(.headline.bold())
+                                .foregroundStyle(AppTheme.textPrimary)
+                            Text(section.1)
+                                .font(.subheadline)
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppTheme.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
+                    }
+                }
+                .padding()
+            }
+        }
+        .navigationTitle(page.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

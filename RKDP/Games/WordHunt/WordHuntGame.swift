@@ -1,5 +1,46 @@
 import Foundation
 
+enum WordHuntTraceGeometry {
+    static func cell(at point: CGPoint, cellSize: CGFloat, size: Int) -> (row: Int, col: Int)? {
+        guard cellSize > 0, size > 0, point.x.isFinite, point.y.isFinite,
+              point.x >= 0, point.y >= 0,
+              point.x < CGFloat(size) * cellSize, point.y < CGFloat(size) * cellSize else { return nil }
+        return (Int(point.y / cellSize), Int(point.x / cellSize))
+    }
+
+    // Sweep through tile centers, leaving corner space for forgiving diagonal drags.
+    static func crossedCells(from start: CGPoint, to end: CGPoint, cellSize: CGFloat, size: Int) -> [(row: Int, col: Int)] {
+        guard cellSize > 0, size > 0,
+              start.x.isFinite, start.y.isFinite, end.x.isFinite, end.y.isFinite else { return [] }
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let lengthSquared = dx * dx + dy * dy
+        let radius = cellSize * 0.38
+        var hits: [(row: Int, col: Int, entry: CGFloat)] = []
+        for row in 0..<size {
+            for col in 0..<size {
+                let cx = (CGFloat(col) + 0.5) * cellSize - start.x
+                let cy = (CGFloat(row) + 0.5) * cellSize - start.y
+                if lengthSquared == 0 {
+                    if cx * cx + cy * cy <= radius * radius {
+                        hits.append((row, col, 0))
+                    }
+                    continue
+                }
+                let projection = (cx * dx + cy * dy) / lengthSquared
+                let nearest = min(1, max(0, projection))
+                let distanceX = cx - nearest * dx
+                let distanceY = cy - nearest * dy
+                guard distanceX * distanceX + distanceY * distanceY <= radius * radius else { continue }
+                let perpendicularSquared = max(0, cx * cx + cy * cy - projection * projection * lengthSquared)
+                let halfSpan = sqrt(max(0, radius * radius - perpendicularSquared) / lengthSquared)
+                hits.append((row, col, max(0, projection - halfSpan)))
+            }
+        }
+        return hits.sorted { $0.entry < $1.entry }.map { ($0.row, $0.col) }
+    }
+}
+
 struct WordHuntGame {
     let grid: [[Character]]
     let seed: Int

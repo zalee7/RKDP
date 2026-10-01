@@ -100,7 +100,7 @@ struct HangmanGame {
 
     private static func fallbackCategory(for difficulty: Difficulty) -> String {
         switch difficulty {
-        case .easy: return "Grid Duel"
+        case .easy: return "Solitaire"
         case .medium: return "Puzzle"
         case .hard: return "Competition"
         case .expert: return "Adventure"

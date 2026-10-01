@@ -9,10 +9,41 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // coinWallets are provisioned only by the trusted migration, never by clients.
+    function hasServerWallet(uid) {
+      return exists(/databases/$(database)/documents/coinWallets/$(uid));
+    }
+
+    function preservesServerEconomy(uid) {
+      return !hasServerWallet(uid) ||
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'coins', 'coinWallet', 'playProgress', 'appliedRankedOutcomes',
+          'appliedCasualOutcomes', 'botMatchProgress', 'dailyChallengeBonusDays',
+          'cosmetics', 'serverWalletVersion'
+        ]);
+    }
+
     match /users/{uid} {
       allow read: if signedIn();
-      allow write: if isSelf(uid);
+      allow create: if isSelf(uid) && !hasServerWallet(uid);
+      allow update: if isSelf(uid) && preservesServerEconomy(uid);
+      allow delete: if isSelf(uid) && !hasServerWallet(uid);
     }
+
+    match /coinWallets/{uid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
+      match /receipts/{receiptID} {
+        allow read: if isSelf(uid);
+        allow write: if false;
+      }
+    }
+
+    // Attempts, canonical puzzle answers and rollout controls are Admin SDK only.
+    match /soloRewardAccounts/{document=**} { allow read, write: if false; }
+    match /soloPuzzles/{document=**} { allow read, write: if false; }
+    match /soloPuzzleCatalog/{document=**} { allow read, write: if false; }
+    match /economyPrivate/{document=**} { allow read, write: if false; }
 
     match /leaderboards/{mode}/entries/{uid} {
       allow read: if signedIn();
@@ -20,7 +51,23 @@ service cloud.firestore {
     }
 
     match /sessions/{sessionID} {
-      allow read, write: if signedIn();
+      allow read: if signedIn() && (!sessionID.matches('sv1_.*') ||
+        request.auth.uid in resource.data.playerIDs || request.auth.uid == resource.data.winnerID);
+      allow write: if signedIn() && !sessionID.matches('sv1_.*');
+    }
+
+    // Official matches are created and finalized only by Cloud Functions.
+    // Queries must include playerIDs array-contains the signed-in player.
+    match /serverMatches/{sessionID} {
+      allow read: if signedIn() && request.auth.uid in resource.data.playerIDs;
+      allow write: if false;
+    }
+
+    // Server-verified daily summaries contain no answers or private inputs.
+    // Clients may compare results, but cannot create, edit or delete entries.
+    match /serverDailyChallenges/{dayKey}/entries/{entryID} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     match /matchmaking/{queue}/queue/{uid} {
@@ -41,12 +88,16 @@ service cloud.firestore {
     }
 
     match /exhibitionInvites/{inviteID} {
-      allow read, create, update: if signedIn();
+      allow read: if signedIn() && (!inviteID.matches('sv1_.*') ||
+        request.auth.uid == resource.data.fromID || request.auth.uid == resource.data.toID);
+      allow create, update: if signedIn() && !inviteID.matches('sv1_.*');
       allow delete: if false;
     }
 
     match /partyRooms/{roomCode} {
-      allow read, create, update: if signedIn();
+      allow read: if signedIn() && (!roomCode.matches('S1.*') ||
+        request.auth.uid in resource.data.playerIDs);
+      allow create, update: if signedIn() && !roomCode.matches('S1.*');
       allow delete: if false;
     }
 

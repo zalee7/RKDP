@@ -77,6 +77,8 @@ struct SudokuView: View {
                 )
                 .padding(.vertical, 12)
             }
+            .disabled(vm.isComplete || didReportMatchResult)
+            .allowsHitTesting(!vm.isComplete && !didReportMatchResult)
 
             if let soloResult {
                 SoloResultOverlay(
@@ -90,6 +92,7 @@ struct SudokuView: View {
         }
         .navigationTitle("Sudoku")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { vm.stop() }
         .onChange(of: vm.isComplete) { _, complete in
             if complete {
                 if sessionID == nil { showSoloResult() }
@@ -110,16 +113,18 @@ struct SudokuView: View {
             difficulty: difficulty,
             completed: true,
             title: "Sudoku Solved",
-            message: "Clean solve on \(difficulty.displayName).",
+            message: vm.hintsUsed == 0 ? "Solved \(difficulty.displayName) without hints." : "Solved \(difficulty.displayName) with \(vm.hintsUsed) hint\(vm.hintsUsed == 1 ? "" : "s").",
             elapsedSeconds: vm.elapsedSeconds,
             score: nil,
             progress: vm.progress,
             stats: [
                 SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
-                SoloResultStat(label: "Progress", value: "\(Int((vm.progress * 100).rounded()))%"),
-                SoloResultStat(label: "Difficulty", value: difficulty.displayName),
-                SoloResultStat(label: "Mode", value: "Solo")
-            ]
+                SoloResultStat(label: "Hints", value: "\(vm.hintsUsed)"),
+                SoloResultStat(label: "Conflicts", value: "\(vm.mistakeCount)"),
+                SoloResultStat(label: "Filled", value: "81/81")
+            ],
+            details: ["Conflicts count entries that duplicated a number in a row, column, or box."],
+            rewardEvidenceJSON: SoloCoinRewards.evidence(["cells": vm.board.cells.map(\.value)])
         )
         soloResult = result
         onSoloResult(result)
@@ -144,7 +149,8 @@ struct SudokuView: View {
             ],
             details: [
                 vm.isComplete ? "Completed the Sudoku" : "Reached \(Int((vm.progress * 100).rounded()))% progress"
-            ]
+            ],
+            rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence(["cells": vm.board.cells.map(\.value)]) : nil
         ))
     }
     private func sudokuBoardRows(_ board: SudokuBoard) -> String {

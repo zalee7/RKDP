@@ -1,5 +1,46 @@
 import Foundation
 
+enum SoloCoinRewards {
+    static func evidence(_ value: [String: Any]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func amount(for mode: GameMode, difficulty: Difficulty) -> Int {
+        let rewards: [Int]
+        switch mode {
+        case .colorLink: rewards = [3, 4, 5, 7]
+        case .wordle, .hangman: rewards = [4, 5, 7, 9]
+        case .anagram, .wordHunt: rewards = [4, 5, 6, 8]
+        case .minesweeper: rewards = [4, 6, 9, 12]
+        case .gridlock: rewards = [5, 7, 10, 14]
+        case .sudoku: rewards = [5, 8, 12, 18]
+        }
+        switch difficulty {
+        case .easy: return rewards[0]
+        case .medium: return rewards[1]
+        case .hard: return rewards[2]
+        case .expert: return rewards[3]
+        }
+    }
+}
+
+enum RankedCoinRewards {
+    static let loss = 5
+    static let draw = 10
+
+    static func win(for tier: RankTier) -> Int {
+        switch tier {
+        case .bronze: return 20
+        case .silver: return 30
+        case .gold: return 40
+        case .platinum: return 50
+        case .diamond: return 60
+        case .master: return 75
+        }
+    }
+}
+
 struct CoinPackProduct: Identifiable, Codable, Equatable {
     var id: String
     var coins: Int
@@ -8,9 +49,9 @@ struct CoinPackProduct: Identifiable, Codable, Equatable {
     var subtitle: String
 
     static let all: [CoinPackProduct] = [
-        CoinPackProduct(id: "com.gridduel.coins.small", coins: 1_000, fallbackPrice: "$0.99", title: "Small Pack", subtitle: "A quick boost for wagers and cosmetics."),
-        CoinPackProduct(id: "com.gridduel.coins.medium", coins: 3_300, fallbackPrice: "$2.99", title: "Medium Pack", subtitle: "Best for a few themes or higher stakes."),
-        CoinPackProduct(id: "com.gridduel.coins.large", coins: 6_000, fallbackPrice: "$4.99", title: "Large Pack", subtitle: "A strong stash for ranked and shop drops."),
+        CoinPackProduct(id: "com.gridduel.coins.small", coins: 1_000, fallbackPrice: "$0.99", title: "Small Pack", subtitle: "A quick boost for your next cosmetic."),
+        CoinPackProduct(id: "com.gridduel.coins.medium", coins: 3_300, fallbackPrice: "$2.99", title: "Medium Pack", subtitle: "Pick up a few favorite themes."),
+        CoinPackProduct(id: "com.gridduel.coins.large", coins: 6_000, fallbackPrice: "$4.99", title: "Large Pack", subtitle: "A strong stash for shop drops."),
         CoinPackProduct(id: "com.gridduel.coins.mega", coins: 13_500, fallbackPrice: "$9.99", title: "Mega Pack", subtitle: "Maximum value for heavy play.")
     ]
 
@@ -29,12 +70,14 @@ struct CoinDailyCounter: Codable, Equatable {
 }
 
 struct CoinWallet: Codable, Equatable {
-    static let dailyClaimAmount = 100
+    static let dailyClaimAmount = 50
+    static let dailyPlayReward = 25
+    static let dailySoloStreakReward = dailyPlayReward
     static let rewardedAdAmount = 75
-    static let rewardedAdsPerDay = 5
-    static let casualWinReward = 10
-    static let casualOtherReward = 3
-    static let casualRewardDailyCap = 100
+    static let rewardedAdsPerDay = 2
+    static let casualWinReward = 15
+    static let casualOtherReward = 5
+    static let casualRewardDailyCap = 90
 
     var claimedDailyCoinDay: String? = nil
     var rewardedCoinAds: CoinDailyCounter = .empty

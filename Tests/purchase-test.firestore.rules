@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Purchase harness only: profiles and wallets are created by the operator.
+    // No public profiles, gameplay, client writes, lists, or private-ledger access.
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    match /users/{uid} {
+      allow get: if isOwner(uid);
+    }
+    match /coinWallets/{uid} {
+      allow get: if isOwner(uid);
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

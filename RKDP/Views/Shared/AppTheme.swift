@@ -106,7 +106,13 @@ enum AppTheme {
 
 private struct ArenaBackgroundView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(AppPreferenceKeys.reduceExtraAnimations) private var reduceExtraAnimations = false
     @State private var animatePieces = false
+
+    private var motionDisabled: Bool { reduceMotion || reduceExtraAnimations }
+    private var shouldAnimate: Bool {
+        !motionDisabled && !ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
 
     var body: some View {
         ZStack {
@@ -138,17 +144,21 @@ private struct ArenaBackgroundView: View {
                     .offset(x: piece.offset.width + motion(piece.drift.width),
                             y: piece.offset.height + motion(piece.drift.height))
                     .blur(radius: piece.blur)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: piece.duration).repeatForever(autoreverses: true).delay(piece.delay), value: animatePieces)
+                    .animation(shouldAnimate ? .easeInOut(duration: piece.duration).repeatForever(autoreverses: true).delay(piece.delay) : nil, value: animatePieces)
             }
         }
-        .onAppear { animatePieces = !reduceMotion }
+        .onAppear { animatePieces = shouldAnimate }
+        .onDisappear { animatePieces = false }
         .onChange(of: reduceMotion) { _, isReduced in
-            animatePieces = !isReduced
+            animatePieces = !(isReduced || reduceExtraAnimations || ProcessInfo.processInfo.isLowPowerModeEnabled)
+        }
+        .onChange(of: reduceExtraAnimations) { _, isReduced in
+            animatePieces = !(isReduced || reduceMotion || ProcessInfo.processInfo.isLowPowerModeEnabled)
         }
     }
 
     private func motion(_ value: CGFloat) -> CGFloat {
-        guard !reduceMotion else { return 0 }
+        guard shouldAnimate else { return 0 }
         return animatePieces ? value : -value
     }
 }

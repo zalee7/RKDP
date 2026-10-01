@@ -97,7 +97,7 @@ enum RankTier: Int, Codable, CaseIterable, Comparable {
     func divisionRangeLabel(for division: RankDivision) -> String {
         let start = divisionStart(for: division)
         if let end = divisionEndExclusive(for: division) {
-            return "\(division.label) \(start)-\(end - 1)"
+            return "\(division.label) \(start) to \(end - 1)"
         }
         return "\(division.label) \(start)+"
     }
@@ -153,7 +153,7 @@ struct BestStat: Codable, Equatable {
     static func from(match result: MatchPlayerResult, mode: GameMode) -> BestStat {
         BestStat(
             time: result.completed ? result.elapsedSeconds : nil,
-            score: mode.isScoreBased ? result.score : nil,
+            score: (mode.isScoreBased || mode == .gridlock) ? result.score : nil,
             moves: result.moveCount > 0 ? result.moveCount : nil,
             progress: result.progress > 0 ? result.progress : nil,
             guesses: mode.isWordle ? result.totalGuesses : nil
@@ -183,9 +183,10 @@ struct BestStat: Codable, Equatable {
     func displayText(for mode: GameMode) -> String {
         switch mode {
         case .gridlock:
-            if let moves { return "\(moves) moves" }
-            if let progress { return "\(Int((progress * 100).rounded()))%" }
             if let time { return formattedTime(time) }
+            if let score { return "\(score) pts" }
+            if let progress { return "\(Int((progress * 100).rounded()))%" }
+            if let moves { return "\(moves) moves" }
         case .wordle:
             if let guesses { return "\(guesses) guesses" }
             if let time { return formattedTime(time) }
@@ -194,7 +195,6 @@ struct BestStat: Codable, Equatable {
         case .anagram, .wordHunt:
             if let score { return "\(score) pts" }
         case .colorLink:
-            if let progress { return "\(Int((progress * 100).rounded()))%" }
             if let time { return formattedTime(time) }
         case .minesweeper:
             if let time { return formattedTime(time) }
@@ -210,6 +210,54 @@ struct BestStat: Codable, Equatable {
     }
 }
 
+// Unlike legacy aggregate bests, these metrics all belong to the same solo run.
+struct SoloPersonalBest: Codable, Equatable {
+    var elapsedSeconds: Int
+    var score: Int?
+    var guesses: Int?
+    var wrongGuesses: Int?
+    var moves: Int?
+
+    init?(result: SoloGameResult) {
+        guard result.completed, result.elapsedSeconds >= 0 else { return nil }
+        if result.mode.isScoreBased && (result.score ?? 0) <= 0 { return nil }
+        if result.mode == .wordle && (result.guesses ?? 0) <= 0 { return nil }
+        if result.mode == .hangman && result.wrongGuesses == nil { return nil }
+        elapsedSeconds = result.elapsedSeconds
+        score = result.score
+        guesses = result.guesses
+        wrongGuesses = result.wrongGuesses
+        moves = result.moves
+    }
+
+    func isBetter(than other: SoloPersonalBest, mode: GameMode) -> Bool {
+        switch mode {
+        case .anagram, .wordHunt:
+            if score != other.score { return (score ?? 0) > (other.score ?? 0) }
+        case .wordle:
+            if guesses != other.guesses { return (guesses ?? Int.max) < (other.guesses ?? Int.max) }
+        case .hangman:
+            if wrongGuesses != other.wrongGuesses { return (wrongGuesses ?? Int.max) < (other.wrongGuesses ?? Int.max) }
+        case .gridlock:
+            if moves != other.moves { return (moves ?? Int.max) < (other.moves ?? Int.max) }
+        case .sudoku, .minesweeper, .colorLink:
+            break
+        }
+        return elapsedSeconds < other.elapsedSeconds
+    }
+
+    func displayText(for mode: GameMode) -> String {
+        let time = "\(elapsedSeconds / 60):\(String(format: "%02d", elapsedSeconds % 60))"
+        switch mode {
+        case .anagram, .wordHunt: return "\(score ?? 0) pts"
+        case .wordle: return "\(guesses ?? 0) guess\((guesses ?? 0) == 1 ? "" : "es") · \(time)"
+        case .hangman: return "\(wrongGuesses ?? 0) wrong · \(time)"
+        case .gridlock: return "\(moves ?? 0) moves · \(time)"
+        default: return time
+        }
+    }
+}
+
 struct RankInfo: Codable {
     var points: Int
     var tier: RankTier
@@ -221,7 +269,20 @@ struct RankInfo: Codable {
     var bestProgress: Double? = nil
     var bestGuesses: Int? = nil
     var soloBest: BestStat? = nil
+    var soloBestsByDifficulty: [String: SoloPersonalBest]? = nil
     var onlineBest: BestStat? = nil
+
+    func soloBest(for difficulty: Difficulty) -> SoloPersonalBest? {
+        soloBestsByDifficulty?[difficulty.rawValue]
+    }
+
+    mutating func recordSoloBest(_ result: SoloGameResult) {
+        guard let candidate = SoloPersonalBest(result: result) else { return }
+        if let current = soloBest(for: result.difficulty), !candidate.isBetter(than: current, mode: result.mode) { return }
+        var records = soloBestsByDifficulty ?? [:]
+        records[result.difficulty.rawValue] = candidate
+        soloBestsByDifficulty = records
+    }
 
     var winRate: Double {
         guard wins + losses > 0 else { return 0 }

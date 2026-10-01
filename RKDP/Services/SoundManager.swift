@@ -2,6 +2,13 @@ import AudioToolbox
 import AVFoundation
 import UIKit
 
+enum AppPreferenceKeys {
+    static let soundEffectsEnabled = "settings.soundEffectsEnabled"
+    static let musicEnabled = "settings.musicEnabled"
+    static let hapticsEnabled = "settings.hapticsEnabled"
+    static let reduceExtraAnimations = "settings.reduceExtraAnimations"
+}
+
 /// Plays bundled audio, system sounds, and haptics for game events.
 @MainActor
 final class SoundManager {
@@ -39,6 +46,7 @@ final class SoundManager {
     }
 
     func playMatchmakingLoop() {
+        guard musicEnabled else { return }
         playLoop(.matchmaking, volume: 0.78)
     }
 
@@ -47,6 +55,7 @@ final class SoundManager {
     }
 
     func playOnlineGameLoop() {
+        guard musicEnabled else { return }
         playLoop(.inOnlineGame, volume: 0.14)
     }
 
@@ -78,13 +87,15 @@ final class SoundManager {
     /// Call whenever a valid word is accepted. Length drives both haptic weight and sound pitch.
     func wordFound(length: Int) {
         // Haptic intensity scales with word length
-        let style: UIImpactFeedbackGenerator.FeedbackStyle
-        switch length {
-        case 3:    style = .light
-        case 4:    style = .medium
-        default:   style = .heavy
+        if hapticsEnabled {
+            let style: UIImpactFeedbackGenerator.FeedbackStyle
+            switch length {
+            case 3:    style = .light
+            case 4:    style = .medium
+            default:   style = .heavy
+            }
+            UIImpactFeedbackGenerator(style: style).impactOccurred()
         }
-        UIImpactFeedbackGenerator(style: style).impactOccurred()
 
         // System sound escalates with length
         //  1104 = SMS received (short click)
@@ -100,7 +111,9 @@ final class SoundManager {
         case 6:    soundID = 1025
         default:   soundID = 1394
         }
-        AudioServicesPlaySystemSound(soundID)
+        if soundEffectsEnabled {
+            AudioServicesPlaySystemSound(soundID)
+        }
 
         // Combo detection
         let now = Date()
@@ -116,21 +129,32 @@ final class SoundManager {
     // MARK: - Invalid / already found
 
     func wordInvalid() {
-        UINotificationFeedbackGenerator().notificationOccurred(.error)
-        AudioServicesPlaySystemSound(1521)
+        if hapticsEnabled {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+        if soundEffectsEnabled {
+            AudioServicesPlaySystemSound(1521)
+        }
     }
 
     // MARK: - Game over
 
     func gameOver() {
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        AudioServicesPlaySystemSound(1025)
+        if hapticsEnabled {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+        if soundEffectsEnabled {
+            AudioServicesPlaySystemSound(1025)
+        }
     }
 
     // MARK: - Combo
 
     private func playCombo(count: Int) {
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        if hapticsEnabled {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+        guard soundEffectsEnabled else { return }
         let reps = min(count, 4)
         for i in 0..<reps {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
@@ -151,6 +175,7 @@ final class SoundManager {
     }
 
     private func playOneShot(_ asset: AudioAsset, volume: Float) {
+        guard soundEffectsEnabled else { return }
         guard let player = player(for: asset, looping: false) else { return }
         player.volume = volume
         player.currentTime = 0
@@ -158,6 +183,7 @@ final class SoundManager {
     }
 
     private func playLoop(_ asset: AudioAsset, volume: Float) {
+        guard musicEnabled else { return }
         guard let player = player(for: asset, looping: true) else { return }
         player.volume = volume
         if !player.isPlaying {
@@ -170,6 +196,18 @@ final class SoundManager {
         guard let player = loopPlayers[asset] else { return }
         player.stop()
         player.currentTime = 0
+    }
+
+    private var soundEffectsEnabled: Bool {
+        UserDefaults.standard.object(forKey: AppPreferenceKeys.soundEffectsEnabled) as? Bool ?? true
+    }
+
+    private var musicEnabled: Bool {
+        UserDefaults.standard.object(forKey: AppPreferenceKeys.musicEnabled) as? Bool ?? true
+    }
+
+    private var hapticsEnabled: Bool {
+        UserDefaults.standard.object(forKey: AppPreferenceKeys.hapticsEnabled) as? Bool ?? true
     }
 
     private func player(for asset: AudioAsset, looping: Bool) -> AVAudioPlayer? {

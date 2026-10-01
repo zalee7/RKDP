@@ -24,10 +24,10 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "Sudoku"
         case .minesweeper: return "Minesweeper"
         case .colorLink:   return "Color Link"
-        case .gridlock:    return "Grid Duel"
+        case .gridlock:    return "Solitaire"
         case .anagram:     return "Anagrams"
         case .wordHunt:    return "Word Hunt"
-        case .wordle:      return "Wordle"
+        case .wordle:      return "Word Guess"
         case .hangman:     return "Lava Rescue"
         }
     }
@@ -41,13 +41,13 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .colorLink:
             return "Connect matching colors with paths that cover the board."
         case .gridlock:
-            return "Slide rows and columns to recreate the target color pattern before your opponent."
+            return "Play classic Klondike Solitaire: build all four foundations from Ace to King."
         case .anagram:
             return "Make the most valid words from the letters. Longer words score more."
         case .wordHunt:
             return "Find as many words as possible before time runs out. Difficulty changes board size only."
         case .wordle:
-            return "Guess the hidden 5-letter word in up to 6 tries. Green = right spot, Yellow = wrong spot."
+            return "Guess the hidden 5-letter word within the guess limit. Green = right spot, Yellow = wrong spot."
         case .hangman:
             return "Use the category and starter letter to rescue the puzzle piece before lava fills the arena."
         }
@@ -58,7 +58,7 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "grid"
         case .minesweeper: return "scope"
         case .colorLink:   return "point.3.connected.trianglepath.dotted"
-        case .gridlock:    return "square.grid.3x3.square"
+        case .gridlock:    return "suit.spade.fill"
         case .anagram:     return "textformat.abc"
         case .wordHunt:    return "magnifyingglass"
         case .wordle:      return "character.cursor.ibeam"
@@ -74,16 +74,35 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
         case .sudoku:      return "Complete the puzzle; progress then time break timeout ties"
         case .minesweeper: return "Avoid mines; clears, safe cells, then time decide"
         case .colorLink:   return "Complete the board; fill, pairs, then time break ties"
-        case .gridlock:    return "Match the target pattern; moves then time break finish ties"
+        case .gridlock:    return "Build all foundations; foundation progress, score, moves, then time decide"
         case .anagram:     return "Timer ends; score, word count, then longest word decide"
         case .wordHunt:    return "Timer ends; score, word count, then longest word decide"
-        case .wordle:      return "Best of 3 shared words; 2 solved rounds clinches"
-        case .hangman:     return "Best of 3 shared rescue words; first to 2 rounds wins"
+        case .wordle:      return "Most words solved, then fewer guesses; equal guesses go to the faster finish"
+        case .hangman:     return "Most words rescued, then fewer wrong letters; time breaks remaining ties"
         }
     }
 
     var defaultDifficulty: Difficulty {
         self == .wordle ? .medium : .easy
+    }
+
+    var onlinePresetDifficulty: Difficulty {
+        switch self {
+        case .sudoku, .minesweeper:
+            return .medium
+        case .colorLink:
+            return .expert
+        case .gridlock:
+            return .easy
+        case .anagram:
+            return .medium
+        case .wordHunt:
+            return .easy
+        case .wordle:
+            return .medium
+        case .hangman:
+            return .medium
+        }
     }
 
     func pointMultiplier(for difficulty: Difficulty) -> Double {
@@ -145,6 +164,27 @@ enum Difficulty: String, Codable, CaseIterable {
 }
 
 extension GameMode {
+    var soloCompletionRequirement: String {
+        switch self {
+        case .sudoku: return "Fill the Sudoku correctly to complete this difficulty."
+        case .minesweeper: return "Reveal every safe cell without hitting a mine."
+        case .colorLink: return "Connect every pair and fill the entire board."
+        case .gridlock: return "Move all 52 cards to the four foundations."
+        case .anagram, .wordHunt: return "Find at least one word and finish the timer."
+        case .wordle: return "Solve the word within the guess limit."
+        case .hangman: return "Rescue the word before the lava reaches the puzzle."
+        }
+    }
+
+    var soloTimingDescription: String {
+        switch self {
+        case .anagram: return "60-second round"
+        case .wordHunt: return "75-second round"
+        case .hangman: return "Untimed"
+        default: return "No time limit"
+        }
+    }
+
     /// Difficulty label customised per mode — Anagram shows letter count instead of Easy/Hard.
     func difficultyLabel(_ d: Difficulty) -> String {
         if self == .anagram {
@@ -179,20 +219,19 @@ extension GameMode {
             case .expert: return "8+ Letters"
             }
         }
+        if self == .gridlock {
+            switch d {
+            case .easy:   return "Draw 1"
+            case .medium: return "Draw 3"
+            case .hard:   return "Draw 3 · 3 Redeals"
+            case .expert: return "Draw 3 · 1 Redeal"
+            }
+        }
         return d.displayName
     }
 
     var rankedDifficulties: [Difficulty] {
-        switch self {
-        case .anagram, .wordHunt, .wordle, .hangman:
-            return Difficulty.allCases
-        case .sudoku, .minesweeper:
-            return [.medium]
-        case .colorLink:
-            return [.expert]
-        case .gridlock:
-            return [.easy, .medium]
-        }
+        [onlinePresetDifficulty]
     }
 
     func rankedLockReason(for difficulty: Difficulty) -> String? {

@@ -51,7 +51,7 @@
 		6A2FE47DF4E01B9BD610AE9A /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE4D7DF30CAD762994D0261 /* LoginView.swift */; };
 		6E9DE5EF9D23F28272162641 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF23F44CB7356563EB3EFF81 /* AppTheme.swift */; };
 		770DEFA767DD2C780E74E66A /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C017E865FFC0818DD6D7536 /* ProfileView.swift */; };
-		7821FB502FC64D73002ADAB7 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 7821FB4F2FC64D73002ADAB7 /* FirebaseMessaging */; };
+		78CC415C2FE85B3000CEDEC8 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 78CC415B2FE85B3000CEDEC8 /* FirebaseMessaging */; };
 		7943090DADBB37F6033AB727 /* word_hunt_valid_words.txt in Resources */ = {isa = PBXBuildFile; fileRef = 17396E39409D426479DDB560 /* word_hunt_valid_words.txt */; };
 		7986FE0A6931BC16D8B9DEF6 /* TournamentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F76169BC37D33C92668E2E /* TournamentService.swift */; };
 		7B70E5C00B399DC18A88A4D3 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497B160B286CACCCA5DD4E32 /* RootView.swift */; };
@@ -199,7 +199,7 @@
 			files = (
 				A84A08BAF0B1FE8493CE0A1A /* FirebaseAnalytics in Frameworks */,
 				B36F98CA23D119F3FA47BC5A /* FirebaseAuth in Frameworks */,
-				7821FB502FC64D73002ADAB7 /* FirebaseMessaging in Frameworks */,
+				78CC415C2FE85B3000CEDEC8 /* FirebaseMessaging in Frameworks */,
 				6383B8D44C15493D05719946 /* FirebaseFirestore in Frameworks */,
 				FEEBB4A18D732806F2927E35 /* FirebaseDatabase in Frameworks */,
 			);
@@ -347,7 +347,7 @@
 			isa = PBXGroup;
 			children = (
 				7415CE88DA14CA28EEF40A00 /* RKDP */,
-				7821FB4E2FC64D73002ADAB7 /* Frameworks */,
+				78CC415A2FE85B3000CEDEC8 /* Frameworks */,
 				9DED48F19EC172AE785BBC05 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -384,7 +384,7 @@
 			path = Minesweeper;
 			sourceTree = "<group>";
 		};
-		7821FB4E2FC64D73002ADAB7 /* Frameworks */ = {
+		78CC415A2FE85B3000CEDEC8 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -604,7 +604,7 @@
 				5E114CE901D164C035260347 /* FirebaseAuth */,
 				1383B0632305826F44720D38 /* FirebaseFirestore */,
 				9A3A33A6B680EF586FC1663E /* FirebaseDatabase */,
-				7821FB4F2FC64D73002ADAB7 /* FirebaseMessaging */,
+				78CC415B2FE85B3000CEDEC8 /* FirebaseMessaging */,
 			);
 			productName = RKDP;
 			productReference = B3E86C12D8148FDFB464C054 /* RKDP.app */;
@@ -759,7 +759,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = D2J77TZ5H3;
 				INFOPLIST_FILE = RKDP/SupportingFiles/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.puzzle-games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -898,7 +897,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = D2J77TZ5H3;
 				INFOPLIST_FILE = RKDP/SupportingFiles/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.puzzle-games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -984,7 +982,7 @@
 			package = 8D53ABE77AE49442F5F11CAB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
 		};
-		7821FB4F2FC64D73002ADAB7 /* FirebaseMessaging */ = {
+		78CC415B2FE85B3000CEDEC8 /* FirebaseMessaging */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 57D957D35D8FDE48A4499E99 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;

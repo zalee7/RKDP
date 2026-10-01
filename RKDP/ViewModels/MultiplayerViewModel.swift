@@ -14,7 +14,6 @@ enum MultiplayerState {
 @MainActor
 final class MultiplayerViewModel: ObservableObject {
     @Published var state: MultiplayerState = .idle
-    @Published var selectedWager: WagerTier?
     @Published var playerResults: [String: MatchPlayerResult] = [:]
     @Published var elapsedSeconds: Int = 0
     @Published var opponentUser: AppUser? = nil
@@ -33,7 +32,8 @@ final class MultiplayerViewModel: ObservableObject {
     private var botResultTask: Task<Void, Never>?
 
     private let store = FirestoreService.shared
-    private let rtdb = RealtimeDBService.shared
+    // Verified matches use Firestore/callables and need no legacy RTDB instance.
+    private lazy var rtdb = RealtimeDBService.shared
     private let ranking = RankingService.shared
 
     // Firestore listeners
@@ -50,6 +50,9 @@ final class MultiplayerViewModel: ObservableObject {
     private var gameTimer: Timer?
     private var activeSearchID: UUID?
     private var isForfeiting = false
+    private var officialSearchTask: Task<Void, Never>?
+    private var officialHeartbeatTask: Task<Void, Never>?
+    private var usesOfficialSearch = false
 
     var user: AppUser?
     var mode: GameMode = .sudoku
@@ -57,16 +60,12 @@ final class MultiplayerViewModel: ObservableObject {
 
     // MARK: - Matchmaking
 
-    func startSearch(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: WagerTier) async {
+    func startSearch(user: AppUser, mode: GameMode, difficulty: Difficulty) async {
         guard mode.rankedDifficulties.contains(difficulty) else {
             state = .error("\(mode.displayName) ranked is only available at \(mode.rankedDifficulties.map { mode.difficultyLabel($0) }.joined(separator: ", ")).")
             return
         }
-        guard user.coins >= wager.amount else {
-            state = .error("Not enough coins for this tier wager.")
-            return
-        }
-        guard user.rankedAccess.canStartRanked(mode: mode) else {
+        guard FirestoreService.serverWalletRolloutEnabled || user.rankedAccess.canStartRanked(mode: mode) else {
             state = .error("No ranked entry is available for this mode today.")
             return
         }
@@ -92,13 +91,16 @@ final class MultiplayerViewModel: ObservableObject {
         self.user = user
         self.mode = mode
         self.difficulty = difficulty
-        self.selectedWager = wager
         playerResults = [:]
         elapsedSeconds = 0
         state = .searching
 
         do {
             // 0. Clear any stale state from a previous attempt before listening.
+            if try await store.usesServerWallet(userID: user.id) {
+                beginOfficialSearch(user: user, mode: mode, kind: .ranked, searchID: searchID)
+                return
+            }
             try? await store.clearPendingSession(userID: user.id)
             try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
             guard isCurrentSearch(searchID) else { return }
@@ -122,14 +124,14 @@ final class MultiplayerViewModel: ObservableObject {
             // 2. Also listen on the queue so that if we're the host we can pair
             //    any opponent who joins after us
             queueListener = store.listenForQueueMatch(
-                user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString
+                user: user, mode: mode, difficulty: difficulty, wager: 0, searchID: searchID.uuidString
             ) { [weak self] sessionID in
                 Task { await self?.consumeMatch(sessionID: sessionID, pendingSearchID: searchID.uuidString, searchID: searchID) }
             }
 
             // 3. Write to queue and try to pair immediately
-            try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: wager.amount, searchID: searchID.uuidString)
-            scheduleBotFallback(user: user, mode: mode, difficulty: difficulty, wager: wager, searchID: searchID)
+            try await store.joinAndPair(user: user, mode: mode, difficulty: difficulty, wager: 0, searchID: searchID.uuidString)
+            scheduleBotFallback(user: user, mode: mode, difficulty: difficulty, searchID: searchID)
 
             if !isCurrentSearch(searchID) {
                 try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
@@ -170,10 +172,13 @@ final class MultiplayerViewModel: ObservableObject {
         self.user = user
         self.mode = mode
         self.difficulty = difficulty
-        self.selectedWager = nil
         state = .searching
 
         do {
+            if try await store.usesServerWallet(userID: user.id) {
+                beginOfficialSearch(user: user, mode: mode, kind: .casual, searchID: searchID)
+                return
+            }
             try? await store.clearPendingSession(userID: user.id)
             try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
             guard isCurrentSearch(searchID) else { return }
@@ -228,7 +233,6 @@ final class MultiplayerViewModel: ObservableObject {
         self.user = user
         self.mode = session.mode
         self.difficulty = session.difficulty
-        self.selectedWager = nil
         playerResults = session.playerResults ?? [:]
         opponentUser = nil
         elapsedSeconds = 0
@@ -252,6 +256,11 @@ final class MultiplayerViewModel: ObservableObject {
             return
         }
         if session.isAsyncExhibition {
+            if session.usesVerifiedSocial {
+                state = .matchFound(session: session)
+                await confirmReady(session: session)
+                return
+            }
             state = .inMatch(session: session)
             listenForResults(session: session)
             listenForSessionStatus(sessionID: session.id)
@@ -265,11 +274,20 @@ final class MultiplayerViewModel: ObservableObject {
 
     func cancelSearch() async {
         guard let user else { return }
+        let cancellingID = activeSearchID
         activeSearchID = nil
         tearDownListeners()
         countdownTask?.cancel()
         countdownTask = nil
         cancelBotTasks()
+        if usesOfficialSearch, let cancellingID {
+            if let reply = try? await store.officialCancel(userID: user.id, requestID: cancellingID.uuidString), let id = reply.sessionID {
+                try? await store.officialAction("forfeit", userID: user.id, sessionID: id)
+            }
+            usesOfficialSearch = false
+            state = .idle
+            return
+        }
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
         try? await store.clearPendingSession(userID: user.id)
         opponentUser = nil
@@ -346,7 +364,23 @@ final class MultiplayerViewModel: ObservableObject {
         sessionListener?.remove()
         sessionListener = store.listenForSession(id: sessionID) { [weak self] session in
             Task { @MainActor in
-                guard let self, session.status == .finished else { return }
+                guard let self else { return }
+                if session.usesVerifiedResults {
+                    if session.status == .abandoned {
+                        self.officialHeartbeatTask?.cancel()
+                        self.state = .error("This match was cancelled or expired. No match coins were awarded.")
+                        return
+                    }
+                    if session.status == .inProgress {
+                        if case .matchFound = self.state {
+                            self.state = .inMatch(session: session)
+                            self.startGameTimer()
+                        }
+                        return
+                    }
+                }
+                guard session.status == .finished else { return }
+                self.officialHeartbeatTask?.cancel()
                 self.gameTimer?.invalidate()
                 if let results = session.playerResults {
                     self.playerResults = self.playerResults.merging(results) { _, sessionResult in sessionResult }
@@ -373,14 +407,32 @@ final class MultiplayerViewModel: ObservableObject {
 
     func submitResult(_ result: MatchPlayerResult, session: GameSession) async {
         guard result.userID == user?.id else { return }
-        if let existing = playerResults[result.userID] {
+        if session.usesVerifiedResults {
+            guard MatchResolver.isFinalResult(result), let evidence = result.rewardEvidenceJSON else { return }
+            guard playerResults[result.userID].map({ MatchResolver.isFinalResult($0) }) != true else { return }
+            playerResults[result.userID] = result
+            let key = officialEvidenceKey(session.id, result.userID)
+            UserDefaults.standard.set(evidence, forKey: key)
+            if let data = try? JSONEncoder().encode(result) { UserDefaults.standard.set(data, forKey: key + "_result") }
+            await retryOfficialSubmission(sessionID: session.id, userID: result.userID)
+            return
+        }
+        if session.isAsyncExhibition {
+            guard MatchResolver.isFinalResult(result) else { return }
+            if let existing = playerResults[result.userID],
+               MatchResolver.isFinalResult(existing) {
+                return
+            }
+        } else if let existing = playerResults[result.userID] {
             switch session.mode {
             case .wordle:
                 guard !existing.isFinalWordleResult,
                       result.wordleRoundCount >= existing.wordleRoundCount else { return }
             case .hangman:
                 guard !MatchResolver.isFinalHangmanResult(existing),
-                      result.hangmanGuessCount >= existing.hangmanGuessCount else { return }
+                      result.wordleRoundCount >= existing.wordleRoundCount else { return }
+                if result.wordleRoundCount == existing.wordleRoundCount,
+                   result.hangmanGuessCount < existing.hangmanGuessCount { return }
             default:
                 return
             }
@@ -391,8 +443,25 @@ final class MultiplayerViewModel: ObservableObject {
             if session.isAsyncExhibition {
                 try? await store.saveAsyncExhibitionResult(sessionID: session.id, result: result)
             }
+            if MatchResolver.isFinalResult(result) {
+                await recordDailyPlayIfNeeded(activityID: "match_\(session.id)_\(result.userID)")
+            }
         } catch {
             state = .error(error.localizedDescription)
+        }
+    }
+
+    private func recordDailyPlayIfNeeded(activityID: String) async {
+        guard let currentUser = user else { return }
+        do {
+            // Migrated ranked/casual settlement includes daily play atomically.
+            // No client-provided activity ID may independently mint a bonus.
+            if try await store.usesServerWallet(userID: currentUser.id) { return }
+            user = try await store.recordDailyPlay(userID: currentUser.id, activityID: activityID)
+        } catch {
+            #if DEBUG
+            print("Daily play record failed: \(error.localizedDescription)")
+            #endif
         }
     }
 
@@ -400,14 +469,6 @@ final class MultiplayerViewModel: ObservableObject {
         let handle = rtdb.listenForResults(sessionID: session.id) { [weak self] results in
             Task { @MainActor in
                 self?.playerResults = results
-                if let self,
-                   session.mode == .wordle,
-                   let bot = session.botPlayer,
-                   results[bot.userID] == nil,
-                   results.values.contains(where: { !$0.userID.hasPrefix(BotMatchService.botIDPrefix) && $0.solvedRounds >= 2 }) {
-                    await self.submitBotResultIfNeeded(session: session, bot: bot, minimumElapsed: self.elapsedSeconds)
-                    return
-                }
                 if MatchResolver.canResolve(session: session, results: results) {
                     await self?.resolveMatch(session: session, results: results)
                 }
@@ -454,6 +515,15 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func forfeitMatch(session: GameSession, resetAfterProcessing: Bool = false) async {
+        if session.usesVerifiedResults, let userID = user?.id {
+            do {
+                try await store.officialAction("forfeit", userID: userID, sessionID: session.id)
+                if resetAfterProcessing { reset() }
+            } catch {
+                rewardErrorMessage = "Could not confirm leaving the match. Reconnect and retry."
+            }
+            return
+        }
         guard !isForfeiting,
               case .inMatch = state,
               let forfeiter = user,
@@ -537,6 +607,7 @@ final class MultiplayerViewModel: ObservableObject {
 
 
     func beginRematchListening(session: GameSession) {
+        guard !session.usesVerifiedResults else { return }
         guard !session.containsBot else { return }
         guard (session.isRanked || session.isExhibition), session.status == .finished else { return }
         if rematchListeningSessionID == session.id { return }
@@ -555,6 +626,10 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func requestRematch(session: GameSession) async {
+        if session.usesVerifiedResults {
+            rematchErrorMessage = "Use Play Again to find your next official match."
+            return
+        }
         guard !session.containsBot else {
             dismissedRematchInviteSessionID = session.id
             rematchErrorMessage = "Training bots do not rematch. Queue again for another match."
@@ -563,11 +638,7 @@ final class MultiplayerViewModel: ObservableObject {
         }
         guard (session.isRanked || session.isExhibition), let user else { return }
         if session.isRanked {
-            guard let player = session.players.first(where: { $0.userID == user.id }) else { return }
-            guard user.coins >= player.wager else {
-                rematchErrorMessage = "Not enough coins for rematch."
-                return
-            }
+            guard session.players.contains(where: { $0.userID == user.id }) else { return }
             guard user.rankedAccess.canStartRanked(mode: session.mode) else {
                 rematchErrorMessage = "No ranked entry is available for this mode today."
                 return
@@ -691,9 +762,6 @@ final class MultiplayerViewModel: ObservableObject {
         rewardSnapshot = nil
         mode = session.mode
         difficulty = session.difficulty
-        if let me = session.players.first(where: { $0.userID == user.id }) {
-            selectedWager = WagerTier(rank: user.rank(for: session.mode).displayTier, label: "Rematch", amount: me.wager)
-        }
         if let opponentID = session.players.first(where: { $0.userID != user.id })?.userID {
             opponentUser = try? await store.fetchUser(id: opponentID)
         }
@@ -710,6 +778,7 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     private func consumeRankedEntryIfNeeded(for session: GameSession) async -> Bool {
+        if session.usesVerifiedResults { return true }
         guard session.isRanked else { return true }
         guard let currentUser = user else { return false }
         do {
@@ -740,7 +809,16 @@ final class MultiplayerViewModel: ObservableObject {
                     didApplyRewards: true
                 )
             } else {
-                rewardSnapshot = PostMatchRewardSnapshot.staticSnapshot(session: session, user: outcome.user)
+                rewardSnapshot = PostMatchRewardSnapshot.staticSnapshot(session: session, user: outcome.user, recordedCoinReward: outcome.coinReward)
+            }
+            if let receipt = outcome.walletReceipt {
+                let total = receipt.matchReward + receipt.dailyCoins
+                // A fresh user snapshot can include another concurrent reward.
+                // Animate only this receipt, never the difference between reads.
+                rewardSnapshot?.coinDelta = total
+                rewardSnapshot?.startingCoins = receipt.balance - total
+                rewardSnapshot?.endingCoins = receipt.balance
+                rewardSnapshot?.rankDelta = receipt.rankDelta
             }
             rewardErrorMessage = nil
         } catch {
@@ -759,7 +837,18 @@ final class MultiplayerViewModel: ObservableObject {
             user = outcome.user
             rewardSnapshot = nil
             rewardErrorMessage = nil
-            if outcome.coinDelta > 0 {
+            if let receipt = outcome.walletReceipt {
+                if receipt.matchReward > 0 {
+                    casualRewardMessage = "+\(receipt.matchReward) casual coins"
+                } else if receipt.reason == "casualLimit" {
+                    casualRewardMessage = "Daily casual coin cap reached"
+                } else {
+                    casualRewardMessage = "No match coins awarded"
+                }
+                if receipt.dailyCoins > 0 {
+                    casualRewardMessage = (casualRewardMessage ?? "") + " · +\(receipt.dailyCoins) daily bonus"
+                }
+            } else if outcome.coinDelta > 0 {
                 casualRewardMessage = "+\(outcome.coinDelta) casual coins"
             } else if outcome.didApplyRewards {
                 casualRewardMessage = "Daily casual coin cap reached"
@@ -780,24 +869,24 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
-    private func scheduleBotFallback(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: WagerTier, searchID: UUID) {
+    private func scheduleBotFallback(user: AppUser, mode: GameMode, difficulty: Difficulty, searchID: UUID) {
         guard BotMatchService.canOfferBot(to: user, mode: mode) else { return }
         botFallbackTask?.cancel()
         let delay = BotMatchService.fallbackDelaySeconds()
         botFallbackTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-            await self?.createBotMatchIfStillSearching(user: user, mode: mode, difficulty: difficulty, wager: wager, searchID: searchID)
+            await self?.createBotMatchIfStillSearching(user: user, mode: mode, difficulty: difficulty, searchID: searchID)
         }
     }
 
-    private func createBotMatchIfStillSearching(user: AppUser, mode: GameMode, difficulty: Difficulty, wager: WagerTier, searchID: UUID) async {
+    private func createBotMatchIfStillSearching(user: AppUser, mode: GameMode, difficulty: Difficulty, searchID: UUID) async {
         guard isCurrentSearch(searchID), case .searching = state else { return }
         do {
             if let sessionID = try await store.createBronzeBotSession(
                 user: user,
                 mode: mode,
                 difficulty: difficulty,
-                wager: wager.amount,
+                wager: 0,
                 searchID: searchID.uuidString
             ) {
                 await consumeMatch(sessionID: sessionID, pendingSearchID: searchID.uuidString, searchID: searchID)
@@ -842,6 +931,10 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     private func tearDownListeners() {
+        officialSearchTask?.cancel()
+        officialSearchTask = nil
+        officialHeartbeatTask?.cancel()
+        officialHeartbeatTask = nil
         userDocListener?.remove()
         userDocListener = nil
         queueListener?.remove()
@@ -898,7 +991,6 @@ final class MultiplayerViewModel: ObservableObject {
         elapsedSeconds = 0
         playerResults = [:]
         opponentUser = nil
-        selectedWager = nil
         finishedSessionID = nil
         rewardErrorMessage = nil
         rewardSnapshot = nil
@@ -909,12 +1001,29 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func handleViewDisappeared() {
-        if case .inMatch(let session) = state, session.isAsyncExhibition {
+        if case .inMatch(let session) = state, session.isExhibition, hasSubmittedLocalTurn(in: session) {
+            reset()
+        } else if case .inMatch(let session) = state, session.isAsyncExhibition {
             reset()
         } else if case .inMatch(let session) = state, finishedSessionID == nil, !isForfeiting {
             Task { await forfeitMatch(session: session, resetAfterProcessing: true) }
         } else {
             reset()
+        }
+    }
+
+    private func hasSubmittedLocalTurn(in session: GameSession) -> Bool {
+        guard let user, let result = playerResults[user.id] else { return false }
+        if session.isAsyncExhibition {
+            return MatchResolver.isFinalResult(result)
+        }
+        switch session.mode {
+        case .wordle:
+            return result.isFinalWordleResult
+        case .hangman:
+            return MatchResolver.isFinalHangmanResult(result)
+        default:
+            return true
         }
     }
 
@@ -941,6 +1050,30 @@ final class MultiplayerViewModel: ObservableObject {
     func confirmReady(session: GameSession) async {
         guard let userID = user?.id, !userID.isEmpty else { return }
         do {
+            if session.usesVerifiedResults {
+                currentSessionID = session.id
+                let key = officialEvidenceKey(session.id, userID)
+                if let data = UserDefaults.standard.data(forKey: key + "_result"),
+                   let result = try? JSONDecoder().decode(MatchPlayerResult.self, from: data) {
+                    playerResults[userID] = result
+                }
+                let reply = try await store.officialAction("ready", userID: userID, sessionID: session.id)
+                acceptOfficialReply(reply, sessionID: session.id, userID: userID)
+                listenForSessionStatus(sessionID: session.id)
+                readySessionIDs.insert(session.id)
+                officialHeartbeatTask?.cancel()
+                officialHeartbeatTask = Task { [weak self] in
+                    while !Task.isCancelled {
+                        guard let self else { return }
+                        await self.retryOfficialSubmission(sessionID: session.id, userID: userID)
+                        if let reply = try? await self.store.officialAction("tick", userID: userID, sessionID: session.id) {
+                            self.acceptOfficialReply(reply, sessionID: session.id, userID: userID)
+                        }
+                        do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+                    }
+                }
+                return
+            }
             try await rtdb.markReady(sessionID: session.id, userID: userID)
             readySessionIDs.insert(session.id)
             if let bot = session.botPlayer {
@@ -953,12 +1086,78 @@ final class MultiplayerViewModel: ObservableObject {
     }
 
     func abortMatchFound(session: GameSession) async {
+        if session.usesVerifiedResults, let userID = user?.id {
+            try? await store.officialAction("forfeit", userID: userID, sessionID: session.id)
+        }
         countdownTask?.cancel()
         countdownTask = nil
-        if session.isRanked, let userID = user?.id {
-            try? await store.updateCoins(userID: userID, delta: -1)
-        }
         reset()
+    }
+
+    private func beginOfficialSearch(user: AppUser, mode: GameMode, kind: SessionKind, searchID: UUID) {
+        usesOfficialSearch = true
+        officialSearchTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.isCurrentSearch(searchID) else { return }
+                do {
+                    let reply = try await self.store.officialQueue(userID: user.id, mode: mode, kind: kind, requestID: searchID.uuidString)
+                    guard self.isCurrentSearch(searchID) else {
+                        let cancelled = try await self.store.officialCancel(userID: user.id, requestID: searchID.uuidString)
+                        if let id = cancelled.sessionID { try await self.store.officialAction("forfeit", userID: user.id, sessionID: id) }
+                        return
+                    }
+                    if let id = reply.sessionID {
+                        let session = try await self.store.fetchSession(id: id)
+                        // Resume an existing official match even when the player
+                        // reopened matchmaking from a different mode's lobby.
+                        self.mode = session.mode
+                        self.difficulty = session.difficulty
+                        if session.status == .finished {
+                            self.state = .finished(session: session)
+                            if session.isRanked { await self.applyFinishedRewards(session) }
+                            else { await self.applyFinishedCasualRewards(session) }
+                        } else {
+                            await self.enterFoundMatch(session, searchID: searchID)
+                        }
+                        return
+                    }
+                    try await Task.sleep(nanoseconds: 3_000_000_000)
+                } catch {
+                    if Task.isCancelled { return }
+                    self.state = .error(error.localizedDescription)
+                    return
+                }
+            }
+        }
+    }
+
+    private func officialEvidenceKey(_ sessionID: String, _ userID: String) -> String {
+        "officialMatchEvidence_\(userID)_\(sessionID)"
+    }
+
+    private func retryOfficialSubmission(sessionID: String, userID: String) async {
+        let key = officialEvidenceKey(sessionID, userID)
+        guard let evidence = UserDefaults.standard.string(forKey: key) else { return }
+        do {
+            let reply = try await store.officialAction("submit", userID: userID, sessionID: sessionID, evidenceJSON: evidence)
+            acceptOfficialReply(reply, sessionID: sessionID, userID: userID)
+            if reply.status == "finished" || reply.status == "abandoned" {
+                UserDefaults.standard.removeObject(forKey: key)
+                UserDefaults.standard.removeObject(forKey: key + "_result")
+            }
+            rewardErrorMessage = nil
+        } catch {
+            rewardErrorMessage = "Submission saved on this device. Retrying when connected."
+        }
+    }
+
+    private func acceptOfficialReply(_ reply: FirestoreService.OfficialMatchReply, sessionID: String, userID: String) {
+        guard let result = reply.ownResult, result.userID == userID else { return }
+        let key = officialEvidenceKey(sessionID, userID)
+        UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: key + "_result")
+        guard currentSessionID == sessionID else { return }
+        playerResults[userID] = result
     }
 }
 
@@ -979,12 +1178,12 @@ enum MatchResolver {
             }
         }
         if session.mode == .wordle {
-            if hasClinchedWordleResult(results) { return true }
-            return results.count >= session.players.count && results.values.allSatisfy(\.isFinalWordleResult)
+            return session.players.allSatisfy { results[$0.userID]?.isFinalWordleResult == true }
         }
         if session.mode == .hangman {
-            if hasClinchedHangmanResult(results) { return true }
-            return results.count >= session.players.count && results.values.allSatisfy { isFinalHangmanResult($0) }
+            return session.players.allSatisfy { player in
+                results[player.userID].map { isFinalHangmanResult($0) } ?? false
+            }
         }
         if hasClinchedTargetResult(session: session, results: results) {
             return true
@@ -994,12 +1193,6 @@ enum MatchResolver {
 
     static func resolve(session: GameSession, results: [String: MatchPlayerResult]) -> MatchResolution {
         let ordered = session.players.compactMap { results[$0.userID] }
-        if !session.isParty, !session.isAsyncExhibition, session.mode == .wordle, ordered.count == 1, let resolution = resolveClinchedWordle(ordered[0]) {
-            return resolution
-        }
-        if !session.isParty, !session.isAsyncExhibition, session.mode == .hangman, ordered.count == 1, let resolution = resolveClinchedHangman(ordered[0]) {
-            return resolution
-        }
         if !session.isParty, !session.isAsyncExhibition, ordered.count == 1, let resolution = resolveClinchedTarget(session: session, result: ordered[0]) {
             return resolution
         }
@@ -1011,17 +1204,23 @@ enum MatchResolver {
 
         switch session.mode {
         case .wordle:
+            guard a.isFinalWordleResult && b.isFinalWordleResult else {
+                return MatchResolution(winnerID: nil, reason: "Waiting for both players")
+            }
             return compareWordle(a, b)
         case .anagram:
             return compareWordScore(a, b, label: "Anagrams")
         case .wordHunt:
             return compareWordScore(a, b, label: "Word Hunt")
         case .hangman:
+            guard isFinalHangmanResult(a) && isFinalHangmanResult(b) else {
+                return MatchResolution(winnerID: nil, reason: "Waiting for both players")
+            }
             return compareHangman(a, b)
         case .sudoku:
             return compareCompletion(a, b)
         case .gridlock:
-            return compareGridlock(a, b)
+            return compareSolitaire(a, b)
         case .colorLink:
             return compareColorLink(a, b)
         case .minesweeper:
@@ -1029,7 +1228,7 @@ enum MatchResolver {
         }
     }
 
-    private static func isFinalResult(_ result: MatchPlayerResult) -> Bool {
+    static func isFinalResult(_ result: MatchPlayerResult) -> Bool {
         switch result.mode {
         case .wordle:
             return result.isFinalWordleResult
@@ -1040,25 +1239,21 @@ enum MatchResolver {
         }
     }
 
-    private static func hasClinchedWordleResult(_ results: [String: MatchPlayerResult]) -> Bool {
-        results.values.contains { $0.mode == .wordle && $0.solvedRounds >= 2 }
-    }
-
-    private static func resolveClinchedWordle(_ result: MatchPlayerResult) -> MatchResolution? {
-        guard result.solvedRounds >= 2 else { return nil }
-        return MatchResolution(winnerID: result.userID, reason: "Won \(result.solvedRounds) Wordles")
-    }
-
     private static func compareWordle(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
         if a.solvedRounds != b.solvedRounds {
             let winner = a.solvedRounds > b.solvedRounds ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Won \(winner.solvedRounds) Wordles")
+            return MatchResolution(winnerID: winner.userID, reason: "Solved more Word Guess words")
         }
+        guard a.solvedRounds > 0 else { return MatchResolution(winnerID: nil, reason: "Neither player solved a word") }
         if a.totalGuesses != b.totalGuesses {
             let winner = a.totalGuesses < b.totalGuesses ? a : b
             return MatchResolution(winnerID: winner.userID, reason: "Solved in fewer guesses")
         }
-        return compareElapsed(a, b, fallback: "Same Wordle result")
+        if a.elapsedSeconds != b.elapsedSeconds {
+            return MatchResolution(winnerID: a.elapsedSeconds < b.elapsedSeconds ? a.userID : b.userID,
+                                   reason: "Same guesses; faster finish")
+        }
+        return MatchResolution(winnerID: nil, reason: "Same solves, guesses, and time")
     }
 
     private static func compareWordScore(_ a: MatchPlayerResult, _ b: MatchPlayerResult, label: String) -> MatchResolution {
@@ -1077,10 +1272,6 @@ enum MatchResolver {
         return MatchResolution(winnerID: nil, reason: "Same score and word count")
     }
 
-    private static func hasClinchedHangmanResult(_ results: [String: MatchPlayerResult]) -> Bool {
-        results.values.contains { $0.mode == .hangman && $0.solvedRounds >= 2 }
-    }
-
     private static func hasClinchedTargetResult(session: GameSession, results: [String: MatchPlayerResult]) -> Bool {
         results.values.contains { resolveClinchedTarget(session: session, result: $0) != nil }
     }
@@ -1091,7 +1282,7 @@ enum MatchResolver {
         case .sudoku:
             return MatchResolution(winnerID: result.userID, reason: "Completed the puzzle")
         case .gridlock:
-            return MatchResolution(winnerID: result.userID, reason: "Matched the Grid Duel target")
+            return MatchResolution(winnerID: result.userID, reason: "Cleared Solitaire")
         case .colorLink:
             return MatchResolution(winnerID: result.userID, reason: "Filled the Color Link board")
         case .minesweeper:
@@ -1101,22 +1292,17 @@ enum MatchResolver {
         }
     }
 
-    private static func resolveClinchedHangman(_ result: MatchPlayerResult) -> MatchResolution? {
-        guard result.solvedRounds >= 2 else { return nil }
-        return MatchResolution(winnerID: result.userID, reason: "Won \(result.solvedRounds) Lava Rescue rounds")
-    }
-
     static func isFinalHangmanResult(_ result: MatchPlayerResult) -> Bool {
+        if let final = result.summary["final"] { return final == "true" }
         if result.solvedRounds >= 2 { return true }
         if let totalRounds = Int(result.summary["totalRounds"] ?? ""), result.wordleRoundCount >= totalRounds { return true }
-        if let final = result.summary["final"] { return final == "true" }
         return result.completed || result.status != "In progress"
     }
 
     private static func compareHangman(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
         if a.solvedRounds != b.solvedRounds {
             let winner = a.solvedRounds > b.solvedRounds ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Won \(winner.solvedRounds) Lava Rescue rounds")
+            return MatchResolution(winnerID: winner.userID, reason: "Rescued more words")
         }
         if a.completed != b.completed {
             let winner = a.completed ? a : b
@@ -1129,10 +1315,6 @@ enum MatchResolver {
         if a.revealedLetterCount != b.revealedLetterCount {
             let winner = a.revealedLetterCount > b.revealedLetterCount ? a : b
             return MatchResolution(winnerID: winner.userID, reason: "Revealed more letters")
-        }
-        if a.wrongGuessCount != b.wrongGuessCount {
-            let winner = a.wrongGuessCount < b.wrongGuessCount ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Had fewer wrong letters")
         }
         return compareElapsed(a, b, fallback: "Same Lava Rescue progress")
     }
@@ -1152,27 +1334,35 @@ enum MatchResolver {
         return compareElapsed(a, b, fallback: "Same puzzle progress")
     }
 
-    private static func compareGridlock(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
+    private static func compareSolitaire(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {
         if a.completed != b.completed {
             let winner = a.completed ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Matched the Grid Duel target")
+            return MatchResolution(winnerID: winner.userID, reason: "Cleared Solitaire")
         }
         if a.completed && b.completed {
             if a.moveCount != b.moveCount {
                 let winner = a.moveCount < b.moveCount ? a : b
                 return MatchResolution(winnerID: winner.userID, reason: "Solved in fewer moves")
             }
-            return compareElapsed(a, b, fallback: "Same Grid Duel result")
+            return compareElapsed(a, b, fallback: "Same Solitaire clear")
+        }
+        if a.foundationCount != b.foundationCount {
+            let winner = a.foundationCount > b.foundationCount ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Moved more cards to foundations")
+        }
+        if a.score != b.score {
+            let winner = a.score > b.score ? a : b
+            return MatchResolution(winnerID: winner.userID, reason: "Higher Solitaire score")
         }
         if a.progress != b.progress {
             let winner = a.progress > b.progress ? a : b
-            return MatchResolution(winnerID: winner.userID, reason: "Higher pattern-match progress")
+            return MatchResolution(winnerID: winner.userID, reason: "Higher foundation progress")
         }
         if a.moveCount != b.moveCount {
             let winner = a.moveCount < b.moveCount ? a : b
             return MatchResolution(winnerID: winner.userID, reason: "Used fewer moves")
         }
-        return compareElapsed(a, b, fallback: "Same Grid Duel pattern progress")
+        return compareElapsed(a, b, fallback: "Same Solitaire progress")
     }
 
     private static func compareColorLink(_ a: MatchPlayerResult, _ b: MatchPlayerResult) -> MatchResolution {

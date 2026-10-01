@@ -67,3 +67,17 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Local development state and generated builds
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.agents/
+skills-lock.json
+
+# Local credentials and environment overrides
+.env.*
+*.p8
+*.p12
+*.mobileprovision

@@ -19,6 +19,7 @@ final class WordHuntViewModel: ObservableObject {
     private let priorBest: Int?
 
     private var timer: AnyCancellable?
+    private var feedbackTask: Task<Void, Never>?
 
     enum WordResult: Equatable {
         case valid(String, Int)
@@ -55,13 +56,15 @@ final class WordHuntViewModel: ObservableObject {
     // MARK: - Path tracing
 
     func startPath(row: Int, col: Int) {
+        guard !isFinished, (0..<game.size).contains(row), (0..<game.size).contains(col) else { return }
         SoundManager.shared.keyboardPress()
         currentPath = [(row, col)]
         currentWord = String(game.grid[row][col])
     }
 
     func extendPath(row: Int, col: Int) {
-        guard !currentPath.isEmpty else { return }
+        guard !isFinished, !currentPath.isEmpty,
+              (0..<game.size).contains(row), (0..<game.size).contains(col) else { return }
 
         guard !currentPath.contains(where: { $0.row == row && $0.col == col }) else { return }
 
@@ -79,7 +82,7 @@ final class WordHuntViewModel: ObservableObject {
             currentPath = []
             currentWord = ""
         }
-        guard word.count >= 3 else { return }
+        guard !isFinished, word.count >= 3 else { return }
 
         if foundWords.contains(word) {
             lastWordResult = .alreadyFound
@@ -95,9 +98,10 @@ final class WordHuntViewModel: ObservableObject {
             SoundManager.shared.wordInvalid()
         }
 
-        Task {
-            try? await Task.sleep(nanoseconds: 800_000_000)
-            lastWordResult = nil
+        feedbackTask?.cancel()
+        feedbackTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 800_000_000) } catch { return }
+            self?.lastWordResult = nil
         }
     }
 
@@ -123,6 +127,7 @@ final class WordHuntViewModel: ObservableObject {
                 guard let self else { return }
                 self.elapsedSeconds += 1
                 if self.elapsedSeconds >= self.totalSeconds {
+                    self.cancelPath()
                     self.isFinished = true
                     self.timer?.cancel()
                     SoundManager.shared.gameOver()
@@ -137,7 +142,10 @@ final class WordHuntViewModel: ObservableObject {
         Task { try? await FirestoreService.shared.updateBestScore(userID: uid, mode: .wordHunt, score: score) }
     }
 
-    func stop() { timer?.cancel() }
+    func stop() {
+        timer?.cancel()
+        feedbackTask?.cancel()
+    }
 
     var sortedFoundWords: [String] {
         foundWords.sorted { WordHuntGame.score(for: $0) > WordHuntGame.score(for: $1) }

@@ -1,0 +1,36 @@
+{
+  "score": 2,
+  "summary": "Reserved server social projections deny all client writes; private issuance, clocks, evidence and wallet receipts remain Admin-only. Rules compiled in a test-project dry run. The whole project remains prototype/beta because legacy documents still allow broad access. Static checks below are not emulator authorization results.",
+  "findings": [
+    {
+      "check": "Authority, create/update/delete bypass and field identity",
+      "severity": "minor",
+      "issue": "sv1_ session/invite IDs and S1 party IDs cannot be created, updated or deleted by any client. The immutable path prefix cannot be removed by changing fields. There is no overlapping recursive allow. A forged legacy document cannot create the private canonical record or pass callable membership checks.",
+      "recommendation": "Exercise owner, guest, outsider, anonymous, unauthenticated, batched-write, field-deletion and forged-prefix cases in the emulator before activation."
+    },
+    {
+      "check": "Read/query compatibility",
+      "severity": "minor",
+      "issue": "Verified sessions use participant-array reads or a winning-user query; invites use fromID/toID queries; party documents require membership. A new party guest must join via the callable before get/listen. Canonical puzzle and private subcollection reads are denied. Queries for another player's full match history are intentionally not authorized by the participant rule.",
+      "recommendation": "Run actual query authorization tests alongside direct document tests. Confirm lobby leave removes read access without breaking dismissal."
+    },
+    {
+      "check": "Legacy social graph and result documents",
+      "severity": "major",
+      "issue": "Nonreserved sessions/parties, friendships and party invites retain broad beta permissions. They are not reward authority, but can still be forged or abused for social data/notifications.",
+      "recommendation": "Migrate friendship consent and notification invitation authority and retire legacy write rules before public launch."
+    },
+    {
+      "check": "Mixed public/private user data",
+      "severity": "moderate",
+      "issue": "Existing users rules allow signed-in reads of account documents that may include email. This pre-existing privacy issue is outside this reward slice.",
+      "recommendation": "Split safe public profiles from private account data before broad release."
+    },
+    {
+      "check": "Storage, type validation and abuse",
+      "severity": "moderate",
+      "issue": "Server actions bound players, rounds, proof size, modes and difficulties; private clocks and receipt IDs prevent replay income. Max function instances and a creation cooldown are not full per-account rate limits. Deterministic puzzles and valid proofs cannot distinguish solvers or colluding users.",
+      "recommendation": "Add App Check, request budgets, operational cleanup and anomaly monitoring. Run real optimistic-concurrency tests; the in-memory double does not prove production race behavior."
+    }
+  ]
+}

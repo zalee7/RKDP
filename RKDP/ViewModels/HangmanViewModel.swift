@@ -13,6 +13,7 @@ struct HangmanRoundResult {
     let maxWrongGuesses: Int
     let elapsedSeconds: Int
     let solved: Bool
+    let guessHistory: String
 }
 
 @MainActor
@@ -29,6 +30,8 @@ final class HangmanViewModel: ObservableObject {
     let totalRounds: Int
     private let puzzles: [HangmanPuzzle]
     private let maxWrongGuesses: Int
+    private(set) var rewardGuessHistory = ""
+    private var currentRoundGuessHistory = ""
     private var timer: AnyCancellable?
 
     init(difficulty: Difficulty, userID: String? = nil, priorBest: Int? = nil, seed: Int? = nil, puzzleData: HangmanPuzzleData? = nil, timed: Bool = false) {
@@ -45,7 +48,7 @@ final class HangmanViewModel: ObservableObject {
             maxWrongGuesses: maxWrongGuesses,
             starterLetter: puzzle.starterLetter
         )
-        if timed { startTimer() }
+        startTimer()
     }
 
     var timeRemaining: Int? {
@@ -70,6 +73,8 @@ final class HangmanViewModel: ObservableObject {
             clearMessageSoon()
             return false
         }
+        rewardGuessHistory.append(letter)
+        currentRoundGuessHistory.append(letter)
         SoundManager.shared.keyboardPress()
         if game.isSolved {
             finishRound(message: "Puzzle rescued!")
@@ -148,7 +153,8 @@ final class HangmanViewModel: ObservableObject {
             details: snapshots.enumerated().map { index, round in
                 let result = round.solved ? "rescued" : "missed"
                 return "Round \(index + 1): \(round.category) · \(round.targetWord) · \(result) · \(round.wrongGuessCount) wrong"
-            }
+            },
+            rewardEvidenceJSON: SoloCoinRewards.evidence(["rounds": snapshots.map(\.guessHistory)])
         )
     }
 
@@ -198,6 +204,7 @@ final class HangmanViewModel: ObservableObject {
     }
 
     private func loadNextRound() {
+        currentRoundGuessHistory = ""
         currentRound = min(currentRound + 1, totalRounds - 1)
         let puzzle = puzzles[currentRound]
         game = HangmanGame(
@@ -220,7 +227,8 @@ final class HangmanViewModel: ObservableObject {
             revealedUniqueCount: game.revealedUniqueCount,
             maxWrongGuesses: game.maxWrongGuesses,
             elapsedSeconds: elapsedSeconds,
-            solved: game.isSolved
+            solved: game.isSolved,
+            guessHistory: currentRoundGuessHistory
         )
     }
 

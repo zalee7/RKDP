@@ -58,7 +58,7 @@ struct WordleView: View {
         let generated = (0..<rounds).map { WordleGame.targetWord(seed: baseSeed, round: $0) }
         let targets = Array((decoded + generated).prefix(rounds))
         if decoded.count < rounds {
-            print("Puzzle data warning: repaired Wordle targets from shared seed")
+            print("Puzzle data warning: repaired Word Guess targets from shared seed")
         }
         return targets
     }
@@ -72,9 +72,6 @@ struct WordleView: View {
                     .padding(.horizontal)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
-
-                messageBanner
-                    .frame(height: 32)
 
                 if vm.totalRounds > 1 {
                     roundDots
@@ -92,7 +89,19 @@ struct WordleView: View {
                     .padding(.bottom, 24)
             }
 
-            if vm.isMatchOver && sessionID == nil { finishedOverlay }
+            VStack {
+                messageBanner
+                    .padding(.top, 60)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .allowsHitTesting(false)
+            .zIndex(1)
+
+            if vm.isMatchOver && sessionID == nil {
+                finishedOverlay
+                    .zIndex(2)
+            }
         }
         .navigationBarBackButtonHidden()
         .onDisappear { vm.stop() }
@@ -122,7 +131,7 @@ struct WordleView: View {
                     .foregroundStyle(AppTheme.textPrimary)
             }
             Spacer()
-            Text("Wordle")
+            Text("Word Guess")
                 .font(.headline.bold())
                 .foregroundStyle(AppTheme.textPrimary)
             Spacer()
@@ -294,8 +303,28 @@ struct WordleView: View {
                 SoloResultStat(label: "Time", value: formattedTime(vm.elapsedSeconds)),
                 SoloResultStat(label: "Word", value: round.targetWord),
                 SoloResultStat(label: "Result", value: round.solved ? "Solved" : "Failed")
-            ]
+            ],
+            details: [
+                round.solved ? "Solved on guess \(round.guessCount)." : "Used all \(vm.maxGuesses) guesses.",
+                "Correct positions are exact matches; close letters are in the word but misplaced."
+            ],
+            sections: [
+                SoloResultSection(
+                    title: "Guess Breakdown",
+                    items: round.guesses.enumerated().map { index, guess in
+                        "G\(index + 1) \(guess.word): \(wordleGuessSummary(guess))"
+                    }
+                )
+            ],
+            rewardEvidenceJSON: SoloCoinRewards.evidence(["guesses": round.guesses.map(\.word)])
         )
+    }
+
+    private func wordleGuessSummary(_ guess: WordleGuess) -> String {
+        let correct = guess.result.filter { $0 == .correct }.count
+        let present = guess.result.filter { $0 == .present }.count
+        let absent = guess.result.filter { $0 == .absent }.count
+        return "\(correct) right, \(present) close, \(absent) out"
     }
 
     private func reportSoloResult() {
@@ -335,9 +364,6 @@ struct WordleView: View {
             "maxGuesses": "\(vm.maxGuesses)",
             "isFinal": isFinal ? "true" : "false"
         ]
-        if hasCurrentPartial {
-            summary["notFinishedBeforeClinch"] = "true"
-        }
         for (idx, result) in rounds.enumerated() {
             let round = idx + 1
             summary["round\(round)Target"] = result.targetWord
@@ -371,7 +397,8 @@ struct WordleView: View {
                     return "Round \(idx + 1): \(result.targetWord) in \(result.guessCount)"
                 }
                 return "Round \(idx + 1): \(result.targetWord) failed"
-            }
+            },
+            rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence(["rounds": rounds.map { $0.guesses.map(\.word) }]) : nil
         ))
     }
 
@@ -424,7 +451,7 @@ struct WordleTileView: View {
         let generated = (0..<rounds).map { WordleGame.targetWord(seed: baseSeed, round: $0) }
         let targets = Array((decoded + generated).prefix(rounds))
         if decoded.count < rounds {
-            print("Puzzle data warning: repaired Wordle targets from shared seed")
+            print("Puzzle data warning: repaired Word Guess targets from shared seed")
         }
         return targets
     }
@@ -509,7 +536,7 @@ private struct KeyButton: View {
         let generated = (0..<rounds).map { WordleGame.targetWord(seed: baseSeed, round: $0) }
         let targets = Array((decoded + generated).prefix(rounds))
         if decoded.count < rounds {
-            print("Puzzle data warning: repaired Wordle targets from shared seed")
+            print("Puzzle data warning: repaired Word Guess targets from shared seed")
         }
         return targets
     }

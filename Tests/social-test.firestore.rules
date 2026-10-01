@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Isolated social harness only. An operator prepares accounts/friendships;
+    // callables own all match transitions, results and shared-wallet changes.
+    // socialTestProfiles contains display-only copies, never account emails.
+    function owner(uid) { return request.auth != null && request.auth.uid == uid; }
+    function tester() {
+      return request.auth != null &&
+        request.auth.uid in get(/databases/$(database)/documents/economyPrivate/control).data.socialTestUIDs;
+    }
+    function participant() { return tester() && request.auth.uid in resource.data.playerIDs; }
+    function recipient() {
+      return tester() && (request.auth.uid == resource.data.fromID || request.auth.uid == resource.data.toID);
+    }
+    match /users/{uid} { allow get: if owner(uid); }
+    match /coinWallets/{uid} { allow get: if owner(uid); }
+    match /socialTestProfiles/{uid} { allow get: if tester(); }
+    match /friendships/{id} { allow read: if tester() && request.auth.uid in resource.data.userIDs; }
+    match /friendRequests/{id} { allow read: if recipient(); }
+    match /exhibitionInvites/{id} { allow read: if recipient(); }
+    match /partyInvites/{id} { allow read: if recipient(); }
+    match /sessions/{id} { allow read: if participant(); }
+    match /serverMatches/{id} { allow read: if participant(); }
+    match /partyRooms/{id} { allow read: if participant(); }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

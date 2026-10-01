@@ -1,0 +1,6 @@
+{
+  "score": 5,
+  "summary": "Restricted test-harness rules, not production rollout rules. Operator-owned allowlist; all client writes denied. Own account and wallet get only. Display-only profile copies omit email. Friend and match queries require membership or sender/recipient filters. Test harness provisions friendships; client friend management and other app areas are intentionally excluded.",
+  "findings": [],
+  "validationScope": "Static review covers create/update/delete bypasses, forged identities, required fields, role escalation, replay, oversized writes and type corruption: all writes denied regardless of payload. Private catalog, receipts and control have no client read grant. October 1: compiled and deployed on puzzlepartytest only; 53 live combined callable/rules checks passed, including direct-write denial, owner/outsider access and actual membership queries. Disposable fixtures cleaned up. No emulator or production certification; signed-in two-client UI checks remain pending."
+}

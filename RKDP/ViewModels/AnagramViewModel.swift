@@ -18,6 +18,7 @@ final class AnagramViewModel: ObservableObject {
     private let userID: String?
     private let priorBest: Int?
     private var timer: AnyCancellable?
+    private var feedbackTask: Task<Void, Never>?
 
     enum SubmitResult: Equatable {
         case valid(String, Int)
@@ -43,26 +44,28 @@ final class AnagramViewModel: ObservableObject {
     // MARK: - Tile actions
 
     func pickFromBank(id: Int) {
-        guard let idx = bank.firstIndex(where: { $0.id == id }) else { return }
+        guard !isFinished, let idx = bank.firstIndex(where: { $0.id == id }) else { return }
         SoundManager.shared.keyboardPress()
         let tile = bank.remove(at: idx)
         placed.append(tile)
     }
 
     func returnToBank(id: Int) {
-        guard let idx = placed.firstIndex(where: { $0.id == id }) else { return }
+        guard !isFinished, let idx = placed.firstIndex(where: { $0.id == id }) else { return }
         SoundManager.shared.keyboardPress()
         let tile = placed.remove(at: idx)
         bank.append(tile)
     }
 
     func clearPlaced() {
+        guard !isFinished else { return }
         if !placed.isEmpty { SoundManager.shared.keyboardPress() }
         bank.append(contentsOf: placed)
         placed = []
     }
 
     func shuffleBank() {
+        guard !isFinished else { return }
         SoundManager.shared.keyboardPress()
         bank.shuffle()
     }
@@ -70,13 +73,15 @@ final class AnagramViewModel: ObservableObject {
     // MARK: - Submit current word
 
     func submit() {
+        guard !isFinished else { return }
         let word = String(placed.map(\.letter)).uppercased()
 
         defer {
             clearPlaced()
-            Task {
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                lastResult = nil
+            feedbackTask?.cancel()
+            feedbackTask = Task { [weak self] in
+                do { try await Task.sleep(nanoseconds: 900_000_000) } catch { return }
+                self?.lastResult = nil
             }
         }
 
@@ -132,7 +137,10 @@ final class AnagramViewModel: ObservableObject {
         Task { try? await FirestoreService.shared.updateBestScore(userID: uid, mode: .anagram, score: score) }
     }
 
-    func stop() { timer?.cancel() }
+    func stop() {
+        timer?.cancel()
+        feedbackTask?.cancel()
+    }
 
     var sortedFoundWords: [String] {
         foundWords.sorted { AnagramGame.score(for: $0) > AnagramGame.score(for: $1) }

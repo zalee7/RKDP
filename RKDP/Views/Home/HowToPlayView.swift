@@ -74,17 +74,19 @@ struct HowToPlayView: View {
                 }
                 .padding(.horizontal)
 
-                // Difficulty breakdown
+                // Difficulty choices belong to solo, not online matchmaking.
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Difficulties")
+                    Text("Solo Difficulties")
                         .font(.headline)
                         .foregroundStyle(AppTheme.modeAccent(mode))
+                    Text("Choose your challenge in solo play. Ranked and casual matchmaking use fixed rules for each game, with no difficulty selection.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.textSecondary)
                     ForEach(Difficulty.allCases, id: \.self) { d in
-                        HStack {
-                            Text(mode.difficultyLabel(d)).font(.subheadline.bold()).foregroundStyle(AppTheme.textPrimary)
-                            Spacer()
-                            Text("\(String(format: "%.1f", mode.pointMultiplier(for: d)))x ranked points").font(.caption).foregroundStyle(AppTheme.textMuted)
-                        }
+                        Text(mode.difficultyLabel(d))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(AppTheme.controlBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -161,19 +163,20 @@ struct HowToPlayView: View {
         case .gridlock:
             return [
                 RuleSection(title: "Objective", bullets: [
-                    "Recreate the target color pattern on your playable grid.",
-                    "Every cell is filled; the challenge is rotating rows and columns into the target layout.",
-                    "The puzzle ends automatically when your grid exactly matches the target.",
+                    "Move every card into the four foundation piles.",
+                    "Foundations build by suit from Ace to King.",
+                    "The game clears automatically when all 52 cards reach the foundations.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
-                    "Drag a row sideways to rotate that row.",
-                    "Drag a column up or down to rotate that column.",
-                    "Each whole-cell shift counts as one move.",
+                    "Tap the stock to draw cards into the waste pile.",
+                    "Tap a face-up card, then tap a tableau lane or foundation to move it.",
+                    "Tableau lanes build downward with alternating red and black cards.",
+                    "Only Kings can start an empty tableau lane.",
+                    "Use Auto to send available top cards to foundations.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same target and scrambled board.",
-                    "Completion wins; if both finish, fewer moves wins, then time.",
-                    "If neither player finishes, higher pattern-match percent wins, then fewer moves and time.",
+                    "Both players receive the same shuffled deck and fixed draw rules.",
+                    "Clearing wins. If neither player clears, more foundation cards wins, then score, moves, and time.",
                 ]),
             ]
         case .anagram:
@@ -199,7 +202,7 @@ struct HowToPlayView: View {
             return [
                 RuleSection(title: "Objective", bullets: [
                     "Find as many valid words as you can in the letter grid.",
-                    "Difficulty changes only the board size: 4×4, 5×5, 6×6, or 7×7.",
+                    "In solo, difficulty changes only the board size: 4×4, 5×5, 6×6, or 7×7.",
                     "Words must be 3 or more letters and traced through adjacent tiles.",
                     "Tiles can only be used once per word; diagonal connections count, but traced paths cannot be undone by dragging backward.",
                     "Longer words score more points — a 7-letter word earns 5 pts.",
@@ -211,7 +214,7 @@ struct HowToPlayView: View {
                     "The current path glows as you trace it; lift your finger to reset if you want a different route.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players get the same seeded grid for the selected board size.",
+                    "Both players get the same seeded grid at the fixed online board size.",
                     "Highest score when the 1:15 timer ends wins.",
                     "Ties use word count, then longest word.",
                 ]),
@@ -220,9 +223,10 @@ struct HowToPlayView: View {
             return [
                 RuleSection(title: "Objective", bullets: [
                     "Guess letters to reveal the category word and rescue the puzzle piece.",
-                    "Difficulty changes word length: 5 letters, 6 letters, 7 letters, or 8+ letters.",
+                    "In solo, difficulty changes word length: 5 letters, 6 letters, 7 letters, or 8+ letters.",
                     "You get 6 wrong letters before the rescue fails.",
                     "Repeated guesses do not raise the lava.",
+                    "Solo has no time limit. Your best at each difficulty uses fewer wrong letters, then faster time.",
                 ]),
                 RuleSection(title: "Controls", bullets: [
                     "Tap letters on the keyboard to guess.",
@@ -231,8 +235,8 @@ struct HowToPlayView: View {
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
                     "Both players get the same three categories, starter letters, and target words.",
-                    "Online Lava Rescue is best-of-3: first to rescue 2 words wins.",
-                    "If nobody clinches, solved rounds win; wrong letters and time break ties.",
+                    "Play up to three words; your turn ends after two rescues or all three attempts.",
+                    "Both players finish before comparison: most rescues, fewer wrong letters, more revealed letters, then faster time.",
                 ]),
             ]
         case .wordle:
@@ -249,9 +253,9 @@ struct HowToPlayView: View {
                     "The keyboard updates after each guess so you can track letters.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same shared words in a best-of-3 match.",
-                    "Solving 2 rounds wins immediately; guesses and time break ties if both finish.",
-                    "Difficulty controls how many guesses you get: 6 guesses is the standard 1.0× game.",
+                    "Both players receive the same shared words, with up to three words per turn. Two solves or two misses ends your turn.",
+                    "Both players finish before comparison: most solves, then fewer guesses on solved words, then faster time. Identical results draw.",
+                    "Both players have the same fixed guess limit for each word.",
                 ]),
             ]
         }
@@ -272,7 +276,7 @@ struct RankGuideView: View {
                     Text("Rank System")
                         .font(.title.bold())
                         .foregroundStyle(AppTheme.textPrimary)
-                    Text("Each game mode has its own independent rank.\nWin matches to climb divisions, then promote tiers. Ranked coin wagers are fixed by tier.")
+                    Text("Each game mode has its own independent rank.\nWin matches to climb divisions, then promote tiers. Higher tiers earn more coins per win, with no coins lost.")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -291,14 +295,17 @@ struct RankGuideView: View {
                         .font(.headline)
                         .foregroundStyle(AppTheme.crownGold)
 
-                    infoRow(icon: "checkmark.circle.fill", color: .green,  text: "Win: +30 pts (×difficulty multiplier)")
-                    infoRow(icon: "xmark.circle.fill",    color: .red,    text: "Loss: −15 pts (×difficulty multiplier)")
-                    infoRow(icon: "equal.circle.fill",    color: .blue,   text: "Draw: +5 pts and no coin change")
-                    infoRow(icon: "arrow.left.circle.fill", color: .orange, text: "Abandon: −20 pts and a ranked loss")
-                    coinInfoRow(text: "Tier wager: one fixed coin stake for your current rank tier. Win +wager, loss -wager.")
+                    infoRow(icon: "slider.horizontal.3", color: AppTheme.accentBright, text: "Ranked uses fixed rules for each game. There is no difficulty selection.")
+                    infoRow(icon: "checkmark.circle.fill", color: .green, text: "Win: gain rank points. The amount depends on the game's fixed rules and your opponent's rank.")
+                    infoRow(icon: "xmark.circle.fill", color: .red, text: "Loss: lose rank points, with the amount adjusted for the game and your opponent's rank.")
+                    infoRow(icon: "equal.circle.fill", color: .blue, text: "Draw: no coin change. Draws against another player also award rank points.")
+                    infoRow(icon: "arrow.left.circle.fill", color: .orange, text: "Forfeiting an active ranked match counts as a loss.")
+                    coinInfoRow(text: "Win rewards use your rank at match start: Bronze +20, Silver +30, Gold +40, Platinum +50, Diamond +60, Master +75 coins.")
+                    coinInfoRow(text: "A completed loss earns +\(RankedCoinRewards.loss); a draw earns +\(RankedCoinRewards.draw). Quitting earns no coins. No coin balance is required to enter; ranked entry access still applies.")
+                    coinInfoRow(text: "Human ranked rewards have no daily coin cap. Training bots reward wins only, up to 3 per day. A forfeit alone does not earn coins without a completed attempt.")
                     infoRow(icon: "cpu.fill", color: .yellow, text: "Bronze queues may fill with a Training Bot after a short wait. Bot matches use limited ranked rewards.")
                     infoRow(icon: "rectangle.split.3x1.fill", color: .purple, text: "Each tier has III, II, and I divisions. Fill Division I to promote.")
-                    infoRow(icon: "clock.fill",           color: .purple, text: "Difficulty and opponent division set rank points; time is a tie-breaker in some modes")
+                    infoRow(icon: "clock.fill", color: .purple, text: "Time breaks tied results in some games. See each game's rules for its win conditions.")
                 }
                 .padding()
                 .background(AppTheme.cardBackground)
@@ -334,7 +341,10 @@ struct RankTierRow: View {
     }
 
     private var tierRangeText: String {
-        "\(tier.pointsRequired)\(nextPoints.map { " – \($0 - 1)" } ?? "+") pts"
+        if let nextPoints {
+            return "\(tier.pointsRequired) to \(nextPoints - 1) pts"
+        }
+        return "\(tier.pointsRequired)+ pts"
     }
 
     private var sampleInfo: RankInfo {
@@ -347,39 +357,41 @@ struct RankTierRow: View {
                 .frame(width: 36)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(tier.displayName)
                         .font(.headline)
                         .foregroundStyle(tier.color)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.74)
+                        .allowsTightening(true)
                     Text(tierRangeText)
                         .font(.caption)
                         .foregroundStyle(AppTheme.textMuted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .allowsTightening(true)
                 }
                 VStack(spacing: 4) {
-                    RankDivisionProgressView(info: sampleInfo, height: 4, spacing: 4, showLabels: true)
-                    HStack(spacing: 0) {
+                    RankDivisionProgressView(info: sampleInfo, height: 4, spacing: 4, showLabels: false)
+                    HStack(alignment: .top, spacing: 4) {
                         ForEach(RankDivision.progression, id: \.self) { division in
-                            Text(tier.divisionRangeLabel(for: division))
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(AppTheme.textMuted)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.68)
-                                .frame(maxWidth: .infinity, alignment: .center)
+                            divisionRangeColumn(for: division)
                         }
                     }
                 }
-                .frame(width: 156)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer()
 
-            if let amount = Wager.options(for: tier).first?.amount {
+            VStack(spacing: 3) {
                 HStack(spacing: 5) {
                     CoinIconView(size: 16)
-                    Text("\(amount)")
+                    Text("\(RankedCoinRewards.win(for: tier))")
                         .font(.caption.bold())
                         .foregroundStyle(AppTheme.textPrimary)
                 }
+                Text("per win").font(.caption2).foregroundStyle(AppTheme.textSecondary)
             }
         }
         .padding(.horizontal, 14)
@@ -387,5 +399,28 @@ struct RankTierRow: View {
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(tier.color.opacity(0.45), lineWidth: 1))
+    }
+
+    private func divisionRangeColumn(for division: RankDivision) -> some View {
+        let start = tier.divisionStart(for: division)
+        let rangeText: String
+        if let end = tier.divisionEndExclusive(for: division) {
+            rangeText = "\(start) to \(end - 1)"
+        } else {
+            rangeText = "\(start)+"
+        }
+
+        return VStack(spacing: 1) {
+            Text(division.label)
+                .font(.system(size: 9, weight: .black))
+                .foregroundStyle(division == .three ? tier.color : AppTheme.textPrimary.opacity(0.72))
+            Text(rangeText)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(AppTheme.textMuted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
+                .allowsTightening(true)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
