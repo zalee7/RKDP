@@ -28,7 +28,8 @@ struct WordleView: View {
         onTryRanked: @escaping () -> Void = {},
         onHome: @escaping () -> Void = {}
     ) {
-        let rounds = sessionID == nil ? 1 : 3
+        let configuredRounds = MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.matchRounds
+        let rounds = sessionID == nil || configuredRounds == 1 ? 1 : 3
         self.userID = user?.id
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult

@@ -79,7 +79,7 @@ struct HowToPlayView: View {
                     Text("Solo Difficulties")
                         .font(.headline)
                         .foregroundStyle(AppTheme.modeAccent(mode))
-                    Text("Choose your challenge in solo play. Ranked and casual matchmaking use fixed rules for each game, with no difficulty selection.")
+                    Text("Choose your challenge in solo play. Online rules are automatic. Ranked Sudoku, Minesweeper, Color Link, and Word Guess become harder at Platinum; casual keeps the starting rules.")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
                     ForEach(Difficulty.allCases, id: \.self) { d in
@@ -114,7 +114,7 @@ struct HowToPlayView: View {
                 RuleSection(title: "Controls", bullets: [
                     "Tap a cell to select it, then tap a number on the pad.",
                     "Use Notes mode (pencil icon) to mark possible candidates.",
-                    "Tap the lightbulb to reveal a hint for the selected cell.",
+                    "In solo play, tap the lightbulb to reveal a hint for the selected cell.",
                     "Tap Erase to clear a cell.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
@@ -253,9 +253,9 @@ struct HowToPlayView: View {
                     "The keyboard updates after each guess so you can track letters.",
                 ]),
                 RuleSection(title: "Ranked Mode", bullets: [
-                    "Both players receive the same shared words, with up to three words per turn. Two solves or two misses ends your turn.",
-                    "Both players finish before comparison: most solves, then fewer guesses on solved words, then faster time. Identical results draw.",
-                    "Both players have the same fixed guess limit for each word.",
+                    "Ranked and casual use one shared word. The first verified solve wins immediately.",
+                    "Rank points still account for your opponent's division. A winning solve in fewer guesses earns a small bonus; a solve under 30 seconds can add one more point, capped at +6.",
+                    "Ranked gives 6 guesses below Platinum and 5 from Platinum onward. Casual gives 6. Friend and party turns can still contain multiple words.",
                 ]),
             ]
         }

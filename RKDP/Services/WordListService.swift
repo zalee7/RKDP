@@ -144,6 +144,7 @@ private extension String {
 struct WordlePuzzleData: Codable {
     let wordBankVersion: String
     let targets: [String]
+    var matchRounds: Int? = nil
 }
 
 struct AnagramPuzzleData: Codable {

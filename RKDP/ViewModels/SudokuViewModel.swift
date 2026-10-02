@@ -37,7 +37,7 @@ final class SudokuViewModel: ObservableObject {
 
     func selectCell(id: Int) {
         guard !isComplete, board.cells.indices.contains(id) else { return }
-        selectedID = (selectedID == id) ? nil : id
+        selectedID = id
         board.updateHighlights(selected: selectedID)
     }
 

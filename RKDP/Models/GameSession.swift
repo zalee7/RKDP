@@ -30,6 +30,7 @@ struct PostMatchRewardSnapshot {
     var startingRank: RankInfo
     var endingRank: RankInfo
     var rankDelta: Int
+    var rankPerformanceBonus: Int
     var didPromote: Bool
     var didDemote: Bool
     var mode: GameMode
@@ -57,6 +58,7 @@ struct PostMatchRewardSnapshot {
             startingRank: startingRank,
             endingRank: endingRank,
             rankDelta: endingRank.points - startingRank.points,
+            rankPerformanceBonus: 0,
             didPromote: endingPosition > startingPosition,
             didDemote: endingPosition < startingPosition,
             mode: session.mode,
@@ -85,6 +87,7 @@ struct PostMatchRewardSnapshot {
                 winnerID: session.winnerID,
                 players: session.players
             ) : 0,
+            rankPerformanceBonus: wordGuessPerformanceBonus(session: session, userID: user.id),
             didPromote: false,
             didDemote: false,
             mode: session.mode,
@@ -96,6 +99,22 @@ struct PostMatchRewardSnapshot {
 
     private static func rankPosition(_ rank: RankInfo) -> Int {
         rank.displayTier.rawValue * 3 + rank.division.rawValue
+    }
+
+    private static func wordGuessPerformanceBonus(session: GameSession, userID: String) -> Int {
+        guard session.mode == .wordle,
+              session.winnerID == userID,
+              let result = session.playerResults?[userID],
+              result.completed else { return 0 }
+        let guessBonus: Int
+        switch result.totalGuesses {
+        case 1: guessBonus = 6
+        case 2: guessBonus = 4
+        case 3: guessBonus = 2
+        default: guessBonus = 0
+        }
+        let speedBonus = result.elapsedSeconds > 0 && result.elapsedSeconds < 30 ? 1 : 0
+        return min(6, guessBonus + speedBonus)
     }
 }
 

@@ -20,7 +20,7 @@ const {Firestore, FieldValue} = fr("@google-cloud/firestore");
 const {OAuth2Client} = createRequire(fr.resolve("google-gax"))("google-auth-library");
 const project = "puzzlepartytest";
 const [mode, argument, uid] = process.argv.slice(2);
-assert.ok(["inspect", "prepare", "verify", "partner", "audit", "ranked-prepare", "ranked-verify"].includes(mode), "Unknown admin mode");
+assert.ok(["inspect", "prepare", "verify", "partner", "audit", "ranked-audit", "ranked-prepare", "ranked-v2-catalog", "ranked-v2-activate", "ranked-verify", "ranked-v2-verify", "ranked-unlock-simulator", "ranked-access-audit"].includes(mode), "Unknown admin mode");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 new Command("social-test-admin").before(requireAuth).action(async () => {
   const app = initializeApp({projectId: project, credential: {getAccessToken: async () => ({
@@ -31,8 +31,32 @@ new Command("social-test-admin").before(requireAuth).action(async () => {
   const db = new Firestore({projectId: project, authClient: googleAuth});
   const auth = getAuth(app);
   try {
-    if (mode === "ranked-verify") await require("./ranked-test-checks.cjs")({db, auth, root, argument});
+    if (mode === "ranked-audit") {
+      const matches = await db.collection("economyPrivate/liveMatches/records").limit(200).get();
+      for (const doc of matches.docs) {
+        const m = doc.data();
+        const verified = (await db.doc(`economyPrivate/verifiedMatches/records/${doc.id}`).get()).data();
+        const players = [];
+        for (const p of m.players.filter((p) => !p.isBot)) {
+          const receipt = (await db.doc(`coinWallets/${p.userID}/receipts/match_${doc.id}`).get()).data();
+          players.push({name: p.username, result: m.playerResults[p.userID]?.status,
+            completed: m.playerResults[p.userID]?.completed, forfeited: m.forfeitedIDs.includes(p.userID),
+            receipt: receipt ? {coins: receipt.matchReward, daily: receipt.dailyCoins,
+              rankDelta: receipt.rankDelta, outcome: receipt.outcome, reason: receipt.reason,
+              balance: receipt.balance} : null});
+        }
+        console.log(JSON.stringify({id: doc.id, mode: m.mode, kind: m.matchKind, status: m.status,
+          created: new Date(m.createdAtMs).toISOString(), settled: !!verified?.settledAtMs, players}));
+      }
+      console.log(JSON.stringify({count: matches.size, truncated: matches.size === 200}));
+    }
+    else if (mode === "ranked-verify") await require("./ranked-test-checks.cjs")({db, auth, root, argument});
+    else if (mode === "ranked-v2-verify") await require("./ranked-test-checks.cjs")({db, auth, root, argument, advanced: true});
     else if (mode === "ranked-prepare") await prepareRanked(db);
+    else if (mode === "ranked-v2-catalog") await prepareRankedV2Catalog(db);
+    else if (mode === "ranked-v2-activate") await activateRankedV2(db);
+    else if (mode === "ranked-unlock-simulator") await unlockSimulatorRanked(db);
+    else if (mode === "ranked-access-audit") await auditSimulatorRankedAccess(db);
     else if (mode === "audit") await audit(db);
     else if (mode === "partner") await provisionPartner(db, auth);
     else if (mode === "prepare") await prepare(db, auth);
@@ -59,6 +83,86 @@ function publicProfile(user) {
       equippedAvatarOutfit: user.cosmetics?.equippedAvatarOutfit || "avatar_outfit_basic",
       equippedAvatarAura: user.cosmetics?.equippedAvatarAura || "avatar_aura_none"}};
 }
+async function activateRankedV2(db) {
+  const {presets, onlineDifficulty} = require("../functions/match-reward-policy");
+  await db.runTransaction(async (tx) => {
+    const ref = db.doc("economyPrivate/control");
+    const flags = (await tx.get(ref)).data();
+    assert.ok(flags?.purchaseSandbox && flags.walletMigrationReady && flags.matchLifecycleEnabled && flags.matchRewardsEnabled);
+    assert.deepEqual([...flags.matchTestUIDs].sort(), ["8nd9VCHUvWfAdOwOwZtnpuaiJc43", "social-simulator-partner-v1"].sort());
+    for (const uid of flags.matchTestUIDs) {
+      const account = (await tx.get(db.doc(`economyPrivate/matchAccounts/players/${uid}`))).data();
+      if (account?.sessionID) {
+        const match = (await tx.get(db.doc(`economyPrivate/liveMatches/records/${account.sessionID}`))).data();
+        assert.ok(!["waiting", "inProgress"].includes(match?.status), "Finish the current test match before switching rules");
+      } else {
+        assert.ok(!account || account.cancelled || account.expiresAtMs <= Date.now(), "Cancel the current search before switching rules");
+      }
+    }
+    for (const game of Object.keys(presets)) for (const points of [0, 3600]) {
+      const key = `${game}_${onlineDifficulty(game, "ranked", points)}`;
+      const catalog = (await tx.get(db.doc(`economyPrivate/matchCatalog/modes/${key}`))).data();
+      assert.ok(catalog?.version === 1 && catalog.puzzleIDs?.length > 0, "Missing v2 catalog");
+    }
+    tx.update(ref, {onlineRulesVersion: 2});
+  });
+  console.log(JSON.stringify({project, onlineRulesVersion: 2, accountDataChanged: false}));
+}
+
+async function unlockSimulatorRanked(db) {
+  const userID = "social-simulator-partner-v1";
+  await db.runTransaction(async (tx) => {
+    const control = (await tx.get(db.doc("economyPrivate/control"))).data();
+    assert.ok(control?.purchaseSandbox && control?.matchTestUIDs?.includes(userID));
+    const ref = db.doc(`coinWallets/${userID}`);
+    const wallet = (await tx.get(ref)).data();
+    const userRef = db.doc(`users/${userID}`);
+    const user = (await tx.get(userRef)).data();
+    assert.ok(wallet?.purchaseSandbox && wallet.version === 1 && wallet.matchEconomyVersion === 1);
+    assert.ok(user?.socialSimulatorPartner === true);
+    tx.update(ref, {rankedAccess: {...wallet.rankedAccess, allModesUnlocked: true}, testRankedAccessGrantedAtMs: Date.now()});
+    tx.update(userRef, {rankedAccess: {...user.rankedAccess, allModesUnlocked: true}, testRankedAccessGrantedAtMs: Date.now()});
+  });
+  console.log(JSON.stringify({project, account: "simulator", allModesUnlocked: true, productionChanged: false}));
+}
+
+async function auditSimulatorRankedAccess(db) {
+  const userID = "social-simulator-partner-v1";
+  const [wallet, user] = await Promise.all([
+    db.doc(`coinWallets/${userID}`).get(),
+    db.doc(`users/${userID}`).get(),
+  ]);
+  console.log(JSON.stringify({project, account: "simulator",
+    walletAllModes: wallet.data()?.rankedAccess?.allModesUnlocked === true,
+    profileAllModes: user.data()?.rankedAccess?.allModesUnlocked === true}));
+}
+
+async function prepareRankedV2Catalog(db) {
+  const {presets, onlineDifficulty} = require("../functions/match-reward-policy");
+  const flags = (await db.doc("economyPrivate/control").get()).data();
+  assert.ok(flags?.purchaseSandbox && flags.walletMigrationReady);
+  const manifests = new Map();
+  for (const game of Object.keys(presets)) {
+    for (const points of [0, 3600]) {
+      const difficulty = onlineDifficulty(game, "ranked", points);
+      const key = `${game}_${difficulty}`;
+      const catalog = (await db.doc(`economyPrivate/socialCatalog/modes/${key}`).get()).data();
+      assert.equal(catalog?.version, 1); assert.ok(catalog.puzzleIDs.length > 0);
+      for (const id of catalog.puzzleIDs) {
+        const puzzle = (await db.doc(`economyPrivate/matchPuzzles/records/${id}`).get()).data();
+        assert.equal(puzzle?.mode, game); assert.equal(puzzle?.difficulty, difficulty);
+        assert.equal(puzzle?.protocolVersion, "match-v1"); assert.ok(!puzzle.testEvidence);
+      }
+      manifests.set(key, catalog);
+    }
+  }
+  const batch = db.batch();
+  for (const [key, catalog] of manifests) batch.set(db.doc(`economyPrivate/matchCatalog/modes/${key}`), catalog);
+  await batch.commit();
+  // Activation is separate: finish old searches and install both clients first.
+  console.log(JSON.stringify({project, preparedV2Catalogs: manifests.size, activated: false}));
+}
+
 async function prepareRanked(db) {
   const {presets} = require("../functions/match-reward-policy");
   const approved = ["8nd9VCHUvWfAdOwOwZtnpuaiJc43", "social-simulator-partner-v1"];

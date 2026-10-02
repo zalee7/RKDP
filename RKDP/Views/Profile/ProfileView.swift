@@ -1001,6 +1001,7 @@ private struct GameCustomizationView: View {
     @ObservedObject var shop: ShopViewModel
     var onChanged: () async -> Void
     @State private var selectedCategory: CosmeticCategory = .boardTheme
+    @State private var previewItem: CosmeticItem?
 
     private let categories: [CosmeticCategory] = [.boardTheme, .tileTheme, .cardTheme]
 
@@ -1050,6 +1051,19 @@ private struct GameCustomizationView: View {
         } message: {
             Text(shop.errorMessage ?? "")
         }
+        .sheet(item: $previewItem) { item in
+            CosmeticThemePreviewSheet(
+                item: item,
+                isEquipped: shop.isEquipped(item)
+            ) {
+                Task {
+                    if await shop.equip(item) {
+                        await onChanged()
+                        previewItem = nil
+                    }
+                }
+            }
+        }
     }
 
     private var ownedGameItems: some View {
@@ -1078,18 +1092,33 @@ private struct GameCustomizationView: View {
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(items) { item in
-                        ShopItemCard(
-                            item: item,
-                            isOwned: true,
-                            isEquipped: shop.isEquipped(item),
-                            canAfford: true,
-                            isLimited: false
-                        ) {
-                            Task {
-                                if await shop.equip(item) {
-                                    await onChanged()
+                        VStack(spacing: 6) {
+                            ShopItemCard(
+                                item: item,
+                                isOwned: true,
+                                isEquipped: shop.isEquipped(item),
+                                canAfford: true,
+                                isLimited: false
+                            ) {
+                                Task {
+                                    if await shop.equip(item) {
+                                        await onChanged()
+                                    }
                                 }
                             }
+
+                            Button {
+                                previewItem = item
+                            } label: {
+                                Label("Preview", systemImage: "eye")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .background(AppTheme.cardBackground.opacity(0.8))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -1103,6 +1132,85 @@ private struct GameCustomizationView: View {
         case .tileTheme: return "Tile Themes"
         case .cardTheme: return "Card Themes"
         default: return category.rawValue
+        }
+    }
+}
+
+private struct CosmeticThemePreviewSheet: View {
+    let item: CosmeticItem
+    let isEquipped: Bool
+    let onEquip: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.arenaBackground.ignoresSafeArea()
+                VStack(spacing: 20) {
+                    preview
+                        .frame(height: 260)
+                        .frame(maxWidth: .infinity)
+
+                    VStack(spacing: 6) {
+                        Text(item.name)
+                            .font(.title2.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+                        Text(item.rarity.rawValue.uppercased())
+                            .font(.caption.bold())
+                            .foregroundStyle(item.rarity.badgeColor)
+                        Text(item.description)
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 24)
+
+                    if isEquipped {
+                        Label("Equipped", systemImage: "checkmark.circle.fill")
+                            .font(.headline.bold())
+                            .foregroundStyle(AppTheme.teal)
+                            .padding(.vertical, 12)
+                    } else {
+                        Button(action: onEquip) {
+                            Label("Equip Theme", systemImage: "checkmark.circle.fill")
+                                .font(.headline.bold())
+                                .foregroundStyle(AppTheme.textOnColor)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(AppTheme.hotPink)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 28)
+                    }
+
+                    Spacer()
+                }
+                .padding(.top, 28)
+            }
+            .navigationTitle("Theme Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.hotPink)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        switch item.category {
+        case .boardTheme:
+            ShopThemePreview(themeID: item.id)
+        case .tileTheme:
+            ShopTileThemePreview(tileThemeID: item.id)
+        case .cardTheme:
+            ShopCardThemePreview(cardThemeID: item.id)
+        default:
+            EmptyView()
         }
     }
 }

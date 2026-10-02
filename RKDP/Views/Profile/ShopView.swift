@@ -2670,7 +2670,7 @@ private struct PreviewDiamondShape: Shape {
     }
 }
 
-private struct ShopThemePreview: View {
+struct ShopThemePreview: View {
     let themeID: String
 
     private var style: BoardThemeStyle {
@@ -2723,7 +2723,7 @@ private struct ShopThemePreview: View {
     }
 }
 
-private struct ShopTileThemePreview: View {
+struct ShopTileThemePreview: View {
     let tileThemeID: String
 
     private var style: TileThemeStyle {
@@ -2781,7 +2781,7 @@ private struct ShopTileThemePreview: View {
     }
 }
 
-private struct ShopCardThemePreview: View {
+struct ShopCardThemePreview: View {
     let cardThemeID: String
 
     private var style: CardThemeStyle {

@@ -819,6 +819,20 @@ final class MultiplayerViewModel: ObservableObject {
                 rewardSnapshot?.startingCoins = receipt.balance - total
                 rewardSnapshot?.endingCoins = receipt.balance
                 rewardSnapshot?.rankDelta = receipt.rankDelta
+                rewardSnapshot?.rankPerformanceBonus = receipt.rankPerformanceBonus ?? 0
+                if let start = receipt.startingRankPoints ?? session.players.first(where: { $0.userID == beforeUser.id })?.rankPoints {
+                    let end = receipt.endingRankPoints ?? max(0, start + receipt.rankDelta)
+                    rewardSnapshot?.startingRank.points = start
+                    rewardSnapshot?.startingRank.tier = RankTier.tier(for: start)
+                    rewardSnapshot?.endingRank.points = end
+                    rewardSnapshot?.endingRank.tier = RankTier.tier(for: end)
+                    if let snapshot = rewardSnapshot {
+                        let oldPosition = snapshot.startingRank.displayTier.rawValue * 3 + snapshot.startingRank.division.rawValue
+                        let newPosition = snapshot.endingRank.displayTier.rawValue * 3 + snapshot.endingRank.division.rawValue
+                        rewardSnapshot?.didPromote = newPosition > oldPosition
+                        rewardSnapshot?.didDemote = newPosition < oldPosition
+                    }
+                }
             }
             rewardErrorMessage = nil
         } catch {

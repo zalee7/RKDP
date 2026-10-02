@@ -50,9 +50,11 @@ struct SudokuView: View {
                         .font(.caption)
                         .foregroundStyle(difficulty == .expert ? .orange : .secondary)
                     Spacer()
-                    Button { vm.useHint() } label: {
-                        Label("Hint", systemImage: "lightbulb.fill")
-                            .font(.caption)
+                    if sessionID == nil {
+                        Button { vm.useHint() } label: {
+                            Label("Hint", systemImage: "lightbulb.fill")
+                                .font(.caption)
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -193,8 +195,13 @@ struct SudokuBoardView: View {
             .overlay(
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 9), spacing: 0) {
                     ForEach(board.cells) { cell in
-                        SudokuCellView(cell: cell, cellSize: cellSize)
-                            .onTapGesture { onSelect(cell.id) }
+                        Button { onSelect(cell.id) } label: {
+                            SudokuCellView(cell: cell, cellSize: cellSize)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Row \(cell.id / 9 + 1), column \(cell.id % 9 + 1)")
+                        .accessibilityValue(cell.value == 0 ? "Empty" : "\(cell.value)")
                     }
                 }
             )
@@ -233,6 +240,7 @@ struct SudokuCellView: View {
             }
         }
         .frame(width: cellSize, height: cellSize)
+        .contentShape(Rectangle())
         .overlay(
             RoundedRectangle(cornerRadius: 2)
                 .stroke(cell.value != 0 && !cell.isGiven ? tile.border.opacity(0.38) : Color.clear, lineWidth: 1)

@@ -36,7 +36,12 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
       r.progress = filled / Math.max(1, blanks); r.completed = filled === blanks;
       if (r.completed) validateCompletion(p, e, elapsedMs);
       r.score = Math.round(r.progress * 100);
-      r.summary = {progressPercent: String(r.score), boardSize: "9", boardRows: Array.from({length: 9}, (_, i) => e.cells.slice(i * 9, i * 9 + 9).join("")).join("|")};
+      r.summary = {
+        progressPercent: String(r.score),
+        boardSize: "9",
+        boardRows: Array.from({length: 9}, (_, i) => e.cells.slice(i * 9, i * 9 + 9).map((n) => n || ".").join("")).join("/"),
+        givensRows: Array.from({length: 9}, (_, i) => p.givens.slice(i * 9, i * 9 + 9).map((n) => n || ".").join("")).join("/"),
+      };
       break;
     }
     case "colorLink": {
@@ -86,6 +91,16 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
       r.completed = !hit && revealed.length === size - p.mines;
       r.score = revealed.length; r.progress = revealed.length / (size - p.mines);
       r.summary = {hitMine: String(hit), safeCells: String(r.score), totalSafeCells: String(size - p.mines)};
+      const visible = new Set(revealed);
+      const board = Array.from({length: size}, (_, i) => {
+        if (i === e.explodedCell) return "X";
+        if (mines.has(i)) return "M";
+        if (!visible.has(i)) return "H";
+        return String([...mines].filter((m) => Math.abs(Math.floor(m / p.cols) - Math.floor(i / p.cols)) <= 1 &&
+          Math.abs(m % p.cols - i % p.cols) <= 1).length);
+      });
+      Object.assign(r.summary, {boardRowsCount: String(p.rows), boardColsCount: String(p.cols),
+        boardRows: Array.from({length: p.rows}, (_, i) => board.slice(i * p.cols, (i + 1) * p.cols).join("")).join("/")});
       played = true;
       break;
     }
@@ -99,7 +114,8 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
       break;
     }
     case "wordle": {
-      check(Array.isArray(e.rounds) && e.rounds.length >= 2 && e.rounds.length <= 3, "Incomplete Word Guess match");
+      const single = p.matchRounds === 1;
+      check(Array.isArray(e.rounds) && (single ? e.rounds.length === 1 : e.rounds.length >= 2 && e.rounds.length <= 3), "Incomplete Word Guess match");
       let solved = 0; let failed = 0; let guesses = 0;
       for (const [i, round] of e.rounds.entries()) {
         check(solved < 2 && failed < 2, "Extra Word Guess round");
@@ -113,8 +129,8 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
         // Evaluation is recomputed for post-game breakdowns, never trusted input.
         r.summary[`round${i + 1}Guesses`] = round.map((word) => `${word}:${evaluateWord(word, p.targets[i])}`).join(";");
       }
-      check(solved >= 2 || failed >= 2, "Unfinished Word Guess match");
-      r.completed = solved >= 2; r.score = solved; r.progress = solved / 3; played = true;
+      check(single || solved >= 2 || failed >= 2, "Unfinished Word Guess match");
+      r.completed = solved >= (single ? 1 : 2); r.score = solved; r.progress = solved / (single ? 1 : 3); played = true;
       Object.assign(r.summary, {solvedRounds: String(solved), failedRounds: String(failed), totalGuesses: String(guesses), roundCount: String(e.rounds.length), isFinal: "true"});
       break;
     }

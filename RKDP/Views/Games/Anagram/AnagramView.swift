@@ -373,12 +373,7 @@ struct AnagramView: View {
 
     private var bankSection: some View {
         GeometryReader { geo in
-            let columns = bankColumnCount
-            let tileSize = fittedBankTileSize(width: geo.size.width, columns: columns)
-            let gridColumns = Array(
-                repeating: GridItem(.fixed(tileSize), spacing: bankTileSpacing),
-                count: columns
-            )
+            let tileSize = fittedBankTileSize(width: geo.size.width)
 
             VStack(spacing: 6) {
                 Text("Your Letters")
@@ -386,7 +381,7 @@ struct AnagramView: View {
                     .foregroundStyle(AppTheme.textSecondary)
                     .tracking(1)
 
-                LazyVGrid(columns: gridColumns, spacing: bankTileSpacing) {
+                HStack(spacing: bankTileSpacing) {
                     ForEach(vm.bank, id: \.id) { tile in
                         LetterTile(letter: tile.letter, size: tileSize)
                             .onTapGesture {
@@ -406,28 +401,18 @@ struct AnagramView: View {
         max(1, vm.game.letters.count)
     }
 
-    private var bankColumnCount: Int {
-        if totalLetterCount <= 5 { return totalLetterCount }
-        return Int(ceil(Double(totalLetterCount) / 2))
-    }
-
-    private var bankRowCount: Int {
-        Int(ceil(Double(totalLetterCount) / Double(max(1, bankColumnCount))))
-    }
-
-    private var bankSectionHeight: CGFloat {
-        let rows = CGFloat(bankRowCount)
-        return 28 + rows * 76 + max(0, rows - 1) * bankTileSpacing + 8
-    }
+    // Keep every difficulty on one stable, fast-to-scan letter rack. The tile
+    // size flexes down for longer banks instead of wrapping into a second row.
+    private var bankSectionHeight: CGFloat { 106 }
 
     private var bankTileSpacing: CGFloat { 10 }
 
     private var bankHorizontalPadding: CGFloat { 16 }
 
-    private func fittedBankTileSize(width: CGFloat, columns: Int) -> CGFloat {
-        guard columns > 0 else { return 76 }
-        let available = width - bankHorizontalPadding * 2 - bankTileSpacing * CGFloat(columns - 1)
-        return min(76, max(48, floor(available / CGFloat(columns))))
+    private func fittedBankTileSize(width: CGFloat) -> CGFloat {
+        let count = max(1, vm.bank.count)
+        let available = width - bankHorizontalPadding * 2 - bankTileSpacing * CGFloat(count - 1)
+        return min(70, max(28, floor(available / CGFloat(count))))
     }
 
     private var placedTileSpacing: CGFloat { 7 }

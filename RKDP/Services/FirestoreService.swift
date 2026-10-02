@@ -280,6 +280,9 @@ final class FirestoreService {
         let matchReward: Int
         let dailyCoins: Int
         let rankDelta: Int
+        let rankPerformanceBonus: Int?
+        let startingRankPoints: Int?
+        let endingRankPoints: Int?
         let balance: Int
         let didApplyRewards: Bool
         let reason: String

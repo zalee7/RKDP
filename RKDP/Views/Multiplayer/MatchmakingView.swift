@@ -730,7 +730,7 @@ struct MatchmakingView: View {
                 if let snapshot {
                     PostMatchRewardPanel(
                         snapshot: snapshot,
-                        adjustmentLabel: rankAdjustmentLabel(session: session)
+                        adjustmentLabel: rankAdjustmentLabel(session: session, snapshot: snapshot)
                     ) {
                         rewardAnimationFinished = true
                     }
@@ -793,7 +793,7 @@ struct MatchmakingView: View {
                 .disabled(!controlsReady)
 
             Button { showBreakdown = true } label: {
-                Label("Match Breakdown", systemImage: "list.bullet.rectangle")
+                Label("View Match Breakdown", systemImage: "list.bullet.rectangle")
                     .font(.headline.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -991,33 +991,48 @@ struct MatchmakingView: View {
         mode == .wordle ? "not finished" : "waiting"
     }
 
-    private func rankAdjustmentLabel(session: GameSession) -> String? {
-        guard !session.containsBot,
-              let winnerID = session.winnerID,
-              let me = session.players.first(where: { $0.userID == user.id }),
-              let opponent = session.players.first(where: { $0.userID != user.id }) else { return nil }
-        let myScore = rankPosition(me)
-        let oppScore = rankPosition(opponent)
-        guard myScore != oppScore else { return nil }
+    private func rankAdjustmentLabel(session: GameSession, snapshot: PostMatchRewardSnapshot) -> String? {
+        guard session.isRanked else { return nil }
+
+        let signed: (Int) -> String = { value in
+            "\(value >= 0 ? "+" : "")\(value)"
+        }
+
+        if session.containsBot {
+            let base = snapshot.outcome == .win ? 15 : snapshot.outcome == .loss ? -8 : 0
+            let outcome = snapshot.outcome == .win ? "Training win" : snapshot.outcome == .loss ? "Training loss" : "Training draw"
+            return "\(outcome) \(signed(base))"
+        }
+
+        guard let winnerID = session.winnerID else {
+            return "Ranked draw +5"
+        }
 
         let isWinner = winnerID == user.id
-        let baselineBase = isWinner ? 30 : -15
-        let baselineDelta = Int(Double(baselineBase) * mode.pointMultiplier(for: session.difficulty))
-        let actualDelta = RankingService.rankDelta(
-            for: user.id,
-            mode: session.mode,
-            difficulty: session.difficulty,
-            winnerID: winnerID,
-            players: session.players
-        )
-        let adjustment = actualDelta - baselineDelta
-        let signedAdjustment = "\(adjustment >= 0 ? "+" : "")\(adjustment)"
-        let adjustmentText = adjustment == 0 ? "" : " \(signedAdjustment) pts"
+        let rawBase = isWinner ? 30 : -15
+        let multiplier = session.mode == .wordle ? 1.0 : session.mode.pointMultiplier(for: session.difficulty)
+        let base = Int(Double(rawBase) * multiplier)
+        var labels = ["Ranked \(isWinner ? "win" : "loss") \(signed(base))"]
 
-        if isWinner {
-            return oppScore > myScore ? "Higher division bonus\(adjustmentText)" : "Lower division adjustment\(adjustmentText)"
+        let performance = snapshot.rankPerformanceBonus
+        let divisionAdjustment = snapshot.rankDelta - base - performance
+        if divisionAdjustment != 0,
+           let me = session.players.first(where: { $0.userID == user.id }),
+           let opponent = session.players.first(where: { $0.userID != user.id }) {
+            let opponentIsHigher = rankPosition(opponent) > rankPosition(me)
+            let reason: String
+            if isWinner {
+                reason = opponentIsHigher ? "Higher-division opponent" : "Lower-division opponent"
+            } else {
+                reason = opponentIsHigher ? "Higher-division opponent" : "Lower-division opponent"
+            }
+            labels.append("\(reason) \(signed(divisionAdjustment))")
         }
-        return oppScore > myScore ? "Reduced loss vs higher division\(adjustmentText)" : "Lower division penalty\(adjustmentText)"
+
+        if performance > 0 {
+            labels.append("Efficient solve +\(performance)")
+        }
+        return labels.joined(separator: " · ")
     }
 
     private func rankPosition(_ player: MatchPlayer) -> Int {
@@ -1358,17 +1373,7 @@ struct MatchBreakdownView: View {
             }
 
             if let result {
-                if session.mode == .wordle {
-                    wordleBreakdown(result)
-                } else if session.mode == .anagram || session.mode == .wordHunt {
-                    wordScoreBreakdown(result)
-                } else if session.mode == .hangman {
-                    hangmanBreakdown(result)
-                } else {
-                    statGrid(modeStats(for: result))
-                    boardSnapshot(for: result)
-                    detailLines(result.details)
-                }
+                modeBreakdown(result)
             } else {
                 Text(missingResultText)
                     .font(.subheadline)
@@ -1381,6 +1386,26 @@ struct MatchBreakdownView: View {
         .background(AppTheme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1.2))
+    }
+
+    @ViewBuilder
+    private func modeBreakdown(_ result: MatchPlayerResult) -> some View {
+        switch session.mode {
+        case .wordle:
+            wordleBreakdown(result)
+        case .anagram, .wordHunt:
+            wordScoreBreakdown(result)
+        case .hangman:
+            hangmanBreakdown(result)
+        case .sudoku:
+            // Sudoku's colored board legend is more useful than repeating the
+            // generic metrics above it, so it remains intentionally visual-first.
+            boardSnapshot(for: result)
+        default:
+            statGrid(modeStats(for: result))
+            boardSnapshot(for: result)
+            detailLines(result.details)
+        }
     }
 
     private func statGrid(_ stats: [(String, String)]) -> some View {
@@ -1560,8 +1585,8 @@ struct MatchBreakdownView: View {
     private func wordleBreakdown(_ result: MatchPlayerResult) -> some View {
         let rounds = parsedWordleRounds(from: result)
         statGrid([
-            ("Rounds", "\(result.solvedRounds)/3 solved"),
-            ("Solved guesses", "\(result.totalGuesses)"),
+            ("Result", result.completed ? "Solved first" : "Opponent solved first"),
+            ("Guesses", "\(result.totalGuesses)"),
             ("Time", formattedTime(result.elapsedSeconds)),
             ("Status", result.completed ? "Complete" : "Incomplete")
         ])
@@ -1580,7 +1605,7 @@ struct MatchBreakdownView: View {
                 ForEach(rounds) { round in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Round \(round.index)")
+                            Text("Word Guess")
                                 .font(.caption.bold())
                                 .foregroundStyle(AppTheme.textSecondary)
                             Spacer()
@@ -1643,9 +1668,10 @@ struct MatchBreakdownView: View {
         switch session.mode {
         case .sudoku:
             let rows = snapshotRows(result.summary["boardRows"])
+            let givens = snapshotRows(result.summary["givensRows"])
             if !rows.isEmpty {
                 snapshotCard(title: "Board") {
-                    sudokuSnapshot(rows)
+                    sudokuSnapshot(rows, givens: givens)
                 }
             }
         case .minesweeper:
@@ -1678,7 +1704,7 @@ struct MatchBreakdownView: View {
 
     private func snapshotRows(_ raw: String?) -> [String] {
         guard let raw, !raw.isEmpty else { return [] }
-        return raw.split(separator: "/").map(String.init)
+        return raw.split(whereSeparator: { $0 == "/" || $0 == "|" }).map(String.init)
     }
 
     private func snapshotCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -1697,22 +1723,44 @@ struct MatchBreakdownView: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
     }
 
-    private func sudokuSnapshot(_ rows: [String]) -> some View {
-        VStack(spacing: 1) {
+    private func sudokuSnapshot(_ rows: [String], givens: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                sudokuLegend("Given", color: AppTheme.textPrimary)
+                sudokuLegend("Placed", color: AppTheme.teal)
+                sudokuLegend("Remaining", color: AppTheme.textSecondary)
+            }
+            VStack(spacing: 1) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                 HStack(spacing: 1) {
                     ForEach(Array(row.enumerated()), id: \.offset) { colIndex, char in
-                        Text(char == "." ? "" : String(char))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppTheme.textPrimary)
-                            .frame(width: 18, height: 18)
-                            .background(Color.white.opacity(char == "." ? 0.06 : 0.16))
+                        let given = sudokuIsGiven(givens, row: rowIndex, column: colIndex)
+                        let empty = char == "." || char == "0"
+                        Text(char == "." || char == "0" ? "" : String(char))
+                            .font(.system(size: 14, weight: given ? .bold : .semibold, design: .rounded))
+                            .foregroundStyle(given ? AppTheme.textPrimary : (empty ? AppTheme.textSecondary : AppTheme.teal))
+                            .frame(width: 26, height: 26)
+                            .background(given ? Color.white.opacity(0.18) : (empty ? Color.white.opacity(0.05) : AppTheme.teal.opacity(0.16)))
                             .overlay(sudokuBorder(row: rowIndex, col: colIndex))
                     }
                 }
             }
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private func sudokuLegend(_ label: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(AppTheme.textSecondary)
+        }
+    }
+
+    private func sudokuIsGiven(_ givens: [String], row: Int, column: Int) -> Bool {
+        guard givens.indices.contains(row) else { return false }
+        let cells = Array(givens[row])
+        return cells.indices.contains(column) && cells[column] != "."
     }
 
     private func sudokuBorder(row: Int, col: Int) -> some View {
@@ -1726,9 +1774,9 @@ struct MatchBreakdownView: View {
                 HStack(spacing: 1) {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, char in
                         Text(minesweeperLabel(char))
-                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .font(.system(size: 12, weight: .black, design: .rounded))
                             .foregroundStyle(minesweeperTextColor(char))
-                            .frame(width: 10, height: 10)
+                            .frame(width: 22, height: 22)
                             .background(minesweeperCellColor(char))
                     }
                 }

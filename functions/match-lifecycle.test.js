@@ -6,7 +6,7 @@ const {MemoryDB} = require("./test-support/memory-firestore");
 const {createMatchLifecycle, privatePath} = require("./match-lifecycle");
 const {createMatchRewards, matchPath} = require("./match-rewards");
 const {verifyResult, limits} = require("./match-evidence");
-const {presets} = require("./match-reward-policy");
+const {presets, onlineDifficulty, resolveMatch, rankDelta} = require("./match-reward-policy");
 const {readFileSync} = require("node:fs");
 
 function fixture(mode = "wordle", kind = "casual") {
@@ -33,6 +33,105 @@ function fixture(mode = "wordle", kind = "casual") {
     now += ms;
   }};
 }
+
+function enableV2(f, mode, kind, points = 0) {
+  const control = f.db.snapshot("economyPrivate/control").data();
+  f.db.set("economyPrivate/control", {...control, onlineRulesVersion: 2});
+  for (const uid of ["a", "b"]) {
+    const wallet = f.db.snapshot(`coinWallets/${uid}`).data();
+    f.db.set(`coinWallets/${uid}`, {...wallet, matchRanks: {[mode]: {points, wins: 0, losses: 0}}});
+  }
+  const difficulty = onlineDifficulty(mode, kind, points);
+  f.db.set(`economyPrivate/matchCatalog/modes/${mode}_${difficulty}`, {version: 1, puzzleIDs: ["p"]});
+  f.db.set("economyPrivate/matchPuzzles/records/p", {...f.puzzle, difficulty});
+}
+
+test("v2 presets promote at Platinum only for ranked", async () => {
+  for (const [mode, lower, upper] of [["sudoku", "easy", "medium"], ["minesweeper", "easy", "medium"],
+    ["colorLink", "hard", "expert"], ["wordle", "medium", "hard"]]) {
+    assert.equal(onlineDifficulty(mode, "ranked", 3599), lower);
+    assert.equal(onlineDifficulty(mode, "ranked", 3600), upper);
+    assert.equal(onlineDifficulty(mode, "casual", 12000), lower);
+    for (const points of [0, 3600]) {
+      const f = fixture(mode, "ranked"); enableV2(f, mode, "ranked", points);
+      const id = await f.paired(); const match = f.db.snapshot(privatePath(id)).data();
+      assert.equal(match.rulesVersion, 2);
+      assert.equal(match.difficulty, points ? upper : lower);
+    }
+  }
+});
+
+test("v2 Word Guess ends immediately when the first player solves", async () => {
+  const f = fixture(); enableV2(f, "wordle", "casual");
+  const sessionID = await f.paired();
+  assert.equal(JSON.parse(f.db.snapshot(`serverMatches/${sessionID}`).data().puzzleData).matchRounds, 1);
+  f.advance(20000);
+  await f.api.submit("a", {sessionID, evidence: {rounds: [["APPLE"]]}});
+  const publicMatch = f.db.snapshot(`serverMatches/${sessionID}`).data();
+  assert.equal(publicMatch.status, "finished");
+  assert.equal(publicMatch.winnerID, "a");
+  assert.equal(publicMatch.playerResults.b.status, "Opponent solved first");
+  assert.equal(publicMatch.playerResults.b.summary.raceLoss, "true");
+  const match = f.db.snapshot(matchPath(sessionID)).data();
+  assert.equal(resolveMatch(match), "a");
+  const receipt = await createMatchRewards({db: f.db, clock: f.clock}).settle("a", {sessionID});
+  assert.equal(receipt.matchReward, 15);
+  assert.equal((await createMatchRewards({db: f.db, clock: f.clock}).settle("b", {sessionID})).matchReward, 0);
+});
+
+test("Word Guess winner bonus rewards efficient verified solves without increasing losses", () => {
+  const match = {
+    mode: "wordle", difficulty: "medium", players: [
+      {userID: "a", rankPoints: 0, isBot: false}, {userID: "b", rankPoints: 0, isBot: false},
+    ],
+    playerResults: {
+      a: {completed: true, elapsedSeconds: 20, summary: {totalGuesses: "1"}},
+      b: {elapsedSeconds: 20, summary: {totalGuesses: "0", raceLoss: "true"}},
+    },
+  };
+  assert.equal(rankDelta(match, "a", "a"), 36, "one guess fast solve is capped at +6");
+  assert.equal(rankDelta(match, "b", "a"), -15, "race loss has no added rank penalty");
+  match.playerResults.a = {completed: true, elapsedSeconds: 20, summary: {totalGuesses: "2"}};
+  assert.equal(rankDelta(match, "a", "a"), 35, "two guesses receives the small speed point");
+  match.playerResults.a = {completed: true, elapsedSeconds: 30, summary: {totalGuesses: "3"}};
+  assert.equal(rankDelta(match, "a", "a"), 32, "thirty seconds is not in the fast band");
+});
+
+test("v2 Word Guess rejects extra rounds and unfinished attempts", () => {
+  const p = {...fixture().puzzle, matchRounds: 1};
+  assert.throws(() => verifyResult(p, "a", {rounds: [["APPLE"], ["BRICK"]]}, 20000));
+  assert.throws(() => verifyResult(p, "a", {rounds: [["BRICK"]]}, 20000));
+});
+
+test("server board snapshots retain blanks and reconstruct mines without trusting client art", () => {
+  const cells = Array(81).fill(0); cells[0] = 1;
+  const givens = Array(81).fill(0); givens[1] = 2;
+  const sudoku = verifyResult({mode: "sudoku", givens}, "a", {cells: cells.map((value, index) => index === 1 ? 2 : value)}, 720000);
+  assert.equal(sudoku.result.summary.boardRows.split("/").length, 9);
+  assert.equal(sudoku.result.summary.boardRows.split("/")[0], "12.......");
+  assert.equal(sudoku.result.summary.givensRows.split("/")[0], ".2.......");
+  const mine = verifyResult({mode: "minesweeper", seed: 1, rows: 5, cols: 5, mines: 3}, "a",
+      {firstCell: 12, revealed: [12], boardRows: "FAKE"}, 300000);
+  const rows = mine.result.summary.boardRows.split("/");
+  assert.equal(rows.length, 5); assert.ok(rows.every((row) => row.length === 5));
+  assert.equal(rows.join("").split("M").length - 1, 3);
+  assert.equal(rows[2][2], "0");
+});
+
+test("Word Hunt is Medium at every online rank; existing v2 Easy matches still settle", async () => {
+  for (const kind of ["ranked", "casual"]) {
+    for (const points of [0, 3599, 3600, 12000]) {
+      assert.equal(onlineDifficulty("wordHunt", kind, points), "medium");
+    }
+  }
+  const f = fixture("wordHunt", "ranked");
+  const sessionID = await f.paired();
+  f.db.set(privatePath(sessionID), {...f.db.snapshot(privatePath(sessionID)).data(), rulesVersion: 2});
+  await f.api.forfeit("a", {sessionID});
+  const receipt = await createMatchRewards({db: f.db, clock: f.clock}).settle("b", {sessionID});
+  assert.ok(receipt.rankDelta > 0);
+  assert.equal(receipt.matchReward, 0);
+});
 
 test("optional test allowlist blocks unapproved queue and actions", async () => {
   const f = fixture();
@@ -183,7 +282,7 @@ test("timed result requires full server duration and a bounded delivery window",
 
 if (process.env.MATCH_CATALOG_FIXTURES) {
   const puzzles = JSON.parse(readFileSync(process.env.MATCH_CATALOG_FIXTURES, "utf8"));
-  for (const p of puzzles) {
+  for (const p of puzzles.filter((p) => p.difficulty === presets[p.mode])) {
     test(`production puzzle/evidence verifies end-to-end: ${p.id}`, async () => {
       const f = fixture(p.mode);
       f.db.set("economyPrivate/matchPuzzles/records/p", p);
@@ -197,6 +296,27 @@ if (process.env.MATCH_CATALOG_FIXTURES) {
       assert.ok(f.db.snapshot(matchPath(sessionID)).exists);
       const receipt = await createMatchRewards({db: f.db, clock: f.clock}).settle("a", {sessionID});
       assert.ok(receipt.matchReward > 0);
+    });
+  }
+  for (const p of puzzles.filter((p) => [onlineDifficulty(p.mode, "ranked", 0), onlineDifficulty(p.mode, "ranked", 3600)].includes(p.difficulty))) {
+    test(`v2 generated puzzle verifies and settles: ${p.id}`, async () => {
+      const f = fixture(p.mode, "ranked");
+      const points = p.difficulty === onlineDifficulty(p.mode, "ranked", 0) ? 0 : 3600;
+      enableV2(f, p.mode, "ranked", points);
+      f.db.set("economyPrivate/matchPuzzles/records/p", p);
+      const sessionID = await f.paired();
+      const seconds = p.mode === "sudoku" && p.difficulty === "easy" ? 600 :
+        p.mode === "minesweeper" && p.difficulty === "easy" ? 180 :
+          p.mode === "colorLink" && p.difficulty === "hard" ? 420 : limits[p.mode] || 30;
+      f.advance(seconds * 1000);
+      const evidence = p.mode === "gridlock" ? {moves: [[0]]} : p.mode === "wordle" ?
+        {rounds: p.testEvidence.rounds.slice(0, 1)} : p.testEvidence;
+      await f.api.submit("a", {sessionID, evidence});
+      if (f.db.snapshot(privatePath(sessionID)).data().status !== "finished") await f.api.submit("b", {sessionID, evidence});
+      assert.ok(f.db.snapshot(matchPath(sessionID)).exists);
+      const receipt = await createMatchRewards({db: f.db, clock: f.clock}).settle("a", {sessionID});
+      assert.ok(receipt.matchReward > 0);
+      assert.equal(receipt.endingRankPoints - receipt.startingRankPoints, receipt.rankDelta);
     });
   }
 }

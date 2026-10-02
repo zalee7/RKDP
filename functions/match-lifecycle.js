@@ -2,7 +2,7 @@
 "use strict";
 const {randomUUID, randomInt, createHash} = require("node:crypto");
 const {check, validUID, validID, dayKey} = require("./wallet-ledger");
-const {presets, tier, resolveMatch, validateMatch} = require("./match-reward-policy");
+const {presets, onlineDifficulty, tier, resolveMatch, validateMatch} = require("./match-reward-policy");
 const {verifyResult, limits} = require("./match-evidence");
 const {matchPath} = require("./match-rewards");
 const privatePath = (id) => `economyPrivate/liveMatches/records/${id}`;
@@ -38,6 +38,7 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
     const flags = (await tx.get(db.doc("economyPrivate/control"))).data();
     check(flags?.walletMigrationReady === true && flags?.matchLifecycleEnabled === true && flags?.matchRewardsEnabled === true, "Official matches are not enabled");
     if (flags.matchTestUIDs) check(flags.matchTestUIDs.includes(uid), "Test account is not approved");
+    return flags;
   }
   async function player(tx, uid) {
     const wallet = (await tx.get(db.doc(`coinWallets/${uid}`))).data();
@@ -46,6 +47,9 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
     return {wallet, user};
   }
   function publicMatch(m, puzzleData) {
+    if (m.rulesVersion === 2 && m.mode === "wordle") {
+      puzzleData = JSON.stringify({...JSON.parse(puzzleData), matchRounds: 1});
+    }
     return {id: m.sessionID, mode: m.mode, difficulty: m.difficulty, matchKind: m.matchKind, seed: m.seed,
       puzzleData, status: m.status, players: m.players, playerIDs: m.players.filter((p) => !p.isBot).map((p) => p.userID),
       createdAt: timestamp(m.createdAtMs), ...(m.startedAtMs ? {startedAt: timestamp(m.startedAtMs)} : {}),
@@ -68,7 +72,7 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       ["ranked", "casual"].includes(data.matchKind), "Invalid queue request");
     const newID = `v1_${uuid()}`;
     return db.runTransaction(async (tx) => {
-      await gate(tx, uid);
+      const flags = await gate(tx, uid);
       const now = clock(); const mine = await player(tx, uid);
       const accountRef = db.doc(accountPath(uid)); const account = (await tx.get(accountRef)).data();
       if (account?.sessionID) {
@@ -77,7 +81,9 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       }
       check(!(account?.requestID === data.requestID && account.cancelled), "Search was cancelled");
       const points = mine.wallet.matchRanks?.[data.mode]?.points ?? 0;
-      const key = `${data.matchKind}_${data.mode}_${data.matchKind === "ranked" ? tier(points) : "all"}`;
+      const rulesVersion = flags.onlineRulesVersion === 2 ? (data.mode === "wordHunt" ? 3 : 2) : 1;
+      const difficulty = rulesVersion >= 2 ? onlineDifficulty(data.mode, data.matchKind, points) : presets[data.mode];
+      const key = `${data.matchKind}_${data.mode}_${data.matchKind === "ranked" ? tier(points) : "all"}${rulesVersion >= 2 ? `_v${rulesVersion}` : ""}`;
       check(!account?.queueKey || account.queueKey === key || account.expiresAtMs <= now || account.cancelled || account.sessionID, "Already searching another mode");
       if (data.matchKind === "ranked") entryAccess(mine.wallet, data.mode, now, false);
       const bucketRef = db.doc(queuePath(key));
@@ -109,18 +115,19 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
         tx.set(accountRef, {...item, queueKey: key, queuedAtMs: queuedAt});
         return {sessionID: null};
       }
-      const catalog = (await tx.get(db.doc(`economyPrivate/matchCatalog/modes/${data.mode}`))).data();
+      const catalogKey = rulesVersion >= 2 ? `${data.mode}_${difficulty}` : data.mode;
+      const catalog = (await tx.get(db.doc(`economyPrivate/matchCatalog/modes/${catalogKey}`))).data();
       check(catalog?.version === 1 && Array.isArray(catalog.puzzleIDs) && catalog.puzzleIDs.length > 0 && catalog.puzzleIDs.length <= 10000,
           "Verified match catalog is missing");
       const puzzleID = catalog.puzzleIDs[choose(catalog.puzzleIDs.length)];
       check(validID(puzzleID), "Invalid puzzle identity");
       const puzzle = (await tx.get(db.doc(`economyPrivate/matchPuzzles/records/${puzzleID}`))).data();
-      check(puzzle?.protocolVersion === "match-v1" && puzzle.mode === data.mode && puzzle.difficulty === presets[data.mode] &&
+      check(puzzle?.protocolVersion === "match-v1" && puzzle.mode === data.mode && puzzle.difficulty === difficulty &&
         Number.isSafeInteger(puzzle.seed) && puzzle.seed >= 0 && typeof puzzle.puzzleData === "string", "Invalid match catalog");
       const humans = [{uid, data: mine, requestID: data.requestID}, ...(opponent ? [{uid: opponent.uid, data: other, requestID: opponent.requestID}] : [])];
       const players = humans.map((h) => participant(h.uid, h.data, data.mode));
       if (bot) players.push({userID: `bot_${newID}`, username: "Training Bot", wager: 0, isBot: true, rankPoints: 200, rankTier: 0});
-      const m = {version: 1, verifierVersion: "match-v1", sessionID: newID, mode: data.mode, difficulty: presets[data.mode],
+      const m = {version: 1, rulesVersion, verifierVersion: "match-v1", sessionID: newID, mode: data.mode, difficulty,
         matchKind: data.matchKind, status: "waiting", players, seed: puzzle.seed, puzzleID, puzzleHash: puzzleHash(puzzle),
         createdAtMs: now, readyIDs: [], playerResults: {}, playedUserIDs: [], forfeitedIDs: [],
         botStrong: bot && choose(100) >= 82};
@@ -191,15 +198,24 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
         check(m.status === "inProgress", "Match has not started");
         const elapsed = now - m.startedAtMs;
         if (action === "submit" && !m.playerResults[uid]) {
-          const limit = limits[m.mode];
+          const limit = matchTimeLimit(m);
           check(!limit || elapsed <= (limit + 20) * 1000, "Submission window expired");
-          const verified = verifyResult(puzzle, uid, data.evidence, elapsed);
+          const verified = verifyResult(m.rulesVersion === 2 && m.mode === "wordle" ? {...puzzle, matchRounds: 1} : puzzle, uid, data.evidence, elapsed, limit);
           m.playerResults[uid] = verified.result;
           if (verified.played) m.playedUserIDs.push(uid);
+          if (m.rulesVersion === 2 && m.mode === "wordle" && verified.result.completed) {
+            // Word Guess is a one-word race: the first verified solve ends it.
+            for (const player of m.players) {
+              if (player.userID === uid || m.playerResults[player.userID]) continue;
+              m.playerResults[player.userID] = {userID: player.userID, mode: m.mode, completed: false,
+                elapsedSeconds: Math.floor(elapsed / 1000), score: 0, progress: 0, status: "Opponent solved first",
+                summary: {raceLoss: "true", isFinal: "true", solvedRounds: "0", failedRounds: "1", totalGuesses: "0", roundCount: "0"}, details: []};
+            }
+          }
         }
         const bot = m.players.find((p) => p.isBot);
         if (bot && !m.playerResults[bot.userID] && elapsed >= botDelay(m.mode) * 1000) m.playerResults[bot.userID] = botResult(m, puzzle, bot.userID);
-        const expiry = (limits[m.mode] || 86400) + 20;
+        const expiry = (matchTimeLimit(m) || 86400) + 20;
         if (elapsed > expiry * 1000) {
           const missing = m.players.filter((p) => !m.playerResults[p.userID]);
           if (missing.length === 2) m.status = "abandoned";
@@ -230,6 +246,15 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
     forfeit: (uid, data) => act(uid, data, "forfeit"), tick: (uid, data) => act(uid, data, "tick")};
 }
 
+function matchTimeLimit(m) {
+  if (m.rulesVersion === 2) {
+    if (m.mode === "sudoku" && m.difficulty === "easy") return 600;
+    if (m.mode === "minesweeper" && m.difficulty === "easy") return 180;
+    if (m.mode === "colorLink" && m.difficulty === "hard") return 420;
+  }
+  return limits[m.mode];
+}
+
 function botDelay(mode) {
   return {wordle: 35, hangman: 91, anagram: 61, wordHunt: 76, sudoku: 55, minesweeper: 42, gridlock: 48, colorLink: 48}[mode];
 }
@@ -243,6 +268,11 @@ function botResult(m, p, uid) {
     Object.assign(r.summary, {wordCount: String(words.length), longestWordLength: String(Math.max(0, ...words.map((w) => w.length))), foundWords: words.join("|")});
   }
   if (m.mode === "wordle") Object.assign(r.summary, {isFinal: "true", solvedRounds: strong ? "2" : "1", failedRounds: strong ? "0" : "2", totalGuesses: strong ? "7" : "5"});
+  if (m.mode === "wordle" && m.rulesVersion === 2) {
+    Object.assign(r.summary, {
+      solvedRounds: strong ? "1" : "0", failedRounds: strong ? "0" : "1", totalGuesses: strong ? "3" : "0", roundCount: "1",
+    });
+  }
   if (m.mode === "hangman") Object.assign(r.summary, {final: "true", solvedRounds: strong ? "2" : "1", wrongGuessCount: strong ? "3" : "9", revealedLetterCount: strong ? "12" : "6"});
   if (m.mode === "gridlock") Object.assign(r.summary, {moves: strong ? "130" : "95", foundationCount: strong ? "52" : "26"});
   if (m.mode === "colorLink") r.summary.solvedPairs = String(strong ? p.pairs.length : Math.floor(p.pairs.length / 2));

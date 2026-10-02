@@ -6,6 +6,14 @@ const presets = {sudoku: "medium", minesweeper: "medium", colorLink: "expert", g
   anagram: "medium", wordHunt: "easy", wordle: "medium", hangman: "medium"};
 const thresholds = [0, 600, 1800, 3600, 7200, 12000];
 const wins = [20, 30, 40, 50, 60, 75];
+function onlineDifficulty(mode, matchKind, points = 0) {
+  if (mode === "wordHunt") return "medium";
+  const platinum = matchKind === "ranked" && points >= 3600;
+  if (mode === "sudoku" || mode === "minesweeper") return platinum ? "medium" : "easy";
+  if (mode === "colorLink") return platinum ? "expert" : "hard";
+  if (mode === "wordle") return platinum ? "hard" : "medium";
+  return presets[mode];
+}
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
 const stat = (r, key, fallback = 0) => Number(r.summary[key] ?? fallback);
 const tier = (points) => thresholds.findLastIndex((n) => points >= n);
@@ -34,8 +42,10 @@ function isForfeit(r) {
 function validateMatch(m, id, now) {
   check(m?.version === 1 && m.verifierVersion === "match-v1" && m.sessionID === id && m.status === "finished",
       "Verified match required");
-  check(["ranked", "casual"].includes(m.matchKind) && Object.hasOwn(presets, m.mode) && presets[m.mode] === m.difficulty,
-      "Unsupported match rules");
+  check(["ranked", "casual"].includes(m.matchKind) && Object.hasOwn(presets, m.mode) &&
+    (m.rulesVersion === 2 && m.mode === "wordHunt" ? "easy" :
+      [2, 3].includes(m.rulesVersion) ? onlineDifficulty(m.mode, m.matchKind, m.players?.[0]?.rankPoints) : presets[m.mode]) === m.difficulty,
+  "Unsupported match rules");
   check(integer(m.startedAtMs) && integer(m.finishedAtMs) && m.finishedAtMs >= m.startedAtMs && m.finishedAtMs <= now,
       "Invalid match clock");
   check(Array.isArray(m.players) && m.players.length === 2 && new Set(m.players.map((p) => p.userID)).size === 2 &&
@@ -117,13 +127,29 @@ function rankDelta(m, uid, winnerID) {
     const diff = Math.max(-2, Math.min(2, division(m.players.find((p) => p.userID !== uid)) - division(m.players.find((p) => p.userID === uid))));
     base = win ? Math.max(10, base + diff * 5) : Math.min(-5, base + diff * 3);
   }
-  const multiplier = m.mode === "wordle" ? 1 : {easy: 1, medium: 1.5, expert: 4}[m.difficulty];
-  return Math.trunc(base * multiplier);
+  const multiplier = m.mode === "wordle" ? 1 : {easy: 1, medium: 1.5, hard: 2, expert: 4}[m.difficulty];
+  const scaled = Math.trunc(base * multiplier);
+  if (m.mode !== "wordle" || !win || winnerID === null) return scaled;
+
+  // Word Guess is a one-word race. Guesses are the main performance signal;
+  // server elapsed time supplies only a small tie-breaker-style flourish.
+  return scaled + wordGuessPerformanceBonus(m, uid, winnerID);
+}
+
+function wordGuessPerformanceBonus(m, uid, winnerID) {
+  if (m.mode !== "wordle" || winnerID !== uid) return 0;
+  const result = m.playerResults?.[uid];
+  if (!result?.completed) return 0;
+  const guesses = stat(result, "totalGuesses");
+  const guessBonus = guesses === 1 ? 6 : guesses === 2 ? 4 : guesses === 3 ? 2 : 0;
+  const speedBonus = result.elapsedSeconds > 0 && result.elapsedSeconds < 30 ? 1 : 0;
+  return Math.min(6, guessBonus + speedBonus);
 }
 
 function matchCoins(m, uid, winnerID, botAvailable) {
   const result = m.playerResults[uid];
   if (m.forfeitedIDs.includes(uid) || isForfeit(result)) return 0;
+  if (result?.summary.raceLoss === "true") return 0;
   if (m.forfeitedIDs.length && !(winnerID === uid && result?.completed && finalResult(result))) return 0;
   if (m.players.some((p) => p.isBot) && !(winnerID === uid && botAvailable)) return 0;
   if (m.matchKind === "casual") return winnerID === uid ? 15 : 5;
@@ -144,4 +170,4 @@ function onlineBest(current, r, mode) {
   return result;
 }
 
-module.exports = {presets, validateMatch, resolveMatch, rankDelta, matchCoins, onlineBest, tier, isForfeit};
+module.exports = {presets, onlineDifficulty, validateMatch, resolveMatch, rankDelta, wordGuessPerformanceBonus, matchCoins, onlineBest, tier, isForfeit};

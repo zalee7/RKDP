@@ -2,7 +2,7 @@
 "use strict";
 
 const {readWallet, commitWallet, dailyPlayChange, dayKey, check, validID, validUID} = require("./wallet-ledger");
-const {validateMatch, resolveMatch, rankDelta, matchCoins, onlineBest, tier, isForfeit} = require("./match-reward-policy");
+const {validateMatch, resolveMatch, rankDelta, wordGuessPerformanceBonus, matchCoins, onlineBest, tier, isForfeit} = require("./match-reward-policy");
 
 // The source must be produced by a trusted match lifecycle/proof verifier, never
 // copied from sessions/{id} or RTDB. No client API creates this private record.
@@ -87,6 +87,8 @@ function createMatchRewards({db, clock = Date.now}) {
         return {p, context, walletUpdates, userUpdates, newRank, receipt: {
           sessionID: id, mode: m.mode, matchKind: m.matchKind, winnerID, matchReward,
           dailyCoins: play.dailyCoins, rankDelta: newRank.points - oldRank.points,
+          rankPerformanceBonus: wordGuessPerformanceBonus(m, p.userID, winnerID),
+          startingRankPoints: oldRank.points, endingRankPoints: newRank.points,
           outcome: winnerID === null ? "draw" : winnerID === p.userID ? "win" : "loss",
           reason: m.forfeitedIDs.includes(p.userID) || isForfeit(m.playerResults[p.userID]) ? "forfeit" :
             botWin && !botAvailable ? "botLimit" : requested > matchReward ? "casualLimit" : "settled",

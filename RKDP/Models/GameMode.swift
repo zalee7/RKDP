@@ -89,19 +89,29 @@ enum GameMode: String, Codable, CaseIterable, Identifiable {
     var onlinePresetDifficulty: Difficulty {
         switch self {
         case .sudoku, .minesweeper:
-            return .medium
+            return .easy
         case .colorLink:
-            return .expert
+            return .hard
         case .gridlock:
             return .easy
         case .anagram:
             return .medium
         case .wordHunt:
-            return .easy
+            return .medium
         case .wordle:
             return .medium
         case .hangman:
             return .medium
+        }
+    }
+
+    func onlineDifficulty(rankPoints: Int, ranked: Bool) -> Difficulty {
+        guard ranked && rankPoints >= 3600 else { return onlinePresetDifficulty }
+        switch self {
+        case .sudoku, .minesweeper: return .medium
+        case .colorLink: return .expert
+        case .wordle: return .hard
+        default: return onlinePresetDifficulty
         }
     }
 
