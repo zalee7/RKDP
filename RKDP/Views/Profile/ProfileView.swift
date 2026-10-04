@@ -381,8 +381,8 @@ struct ProfileView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var shop: ShopViewModel
     @State private var isGrantingTesterAccess = false
-    @State private var wordHuntTestPoolEnabled = false
-    @State private var isUpdatingWordHuntTestPool = false
+    @State private var wordGuessTestTargetEnabled = false
+    @State private var isUpdatingWordGuessTestTarget = false
     @State private var selectedOwnedCategory: CosmeticCategory = .title
     @State private var recentGames: [GameSession] = []
     @State private var onlineStatGames: [GameSession] = []
@@ -488,31 +488,31 @@ struct ProfileView: View {
                             Button {
                                 guard let userID = auth.user?.id else { return }
                                 Task {
-                                    isUpdatingWordHuntTestPool = true
-                                    defer { isUpdatingWordHuntTestPool = false }
+                                    isUpdatingWordGuessTestTarget = true
+                                    defer { isUpdatingWordGuessTestTarget = false }
                                     do {
-                                        wordHuntTestPoolEnabled = try await FirestoreService.shared.setWordHuntTestPool(
-                                            enabled: !wordHuntTestPoolEnabled,
+                                        wordGuessTestTargetEnabled = try await FirestoreService.shared.setWordGuessTestTarget(
+                                            enabled: !wordGuessTestTargetEnabled,
                                             userID: userID
                                         )
                                     } catch {
-                                        print("Word Hunt test pool update failed: \(error.localizedDescription)")
+                                        print("Word Guess test target update failed: \(error.localizedDescription)")
                                     }
                                 }
                             } label: {
                                 Label(
-                                    wordHuntTestPoolEnabled ? "Word Hunt ATEST Pool On" : "Enable Word Hunt ATEST Pool",
-                                    systemImage: wordHuntTestPoolEnabled ? "checkmark.circle.fill" : "testtube.2"
+                                    wordGuessTestTargetEnabled ? "Word Guess ATEST On" : "Use ATEST in Word Guess",
+                                    systemImage: wordGuessTestTargetEnabled ? "checkmark.circle.fill" : "testtube.2"
                                 )
                                 .font(.caption.bold())
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background((wordHuntTestPoolEnabled ? AppTheme.teal : AppTheme.hotPink).opacity(0.2))
-                                .foregroundStyle(wordHuntTestPoolEnabled ? AppTheme.teal : AppTheme.hotPink)
+                                .background((wordGuessTestTargetEnabled ? AppTheme.teal : AppTheme.hotPink).opacity(0.2))
+                                .foregroundStyle(wordGuessTestTargetEnabled ? AppTheme.teal : AppTheme.hotPink)
                                 .clipShape(Capsule())
-                                .overlay(Capsule().stroke((wordHuntTestPoolEnabled ? AppTheme.teal : AppTheme.hotPink).opacity(0.45), lineWidth: 1))
+                                .overlay(Capsule().stroke((wordGuessTestTargetEnabled ? AppTheme.teal : AppTheme.hotPink).opacity(0.45), lineWidth: 1))
                             }
-                            .disabled(isUpdatingWordHuntTestPool)
+                            .disabled(isUpdatingWordGuessTestTarget)
                             #endif
                         }
                         .padding(.top, 24)
@@ -613,7 +613,7 @@ struct ProfileView: View {
             .task {
                 await loadRecentGames()
                 #if PP_SOCIAL_SANDBOX
-                await loadWordHuntTestPool()
+                await loadWordGuessTestTarget()
                 #endif
             }
             .onAppear {
@@ -628,13 +628,13 @@ struct ProfileView: View {
 
     #if PP_SOCIAL_SANDBOX
     @MainActor
-    private func loadWordHuntTestPool() async {
+    private func loadWordGuessTestTarget() async {
         guard let userID = auth.user?.id else { return }
         do {
-            wordHuntTestPoolEnabled = try await FirestoreService.shared.wordHuntTestPoolEnabled(userID: userID)
+            wordGuessTestTargetEnabled = try await FirestoreService.shared.wordGuessTestTargetEnabled(userID: userID)
         } catch {
             // The normal production build and unapproved accounts never expose this tool.
-            wordHuntTestPoolEnabled = false
+            wordGuessTestTargetEnabled = false
         }
     }
     #endif

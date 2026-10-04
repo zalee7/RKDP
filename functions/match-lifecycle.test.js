@@ -143,24 +143,24 @@ test("optional test allowlist blocks unapproved queue and actions", async () => 
   assert.equal((await f.join("a")).sessionID, null);
 });
 
-test("shared Word Hunt test pool uses only ATEST for approved test accounts", async () => {
-  const f = fixture("wordHunt", "casual");
-  enableV2(f, "wordHunt", "casual");
+test("shared Word Guess test target uses ATEST for both approved players", async () => {
+  const f = fixture("wordle", "casual");
+  enableV2(f, "wordle", "casual");
   const control = f.db.snapshot("economyPrivate/control").data();
   f.db.set("economyPrivate/control", {...control, matchTestUIDs: ["a", "b"]});
-  assert.equal((await f.api.wordHuntTestPool("a", {})).enabled, false);
-  assert.equal((await f.api.wordHuntTestPool("a", {enabled: true})).enabled, true);
+  assert.equal((await f.api.wordGuessTestTarget("a", {})).enabled, false);
+  assert.equal((await f.api.wordGuessTestTarget("a", {enabled: true})).enabled, true);
   const sessionID = await f.paired();
   const match = f.db.snapshot(privatePath(sessionID)).data();
-  assert.equal(match.puzzleID, "wordhunt_test_atest_v1");
+  assert.equal(match.puzzleID, "wordle_test_atest_medium_v1");
   const payload = JSON.parse(f.db.snapshot(`serverMatches/${sessionID}`).data().puzzleData);
-  assert.deepEqual(payload.validWords, ["ATEST"]);
-  const puzzle = f.db.snapshot("economyPrivate/matchPuzzles/records/wordhunt_test_atest_v1").data();
-  assert.deepEqual(puzzle.validWords, ["ATEST"]);
-  f.advance(75000);
-  assert.throws(() => verifyResult(puzzle, "a", {words: ["TEST"]}, 75000), /Invalid found words/);
-  await f.api.submit("a", {sessionID, evidence: {words: ["ATEST"]}});
-  await f.api.submit("b", {sessionID, evidence: {words: ["ATEST"]}});
+  assert.deepEqual(payload.targets, ["ATEST"]);
+  assert.equal(payload.matchRounds, 1);
+  const puzzle = f.db.snapshot("economyPrivate/matchPuzzles/records/wordle_test_atest_medium_v1").data();
+  assert.deepEqual(puzzle.targets, ["ATEST"]);
+  assert.throws(() => verifyResult({...puzzle, matchRounds: 1}, "a", {rounds: [["APPLE"]]}, 1000), /Invalid guess/);
+  await f.api.submit("a", {sessionID, evidence: {rounds: [["ATEST"]]}});
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().winnerID, "a");
 });
 
 test("official pairing uses private rank and shared server puzzle, atomically once", async () => {
@@ -172,6 +172,19 @@ test("official pairing uses private rank and shared server puzzle, atomically on
   assert.equal(m.seed, 1); assert.deepEqual(m.players.map((p) => p.rankPoints), [0, 0]);
   assert.equal(f.db.snapshot(`serverMatches/${ids[0]}`).data().playerResults, undefined);
   assert.equal(f.db.snapshot(`serverMatches/${ids[0]}`).data().status, "waiting");
+});
+
+test("a new search retires a stale waiting match instead of reopening it", async () => {
+  const f = fixture("anagram", "casual");
+  const staleID = await f.paired();
+  const stale = f.db.snapshot(privatePath(staleID)).data();
+  f.db.set(privatePath(staleID), {...stale, status: "waiting", createdAtMs: f.clock() - 121000,
+    startedAtMs: undefined, preGameCountdownStartedAtMs: undefined});
+  f.db.set(`serverMatches/${staleID}`, {...f.db.snapshot(`serverMatches/${staleID}`).data(), status: "waiting"});
+  const reply = await f.api.queue("a", {requestID: "replacement_a", mode: "anagram", matchKind: "casual"});
+  assert.equal(reply.sessionID, null);
+  assert.equal(f.db.snapshot(privatePath(staleID)).data().status, "abandoned");
+  assert.equal(f.db.snapshot(`serverMatches/${staleID}`).data().status, "abandoned");
 });
 
 test("no human can be paired into two concurrent modes or opponents", async () => {

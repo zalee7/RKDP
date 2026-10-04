@@ -111,7 +111,8 @@ for (const method of ["create", "join", "accept", "decline", "ready", "start",
 }
 
 const matchMethods = [
-  "queue", "cancel", "wordHuntTestPool", "ready", "submit", "forfeit", "tick",
+  "queue", "cancel", "wordGuessTestTarget", "ready", "submit", "forfeit",
+  "tick",
 ];
 for (const method of matchMethods) {
   exports[`officialMatch_${method}`] = onCall({

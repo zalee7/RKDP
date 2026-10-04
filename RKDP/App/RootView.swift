@@ -39,6 +39,8 @@ private struct RankedSandboxView: View {
     @State private var casual = false
     @State private var selectedMode: GameMode?
     @State private var showFriends = false
+    @State private var wordGuessTestTargetEnabled = false
+    @State private var isUpdatingWordGuessTarget = false
 
     var body: some View {
         NavigationStack {
@@ -72,12 +74,45 @@ private struct RankedSandboxView: View {
                             }
                         }
                     }
+                    #if PP_SOCIAL_SANDBOX
+                    Section("Shared Word Guess Test") {
+                        Button {
+                            Task {
+                                isUpdatingWordGuessTarget = true
+                                defer { isUpdatingWordGuessTarget = false }
+                                do {
+                                    wordGuessTestTargetEnabled = try await FirestoreService.shared.setWordGuessTestTarget(
+                                        enabled: !wordGuessTestTargetEnabled,
+                                        userID: user.id
+                                    )
+                                } catch {
+                                    print("Word Guess test target update failed: \(error.localizedDescription)")
+                                }
+                            }
+                        } label: {
+                            Label(
+                                wordGuessTestTargetEnabled ? "ATEST Answer Enabled" : "Use ATEST as Answer",
+                                systemImage: wordGuessTestTargetEnabled ? "checkmark.circle.fill" : "testtube.2"
+                            )
+                        }
+                        .disabled(isUpdatingWordGuessTarget)
+
+                        Text("Applies to the next Word Guess match for both phones.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    #endif
                     Section {
                         Button("Friends and Parties", systemImage: "person.2.fill") { showFriends = true }
                         Button("Sign Out", role: .destructive) { auth.signOut() }
                     }
                 }
                 .navigationTitle("Online Test")
+                .task {
+                    #if PP_SOCIAL_SANDBOX
+                    wordGuessTestTargetEnabled = (try? await FirestoreService.shared.wordGuessTestTargetEnabled(userID: user.id)) ?? false
+                    #endif
+                }
                 .fullScreenCover(item: $selectedMode, onDismiss: {
                     Task { await auth.refreshUser() }
                 }) { mode in

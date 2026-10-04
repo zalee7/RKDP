@@ -17,11 +17,11 @@ function canonical(value) {
 }
 const puzzleHash = (puzzle) => createHash("sha256").update(JSON.stringify(canonical(puzzle))).digest("hex");
 const actionReply = (m, uid) => ({accepted: true, status: m.status, ownResult: m.playerResults[uid] ?? null});
-const wordHuntTestPuzzleID = "wordhunt_test_atest_v1";
-const wordHuntTestPuzzle = () => ({
-  protocolVersion: "match-v1", mode: "wordHunt", difficulty: "medium", seed: 1,
-  validWords: ["ATEST"],
-  puzzleData: JSON.stringify({wordBankVersion: "test-atest-v1", gridRows: ["ATEST", "QQQQQ", "XXXXX", "JJJJJ", "ZZZZZ"], validWords: ["ATEST"]}),
+const wordGuessTestPuzzleID = (difficulty) => `wordle_test_atest_${difficulty}_v1`;
+const wordGuessTestPuzzle = (difficulty) => ({
+  protocolVersion: "match-v1", mode: "wordle", difficulty, seed: 1,
+  target: "ATEST", targets: ["ATEST"], validGuesses: ["ATEST"],
+  puzzleData: JSON.stringify({wordBankVersion: "test-atest-v1", targets: ["ATEST"]}),
 });
 
 function entryAccess(wallet, mode, now, consume) {
@@ -97,9 +97,12 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       const flags = await gate(tx, uid);
       const now = clock(); const mine = await player(tx, uid);
       const accountRef = db.doc(accountPath(uid)); const account = (await tx.get(accountRef)).data();
+      let staleSessionID = null;
       if (account?.sessionID) {
         const active = (await tx.get(db.doc(privatePath(account.sessionID)))).data();
-        if (account.requestID === data.requestID || ["waiting", "inProgress"].includes(active?.status)) return {sessionID: account.sessionID};
+        const staleWaiting = active?.status === "waiting" && now - active.createdAtMs > 120000;
+        if (staleWaiting) staleSessionID = account.sessionID;
+        else if (account.requestID === data.requestID || ["waiting", "inProgress"].includes(active?.status)) return {sessionID: account.sessionID};
       }
       check(!(account?.requestID === data.requestID && account.cancelled), "Search was cancelled");
       const points = mine.wallet.matchRanks?.[data.mode]?.points ?? 0;
@@ -133,18 +136,24 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       if (!opponent && !bot) {
         check(entries.length < 100, "Queue is busy; retry shortly");
         const item = {uid, requestID: data.requestID, expiresAtMs: now + 20000};
+        if (staleSessionID) {
+          tx.update(db.doc(privatePath(staleSessionID)), {status: "abandoned"});
+          tx.update(db.doc(`serverMatches/${staleSessionID}`), {status: "abandoned"});
+        }
         tx.set(bucketRef, {entries: [...entries, item]});
         tx.set(accountRef, {...item, queueKey: key, queuedAtMs: queuedAt});
         return {sessionID: null};
       }
       let puzzleID; let puzzle;
-      if (data.mode === "wordHunt" && flags.wordHuntTestPoolEnabled === true) {
-        const testRef = db.doc(`economyPrivate/matchPuzzles/records/${wordHuntTestPuzzleID}`);
+      if (data.mode === "wordle" && flags.wordGuessTestTargetEnabled === true) {
+        const testPuzzleID = wordGuessTestPuzzleID(difficulty);
+        const expectedPuzzle = wordGuessTestPuzzle(difficulty);
+        const testRef = db.doc(`economyPrivate/matchPuzzles/records/${testPuzzleID}`);
         const existing = await tx.get(testRef);
-        puzzleID = wordHuntTestPuzzleID;
-        puzzle = existing.data() || wordHuntTestPuzzle();
+        puzzleID = testPuzzleID;
+        puzzle = existing.data() || expectedPuzzle;
         if (existing.exists) {
-          check(puzzleHash(puzzle) === puzzleHash(wordHuntTestPuzzle()), "Invalid Word Hunt test puzzle");
+          check(puzzleHash(puzzle) === puzzleHash(expectedPuzzle), "Invalid Word Guess test puzzle");
         } else {
           tx.create(testRef, puzzle);
         }
@@ -166,6 +175,10 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
         matchKind: data.matchKind, status: "waiting", players, seed: puzzle.seed, puzzleID, puzzleHash: puzzleHash(puzzle),
         createdAtMs: now, readyIDs: [], playerResults: {}, playedUserIDs: [], forfeitedIDs: [],
         botStrong: bot && choose(100) >= 82};
+      if (staleSessionID) {
+        tx.update(db.doc(privatePath(staleSessionID)), {status: "abandoned"});
+        tx.update(db.doc(`serverMatches/${staleSessionID}`), {status: "abandoned"});
+      }
       tx.create(db.doc(privatePath(newID)), m);
       tx.create(db.doc(`serverMatches/${newID}`), publicMatch(m, puzzle.puzzleData));
       tx.set(bucketRef, {entries: entries.filter((e) => e.uid !== opponent?.uid)});
@@ -271,21 +284,21 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       return actionReply(m, uid);
     });
   }
-  async function wordHuntTestPool(uid, data) {
+  async function wordGuessTestTarget(uid, data) {
     return db.runTransaction(async (tx) => {
       const flags = await gate(tx, uid);
       // This control exists only for explicitly allowlisted sandbox testers.
-      check(Array.isArray(flags.matchTestUIDs) && flags.matchTestUIDs.includes(uid), "Word Hunt test pool is unavailable");
+      check(Array.isArray(flags.matchTestUIDs) && flags.matchTestUIDs.includes(uid), "Word Guess test target is unavailable");
       const enabled = data?.enabled;
-      check(enabled === undefined || typeof enabled === "boolean", "Invalid test pool setting");
+      check(enabled === undefined || typeof enabled === "boolean", "Invalid test target setting");
       if (typeof enabled === "boolean") {
-        tx.update(db.doc("economyPrivate/control"), {wordHuntTestPoolEnabled: enabled});
+        tx.update(db.doc("economyPrivate/control"), {wordGuessTestTargetEnabled: enabled, wordHuntTestPoolEnabled: false});
         return {enabled};
       }
-      return {enabled: flags.wordHuntTestPoolEnabled === true};
+      return {enabled: flags.wordGuessTestTargetEnabled === true};
     });
   }
-  return {queue, cancel, wordHuntTestPool, ready: (uid, data) => act(uid, data, "ready"), submit: (uid, data) => act(uid, data, "submit"),
+  return {queue, cancel, wordGuessTestTarget, ready: (uid, data) => act(uid, data, "ready"), submit: (uid, data) => act(uid, data, "submit"),
     forfeit: (uid, data) => act(uid, data, "forfeit"), tick: (uid, data) => act(uid, data, "tick")};
 }
 

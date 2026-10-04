@@ -99,7 +99,8 @@ final class WordleViewModel: ObservableObject {
         guard currentInput.count == 5, !isRoundOver, revealingRow == nil else { return }
         let word = currentInput.uppercased()
 
-        guard WordleGame.isValidGuess(word) else {
+        // A server-provided target must always be playable, including sandbox targets.
+        guard word == game.targetWord || WordleGame.isValidGuess(word) else {
             message = "Not in word list"
             triggerShake()
             return

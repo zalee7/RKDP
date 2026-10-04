@@ -334,7 +334,12 @@ final class MultiplayerViewModel: ObservableObject {
             return
         }
 
-        tearDownListeners()
+        // Official discovery invokes this method from inside officialSearchTask.
+        // Releasing that task is safe; canceling it here interrupts the ready call.
+        tearDownDiscoveryListeners()
+        officialSearchTask = nil
+        officialHeartbeatTask?.cancel()
+        officialHeartbeatTask = nil
         botFallbackTask?.cancel()
         botFallbackTask = nil
         try? await store.leaveMatchmakingQueue(userID: user.id, mode: mode, difficulty: difficulty)
@@ -965,14 +970,18 @@ final class MultiplayerViewModel: ObservableObject {
         officialSearchTask = nil
         officialHeartbeatTask?.cancel()
         officialHeartbeatTask = nil
+        tearDownDiscoveryListeners()
+        sessionListener?.remove()
+        sessionListener = nil
+    }
+
+    private func tearDownDiscoveryListeners() {
         userDocListener?.remove()
         userDocListener = nil
         queueListener?.remove()
         queueListener = nil
         matchDiscoveryListener?.remove()
         matchDiscoveryListener = nil
-        sessionListener?.remove()
-        sessionListener = nil
     }
 
 

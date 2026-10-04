@@ -301,18 +301,18 @@ final class FirestoreService {
         var ownResult: MatchPlayerResult?
     }
 
-    private struct WordHuntTestPoolReply: Decodable { let enabled: Bool }
+    private struct WordGuessTestTargetReply: Decodable { let enabled: Bool }
 
-    func wordHuntTestPoolEnabled(userID: String) async throws -> Bool {
-        let reply: WordHuntTestPoolReply = try await EconomyCallable.call(
-            "officialMatch_wordHuntTestPool", userID: userID, data: [:]
+    func wordGuessTestTargetEnabled(userID: String) async throws -> Bool {
+        let reply: WordGuessTestTargetReply = try await EconomyCallable.call(
+            "officialMatch_wordGuessTestTarget", userID: userID, data: [:]
         )
         return reply.enabled
     }
 
-    func setWordHuntTestPool(enabled: Bool, userID: String) async throws -> Bool {
-        let reply: WordHuntTestPoolReply = try await EconomyCallable.call(
-            "officialMatch_wordHuntTestPool", userID: userID, data: ["enabled": enabled]
+    func setWordGuessTestTarget(enabled: Bool, userID: String) async throws -> Bool {
+        let reply: WordGuessTestTargetReply = try await EconomyCallable.call(
+            "officialMatch_wordGuessTestTarget", userID: userID, data: ["enabled": enabled]
         )
         return reply.enabled
     }
