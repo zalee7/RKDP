@@ -66,6 +66,7 @@ final class SudokuViewModel: ObservableObject {
         board.cells[id].value = 0
         board.cells[id].notes = []
         board.markInvalidCells()
+        SoundManager.shared.clearErase()
     }
 
     func useHint() {

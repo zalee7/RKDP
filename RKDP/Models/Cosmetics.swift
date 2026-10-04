@@ -210,14 +210,14 @@ extension OwnedCosmetics {
             )
         case "theme_prism_party":
             return BoardThemeStyle(
-                cellBackground: Color(hex: "291047").opacity(0.22),
-                selectedCell: Color(hex: "FF2F78").opacity(0.42),
-                highlightedCell: Color(hex: "12C8A2").opacity(0.18),
+                cellBackground: Color(hex: "171A3A").opacity(0.88),
+                selectedCell: Color(hex: "FF4F91").opacity(0.68),
+                highlightedCell: Color(hex: "7266D9").opacity(0.34),
                 invalidCell: Color.red.opacity(0.3),
-                gridLineMajor: Color(hex: "FF2F78"),
-                gridLineMinor: Color(hex: "12C8A2").opacity(0.34),
-                tileGradient: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF"), Color(hex: "12C8A2"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
-                activeTraceColor: Color(hex: "FFD02E")
+                gridLineMajor: Color(hex: "A89CFF").opacity(0.78),
+                gridLineMinor: Color(hex: "8D86D9").opacity(0.38),
+                tileGradient: LinearGradient(colors: [Color(hex: "151833"), Color(hex: "2A2454")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD36B")
             )
         case "theme_royal_arcade":
             return BoardThemeStyle(
@@ -368,12 +368,12 @@ extension OwnedCosmetics {
             )
         case "tile_crystal":
             return TileThemeStyle(
-                fill: LinearGradient(colors: [Color(hex: "E8F7FF"), Color(hex: "12C8A2")], startPoint: .topLeading, endPoint: .bottomTrailing),
-                inactiveFill: Color(hex: "092B36").opacity(0.7),
-                border: Color.white.opacity(0.84),
-                textColor: Color(hex: "07333B"),
-                accent: Color(hex: "12C8A2"),
-                shadow: Color(hex: "12C8A2").opacity(0.34),
+                fill: LinearGradient(colors: [Color(hex: "F4FDFF"), Color(hex: "B8EEF4"), Color(hex: "68C8D5")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                inactiveFill: Color(hex: "0B2631").opacity(0.92),
+                border: Color(hex: "D9FBFF").opacity(0.88),
+                textColor: Color(hex: "082E3A"),
+                accent: Color(hex: "83DDE8"),
+                shadow: Color(hex: "49B9CA").opacity(0.28),
                 cornerScale: 0.14
             )
         case "tile_midnight_mint":

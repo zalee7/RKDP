@@ -19,6 +19,7 @@ final class AnagramViewModel: ObservableObject {
     private let priorBest: Int?
     private var timer: AnyCancellable?
     private var feedbackTask: Task<Void, Never>?
+    private var rackOrder: [Int]
 
     enum SubmitResult: Equatable {
         case valid(String, Int)
@@ -36,6 +37,7 @@ final class AnagramViewModel: ObservableObject {
         self.game = g
         self.bank = g.letters.enumerated().map { ($0.offset, $0.element) }
         self.placed = []
+        self.rackOrder = g.letters.indices.map { $0 }
         startTimer()
     }
 
@@ -55,19 +57,28 @@ final class AnagramViewModel: ObservableObject {
         SoundManager.shared.keyboardPress()
         let tile = placed.remove(at: idx)
         bank.append(tile)
+        restoreRackOrder()
     }
 
-    func clearPlaced() {
+    func clearPlaced(playSound: Bool = true) {
         guard !isFinished else { return }
-        if !placed.isEmpty { SoundManager.shared.keyboardPress() }
+        if !placed.isEmpty, playSound { SoundManager.shared.clearErase() }
         bank.append(contentsOf: placed)
         placed = []
+        restoreRackOrder()
     }
 
     func shuffleBank() {
         guard !isFinished else { return }
         SoundManager.shared.keyboardPress()
         bank.shuffle()
+        // A shuffled rack remains stable when a submitted word returns to it.
+        rackOrder = bank.map(\.id) + placed.map(\.id)
+    }
+
+    private func restoreRackOrder() {
+        let positions = Dictionary(uniqueKeysWithValues: rackOrder.enumerated().map { ($0.element, $0.offset) })
+        bank.sort { positions[$0.id, default: .max] < positions[$1.id, default: .max] }
     }
 
     // MARK: - Submit current word
@@ -77,7 +88,7 @@ final class AnagramViewModel: ObservableObject {
         let word = String(placed.map(\.letter)).uppercased()
 
         defer {
-            clearPlaced()
+            clearPlaced(playSound: false)
             feedbackTask?.cancel()
             feedbackTask = Task { [weak self] in
                 do { try await Task.sleep(nanoseconds: 900_000_000) } catch { return }
@@ -92,7 +103,7 @@ final class AnagramViewModel: ObservableObject {
         }
         if foundWords.contains(word) {
             lastResult = .alreadyFound
-            SoundManager.shared.wordInvalid()
+            SoundManager.shared.wordAlreadyUsed()
             return
         }
         if game.validWords.contains(word) {

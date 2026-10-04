@@ -332,6 +332,7 @@ struct GameSession: Codable, Identifiable {
     var seed: Int               // shared puzzle seed — both players get identical puzzle
     var puzzleData: String      // JSON-encoded puzzle snapshot
     var createdAt: Date
+    var preGameCountdownStartedAt: Date? = nil
     var startedAt: Date?
     var finishedAt: Date?
     var winnerID: String?
@@ -381,7 +382,7 @@ struct GameSession: Codable, Identifiable {
 
 extension GameSession {
     enum CodingKeys: String, CodingKey {
-        case id, mode, difficulty, status, players, playerIDs, seed, puzzleData, createdAt, startedAt, finishedAt, winnerID, playerResults, winnerReason, matchKind, rankedCoinRewards
+        case id, mode, difficulty, status, players, playerIDs, seed, puzzleData, createdAt, preGameCountdownStartedAt, startedAt, finishedAt, winnerID, playerResults, winnerReason, matchKind, rankedCoinRewards
     }
 
     init(from decoder: Decoder) throws {
@@ -395,6 +396,7 @@ extension GameSession {
         seed = try c.decode(Int.self, forKey: .seed)
         puzzleData = try c.decodeIfPresent(String.self, forKey: .puzzleData) ?? ""
         createdAt = try c.decode(Date.self, forKey: .createdAt)
+        preGameCountdownStartedAt = try c.decodeIfPresent(Date.self, forKey: .preGameCountdownStartedAt)
         startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
         finishedAt = try c.decodeIfPresent(Date.self, forKey: .finishedAt)
         winnerID = try c.decodeIfPresent(String.self, forKey: .winnerID)
@@ -415,6 +417,7 @@ extension GameSession {
         try c.encode(seed, forKey: .seed)
         try c.encode(puzzleData, forKey: .puzzleData)
         try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(preGameCountdownStartedAt, forKey: .preGameCountdownStartedAt)
         try c.encodeIfPresent(startedAt, forKey: .startedAt)
         try c.encodeIfPresent(finishedAt, forKey: .finishedAt)
         try c.encodeIfPresent(winnerID, forKey: .winnerID)

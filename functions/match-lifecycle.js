@@ -9,6 +9,7 @@ const privatePath = (id) => `economyPrivate/liveMatches/records/${id}`;
 const accountPath = (uid) => `economyPrivate/matchAccounts/players/${uid}`;
 const queuePath = (key) => `economyPrivate/matchQueues/buckets/${key}`;
 const idOK = (id) => validID(id) && id.startsWith("v1_") && id.length <= 100;
+const preGameCountdownMilliseconds = 5_000;
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
@@ -16,6 +17,12 @@ function canonical(value) {
 }
 const puzzleHash = (puzzle) => createHash("sha256").update(JSON.stringify(canonical(puzzle))).digest("hex");
 const actionReply = (m, uid) => ({accepted: true, status: m.status, ownResult: m.playerResults[uid] ?? null});
+const wordHuntTestPuzzleID = "wordhunt_test_atest_v1";
+const wordHuntTestPuzzle = () => ({
+  protocolVersion: "match-v1", mode: "wordHunt", difficulty: "medium", seed: 1,
+  validWords: ["ATEST"],
+  puzzleData: JSON.stringify({wordBankVersion: "test-atest-v1", gridRows: ["ATEST", "QQQQQ", "XXXXX", "JJJJJ", "ZZZZZ"], validWords: ["ATEST"]}),
+});
 
 function entryAccess(wallet, mode, now, consume) {
   const access = structuredClone(wallet.rankedAccess || {});
@@ -52,7 +59,8 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
     }
     return {id: m.sessionID, mode: m.mode, difficulty: m.difficulty, matchKind: m.matchKind, seed: m.seed,
       puzzleData, status: m.status, players: m.players, playerIDs: m.players.filter((p) => !p.isBot).map((p) => p.userID),
-      createdAt: timestamp(m.createdAtMs), ...(m.startedAtMs ? {startedAt: timestamp(m.startedAtMs)} : {}),
+      createdAt: timestamp(m.createdAtMs), ...(m.preGameCountdownStartedAtMs ? {preGameCountdownStartedAt: timestamp(m.preGameCountdownStartedAtMs)} : {}),
+      ...(m.startedAtMs ? {startedAt: timestamp(m.startedAtMs)} : {}),
       ...(m.finishedAtMs ? {finishedAt: timestamp(m.finishedAtMs)} : {}),
       // Do not expose another player's private input/answers during the round.
       ...(m.status === "finished" ? {playerResults: m.playerResults, winnerID: resolveMatch(m), winnerReason: "Verified result"} : {})};
@@ -65,6 +73,20 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       rankPoints: points, rankTier: tier(points), avatarStyle: {head: c.equippedAvatarHead || "avatar_head_none",
         face: c.equippedAvatarFace || "avatar_face_smile", outfit: c.equippedAvatarOutfit || "avatar_outfit_basic",
         aura: c.equippedAvatarAura || "avatar_aura_none", pose: c.equippedAvatarPose || "avatar_pose_jump", bodyHex: c.customAvatarBodyHex || "FF2F78"}};
+  }
+
+  async function startMatch(tx, m, now) {
+    const humans = [];
+    for (const p of m.players.filter((p) => !p.isBot)) humans.push({uid: p.userID, ...(await player(tx, p.userID))});
+    const updates = humans.map((h) => ({...h, access: m.matchKind === "ranked" ? entryAccess(h.wallet, m.mode, now, true) : null}));
+    m.status = "inProgress"; m.startedAtMs = now;
+    for (const h of updates) {
+      if (h.access) {
+        tx.update(db.doc(`coinWallets/${h.uid}`), {rankedAccess: h.access});
+        tx.update(db.doc(`users/${h.uid}`), {rankedAccess: {...h.user.rankedAccess, ...h.access,
+          consumedSessionIDs: {...h.user.rankedAccess?.consumedSessionIDs, [m.sessionID]: true}}});
+      }
+    }
   }
 
   async function queue(uid, data) {
@@ -115,13 +137,26 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
         tx.set(accountRef, {...item, queueKey: key, queuedAtMs: queuedAt});
         return {sessionID: null};
       }
-      const catalogKey = rulesVersion >= 2 ? `${data.mode}_${difficulty}` : data.mode;
-      const catalog = (await tx.get(db.doc(`economyPrivate/matchCatalog/modes/${catalogKey}`))).data();
-      check(catalog?.version === 1 && Array.isArray(catalog.puzzleIDs) && catalog.puzzleIDs.length > 0 && catalog.puzzleIDs.length <= 10000,
-          "Verified match catalog is missing");
-      const puzzleID = catalog.puzzleIDs[choose(catalog.puzzleIDs.length)];
-      check(validID(puzzleID), "Invalid puzzle identity");
-      const puzzle = (await tx.get(db.doc(`economyPrivate/matchPuzzles/records/${puzzleID}`))).data();
+      let puzzleID; let puzzle;
+      if (data.mode === "wordHunt" && flags.wordHuntTestPoolEnabled === true) {
+        const testRef = db.doc(`economyPrivate/matchPuzzles/records/${wordHuntTestPuzzleID}`);
+        const existing = await tx.get(testRef);
+        puzzleID = wordHuntTestPuzzleID;
+        puzzle = existing.data() || wordHuntTestPuzzle();
+        if (existing.exists) {
+          check(puzzleHash(puzzle) === puzzleHash(wordHuntTestPuzzle()), "Invalid Word Hunt test puzzle");
+        } else {
+          tx.create(testRef, puzzle);
+        }
+      } else {
+        const catalogKey = rulesVersion >= 2 ? `${data.mode}_${difficulty}` : data.mode;
+        const catalog = (await tx.get(db.doc(`economyPrivate/matchCatalog/modes/${catalogKey}`))).data();
+        check(catalog?.version === 1 && Array.isArray(catalog.puzzleIDs) && catalog.puzzleIDs.length > 0 && catalog.puzzleIDs.length <= 10000,
+            "Verified match catalog is missing");
+        puzzleID = catalog.puzzleIDs[choose(catalog.puzzleIDs.length)];
+        check(validID(puzzleID), "Invalid puzzle identity");
+        puzzle = (await tx.get(db.doc(`economyPrivate/matchPuzzles/records/${puzzleID}`))).data();
+      }
       check(puzzle?.protocolVersion === "match-v1" && puzzle.mode === data.mode && puzzle.difficulty === difficulty &&
         Number.isSafeInteger(puzzle.seed) && puzzle.seed >= 0 && typeof puzzle.puzzleData === "string", "Invalid match catalog");
       const humans = [{uid, data: mine, requestID: data.requestID}, ...(opponent ? [{uid: opponent.uid, data: other, requestID: opponent.requestID}] : [])];
@@ -166,23 +201,17 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       const puzzle = (await tx.get(db.doc(`economyPrivate/matchPuzzles/records/${m.puzzleID}`))).data();
       check(puzzle?.seed === m.seed && puzzle.mode === m.mode && puzzle.protocolVersion === "match-v1" && puzzleHash(puzzle) === m.puzzleHash, "Puzzle unavailable");
       if (action === "tick" && m.status === "waiting") {
-        if (now - m.createdAtMs > 120000) m.status = "abandoned";
+        if (m.preGameCountdownStartedAtMs && now >= m.preGameCountdownStartedAtMs + preGameCountdownMilliseconds) {
+          await startMatch(tx, m, now);
+        } else if (now - m.createdAtMs > 120000) m.status = "abandoned";
       } else if (action === "ready") {
         check(m.status === "waiting", "Match already started");
         if (!m.readyIDs.includes(uid)) m.readyIDs.push(uid);
         if (now - m.createdAtMs > 120000) m.status = "abandoned";
         else if (m.players.filter((p) => !p.isBot).every((p) => m.readyIDs.includes(p.userID))) {
-          const humans = [];
-          for (const p of m.players.filter((p) => !p.isBot)) humans.push({uid: p.userID, ...(await player(tx, p.userID))});
-          const updates = humans.map((h) => ({...h, access: m.matchKind === "ranked" ? entryAccess(h.wallet, m.mode, now, true) : null}));
-          m.status = "inProgress"; m.startedAtMs = now;
-          for (const h of updates) {
-            if (h.access) {
-              tx.update(db.doc(`coinWallets/${h.uid}`), {rankedAccess: h.access});
-              tx.update(db.doc(`users/${h.uid}`), {rankedAccess: {...h.user.rankedAccess, ...h.access,
-                consumedSessionIDs: {...h.user.rankedAccess?.consumedSessionIDs, [m.sessionID]: true}}});
-            }
-          }
+          // The shared timestamp starts only after both phones have reached the pre-game screen.
+          // A later tick transitions everyone into the actual game together.
+          m.preGameCountdownStartedAtMs ??= now;
         }
       } else if (action === "forfeit") {
         if (m.status === "waiting") m.status = "abandoned";
@@ -242,7 +271,21 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       return actionReply(m, uid);
     });
   }
-  return {queue, cancel, ready: (uid, data) => act(uid, data, "ready"), submit: (uid, data) => act(uid, data, "submit"),
+  async function wordHuntTestPool(uid, data) {
+    return db.runTransaction(async (tx) => {
+      const flags = await gate(tx, uid);
+      // This control exists only for explicitly allowlisted sandbox testers.
+      check(Array.isArray(flags.matchTestUIDs) && flags.matchTestUIDs.includes(uid), "Word Hunt test pool is unavailable");
+      const enabled = data?.enabled;
+      check(enabled === undefined || typeof enabled === "boolean", "Invalid test pool setting");
+      if (typeof enabled === "boolean") {
+        tx.update(db.doc("economyPrivate/control"), {wordHuntTestPoolEnabled: enabled});
+        return {enabled};
+      }
+      return {enabled: flags.wordHuntTestPoolEnabled === true};
+    });
+  }
+  return {queue, cancel, wordHuntTestPool, ready: (uid, data) => act(uid, data, "ready"), submit: (uid, data) => act(uid, data, "submit"),
     forfeit: (uid, data) => act(uid, data, "forfeit"), tick: (uid, data) => act(uid, data, "tick")};
 }
 

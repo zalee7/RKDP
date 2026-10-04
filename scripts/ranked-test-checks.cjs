@@ -10,6 +10,16 @@ module.exports = async ({db, auth, root, argument, advanced = false}) => {
   const proofs = new Map(JSON.parse(readFileSync(argument, "utf8")).map((p) => [p.id, p.testEvidence]));
   const users = []; const rooms = []; let checks = 0;
   const pass = () => checks++;
+  const waitForSharedCountdown = async (user, sessionID) => {
+    let live = (await db.doc(`economyPrivate/liveMatches/records/${sessionID}`).get()).data();
+    assert.equal(live.status, "waiting");
+    assert.ok(live.preGameCountdownStartedAtMs); pass();
+    await new Promise((resolve) => setTimeout(resolve, 5100));
+    await call("officialMatch_tick", user, {sessionID});
+    live = (await db.doc(`economyPrivate/liveMatches/records/${sessionID}`).get()).data();
+    assert.equal(live.status, "inProgress"); pass();
+    return live;
+  };
   const call = async (name, user, data, reject = false) => {
     const res = await fetch(`https://us-central1-puzzlepartytest.cloudfunctions.net/${name}`, {
       method: "POST", headers: {"Content-Type": "application/json", ...(user ? {Authorization: `Bearer ${user.token}`} : {})},
@@ -62,8 +72,8 @@ module.exports = async ({db, auth, root, argument, advanced = false}) => {
       await probe(`coinWallets/${b.uid}`, a, 403);
       await call("officialMatch_ready", a, {sessionID: id});
       await call("officialMatch_ready", b, {sessionID: id});
-      const live = (await db.doc(`economyPrivate/liveMatches/records/${id}`).get()).data();
-      assert.equal(live.status, "inProgress"); assert.equal(live.difficulty, rulesVersion === 2 ? "hard" : "expert");
+      const live = await waitForSharedCountdown(a, id);
+      assert.equal(live.difficulty, rulesVersion === 2 ? "hard" : "expert");
       assert.equal(live.rulesVersion ?? 1, rulesVersion); pass();
       await call("officialMatch_submit", a, {sessionID: id, evidence: {completed: true}}, true);
       const evidence = proofs.get(live.puzzleID); assert.ok(evidence);
@@ -104,7 +114,7 @@ module.exports = async ({db, auth, root, argument, advanced = false}) => {
         assert.equal(live.difficulty, points === 3599 ? lower : upper); pass();
         await call("officialMatch_ready", a, {sessionID: id});
         await call("officialMatch_ready", b, {sessionID: id});
-        live = (await db.doc(`economyPrivate/liveMatches/records/${id}`).get()).data();
+        live = await waitForSharedCountdown(a, id);
         const refresh = await fetch(`https://securetoken.googleapis.com/v1/token?key=${config.API_KEY}`, {
           method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded"},
           body: new URLSearchParams({grant_type: "refresh_token", refresh_token: a.refreshToken}),
@@ -117,15 +127,17 @@ module.exports = async ({db, auth, root, argument, advanced = false}) => {
         assert.equal((await db.doc(`economyPrivate/liveMatches/records/${id}`).get()).data().startedAtMs, live.startedAtMs); pass();
         if (mode === "wordle") {
           const publicMatch = (await db.doc(`serverMatches/${id}`).get()).data();
-          assert.equal(JSON.parse(publicMatch.puzzleData).matchRounds, 1); pass();
-          const evidence = {rounds: proofs.get(live.puzzleID).rounds.slice(0, 1)};
+          const wordPuzzle = JSON.parse(publicMatch.puzzleData);
+          assert.equal(wordPuzzle.matchRounds, 1);
+          assert.equal(typeof wordPuzzle.targets?.[0], "string"); pass();
+          const evidence = {rounds: [[wordPuzzle.targets[0]]]};
           await call("officialMatch_submit", a, {sessionID: id, evidence});
           const finished = (await db.doc(`serverMatches/${id}`).get()).data();
           assert.equal(finished.status, "finished");
           assert.equal(finished.winnerID, a.uid);
           assert.equal(finished.playerResults[b.uid].summary.raceLoss, "true"); pass();
           const before = (await db.doc(`coinWallets/${a.uid}`).get()).data();
-          await call("officialMatch_submit", b, {sessionID: id, evidence}, true);
+          await call("officialMatch_submit", b, {sessionID: id, evidence});
           await call("settleWalletMatch", a, {sessionID: id});
           assert.deepEqual((await db.doc(`coinWallets/${a.uid}`).get()).data(), before); pass();
         } else {

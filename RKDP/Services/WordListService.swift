@@ -157,6 +157,8 @@ struct AnagramPuzzleData: Codable {
 struct WordHuntPuzzleData: Codable {
     let wordBankVersion: String
     let gridRows: [String]
+    /// Present only for server-controlled test boards. Normal games use the bundled word list.
+    var validWords: [String]? = nil
 }
 
 struct HangmanRoundPuzzleData: Codable {
@@ -215,7 +217,8 @@ enum MultiplayerPuzzleDataFactory {
             let game = WordHuntGame.generate(difficulty: difficulty, seed: seed)
             let data = WordHuntPuzzleData(
                 wordBankVersion: WordListService.wordBankVersion,
-                gridRows: game.grid.map { String($0) }
+                gridRows: game.grid.map { String($0) },
+                validWords: nil
             )
             return encode(data)
         case .hangman:

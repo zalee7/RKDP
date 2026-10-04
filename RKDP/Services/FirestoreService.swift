@@ -301,6 +301,22 @@ final class FirestoreService {
         var ownResult: MatchPlayerResult?
     }
 
+    private struct WordHuntTestPoolReply: Decodable { let enabled: Bool }
+
+    func wordHuntTestPoolEnabled(userID: String) async throws -> Bool {
+        let reply: WordHuntTestPoolReply = try await EconomyCallable.call(
+            "officialMatch_wordHuntTestPool", userID: userID, data: [:]
+        )
+        return reply.enabled
+    }
+
+    func setWordHuntTestPool(enabled: Bool, userID: String) async throws -> Bool {
+        let reply: WordHuntTestPoolReply = try await EconomyCallable.call(
+            "officialMatch_wordHuntTestPool", userID: userID, data: ["enabled": enabled]
+        )
+        return reply.enabled
+    }
+
     func officialQueue(userID: String, mode: GameMode, kind: SessionKind, requestID: String) async throws -> OfficialMatchReply {
         try await EconomyCallable.call("officialMatch_queue", userID: userID,
                                        data: ["mode": mode.rawValue, "matchKind": kind.rawValue, "requestID": requestID])

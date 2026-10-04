@@ -222,6 +222,8 @@ private struct MainBottomBar: View {
         HStack(spacing: 0) {
             ForEach(MainTab.allCases, id: \.self) { tab in
                 Button {
+                    guard selectedTab != tab else { return }
+                    SoundManager.shared.appButtonTap()
                     withAnimation(.spring(response: 0.26, dampingFraction: 0.82)) {
                         selectedTab = tab
                     }

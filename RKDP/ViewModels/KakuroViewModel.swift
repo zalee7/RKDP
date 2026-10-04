@@ -51,8 +51,10 @@ final class ColorLinkViewModel: ObservableObject {
         guard board.contains(position), let activePairID, !isPairConnected(activePairID) else { return }
 
         if let endpointPairID = board.pairID(at: position), endpointPairID != activePairID { return }
+        let wasConnected = isPairConnected(activePairID)
         extendActivePath(to: position, pairID: activePairID)
-        if isPairConnected(activePairID) {
+        if !wasConnected, isPairConnected(activePairID) {
+            SoundManager.shared.colorLinkAttached()
             self.activePairID = nil
         }
 
@@ -62,6 +64,7 @@ final class ColorLinkViewModel: ObservableObject {
     func clearActivePath() {
         guard !isComplete, let activePairID else { return }
         paths[activePairID] = nil
+        SoundManager.shared.clearErase()
     }
 
     private func extendActivePath(to position: ColorLinkPosition, pairID: Int) {

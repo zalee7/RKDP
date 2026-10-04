@@ -28,6 +28,8 @@ final class MultiplayerViewModel: ObservableObject {
     @Published var dismissedRematchInviteSessionID: String?
     @Published var readySessionIDs: Set<String> = []
     private var countdownTask: Task<Void, Never>?
+    private var sharedCountdownSessionID: String?
+    private var sharedCountdownStartedAt: Date?
     private var botFallbackTask: Task<Void, Never>?
     private var botResultTask: Task<Void, Never>?
 
@@ -266,7 +268,9 @@ final class MultiplayerViewModel: ObservableObject {
             listenForSessionStatus(sessionID: session.id)
         } else {
             state = .matchFound(session: session)
-            if !session.isLiveExhibition {
+            if session.usesServerAuthority {
+                await confirmReady(session: session)
+            } else if !session.isLiveExhibition {
                 startMatchCountdown(session: session)
             }
         }
@@ -341,7 +345,11 @@ final class MultiplayerViewModel: ObservableObject {
         guard isCurrentSearch(searchID) else { return }
         activeSearchID = nil
         state = .matchFound(session: session)
-        startMatchCountdown(session: session)
+        if session.usesServerAuthority {
+            await confirmReady(session: session)
+        } else {
+            startMatchCountdown(session: session)
+        }
     }
 
     // MARK: - Session
@@ -372,10 +380,16 @@ final class MultiplayerViewModel: ObservableObject {
                         return
                     }
                     if session.status == .inProgress {
+                        self.stopMatchCountdown()
                         if case .matchFound = self.state {
                             self.state = .inMatch(session: session)
                             self.startGameTimer()
                         }
+                        return
+                    }
+                    if session.usesServerAuthority, session.status == .waiting {
+                        self.state = .matchFound(session: session)
+                        self.syncSharedMatchCountdown(session)
                         return
                     }
                 }
@@ -771,7 +785,9 @@ final class MultiplayerViewModel: ObservableObject {
             listenForSessionStatus(sessionID: session.id)
         } else {
             state = .matchFound(session: session)
-            if !session.isLiveExhibition {
+            if session.usesServerAuthority {
+                await confirmReady(session: session)
+            } else if !session.isLiveExhibition {
                 startMatchCountdown(session: session)
             }
         }
@@ -1061,6 +1077,36 @@ final class MultiplayerViewModel: ObservableObject {
         }
     }
 
+    private func syncSharedMatchCountdown(_ session: GameSession) {
+        guard let startedAt = session.preGameCountdownStartedAt else {
+            stopMatchCountdown()
+            matchCountdown = 5
+            return
+        }
+        guard sharedCountdownSessionID != session.id || sharedCountdownStartedAt != startedAt else { return }
+
+        stopMatchCountdown()
+        sharedCountdownSessionID = session.id
+        sharedCountdownStartedAt = startedAt
+        countdownTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let deadline = startedAt.addingTimeInterval(5)
+            while !Task.isCancelled {
+                let remaining = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
+                self.matchCountdown = remaining
+                guard remaining > 0 else { return }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+    }
+
+    private func stopMatchCountdown() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        sharedCountdownSessionID = nil
+        sharedCountdownStartedAt = nil
+    }
+
     func confirmReady(session: GameSession) async {
         guard let userID = user?.id, !userID.isEmpty else { return }
         do {
@@ -1071,9 +1117,9 @@ final class MultiplayerViewModel: ObservableObject {
                    let result = try? JSONDecoder().decode(MatchPlayerResult.self, from: data) {
                     playerResults[userID] = result
                 }
+                listenForSessionStatus(sessionID: session.id)
                 let reply = try await store.officialAction("ready", userID: userID, sessionID: session.id)
                 acceptOfficialReply(reply, sessionID: session.id, userID: userID)
-                listenForSessionStatus(sessionID: session.id)
                 readySessionIDs.insert(session.id)
                 officialHeartbeatTask?.cancel()
                 officialHeartbeatTask = Task { [weak self] in

@@ -27,6 +27,7 @@ function fixture(mode = "wordle", kind = "casual") {
   async function paired() {
     await join("a"); const {sessionID} = await join("b");
     await api.ready("a", {sessionID}); await api.ready("b", {sessionID});
+    now += 5000; await api.tick("a", {sessionID});
     return sessionID;
   }
   return {db, api, join, paired, puzzle, clock, advance: (ms) => {
@@ -142,6 +143,26 @@ test("optional test allowlist blocks unapproved queue and actions", async () => 
   assert.equal((await f.join("a")).sessionID, null);
 });
 
+test("shared Word Hunt test pool uses only ATEST for approved test accounts", async () => {
+  const f = fixture("wordHunt", "casual");
+  enableV2(f, "wordHunt", "casual");
+  const control = f.db.snapshot("economyPrivate/control").data();
+  f.db.set("economyPrivate/control", {...control, matchTestUIDs: ["a", "b"]});
+  assert.equal((await f.api.wordHuntTestPool("a", {})).enabled, false);
+  assert.equal((await f.api.wordHuntTestPool("a", {enabled: true})).enabled, true);
+  const sessionID = await f.paired();
+  const match = f.db.snapshot(privatePath(sessionID)).data();
+  assert.equal(match.puzzleID, "wordhunt_test_atest_v1");
+  const payload = JSON.parse(f.db.snapshot(`serverMatches/${sessionID}`).data().puzzleData);
+  assert.deepEqual(payload.validWords, ["ATEST"]);
+  const puzzle = f.db.snapshot("economyPrivate/matchPuzzles/records/wordhunt_test_atest_v1").data();
+  assert.deepEqual(puzzle.validWords, ["ATEST"]);
+  f.advance(75000);
+  assert.throws(() => verifyResult(puzzle, "a", {words: ["TEST"]}, 75000), /Invalid found words/);
+  await f.api.submit("a", {sessionID, evidence: {words: ["ATEST"]}});
+  await f.api.submit("b", {sessionID, evidence: {words: ["ATEST"]}});
+});
+
 test("official pairing uses private rank and shared server puzzle, atomically once", async () => {
   const f = fixture("wordle", "ranked");
   const replies = await Promise.all([f.join("a", {seed: 999, rankPoints: 12000}), f.join("b"), f.join("a"), f.join("b")]);
@@ -175,6 +196,14 @@ test("ready is authenticated, idempotent and consumes a ranked entry only at act
   await f.api.ready("a", {sessionID});
   assert.deepEqual(f.db.snapshot("coinWallets/a").data().rankedAccess, {});
   await f.api.ready("b", {sessionID}); await f.api.ready("b", {sessionID});
+  const waiting = f.db.snapshot(privatePath(sessionID)).data();
+  assert.equal(waiting.status, "waiting");
+  assert.equal(waiting.preGameCountdownStartedAtMs, f.clock());
+  assert.equal(f.db.snapshot("coinWallets/a").data().rankedAccess.dailyFreeUses, undefined);
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().preGameCountdownStartedAt.getTime(), f.clock());
+  f.advance(4999); await f.api.tick("a", {sessionID});
+  assert.equal(f.db.snapshot(privatePath(sessionID)).data().status, "waiting");
+  f.advance(1); await f.api.tick("a", {sessionID});
   assert.equal(f.db.snapshot("coinWallets/a").data().rankedAccess.dailyFreeUses.wordle.count, 1);
   assert.equal(f.db.snapshot(privatePath(sessionID)).data().startedAtMs, f.clock());
 });
@@ -253,7 +282,7 @@ test("waiting cancellation and both-player expiry award nothing", async () => {
 test("bot fallback is server-owned, delayed and limited to eligible Bronze wallets", async () => {
   const f = fixture("wordle", "ranked"); await f.join("a"); f.advance(15000);
   const {sessionID} = await f.join("a", {isBot: false, botStrong: true});
-  await f.api.ready("a", {sessionID}); f.advance(20000);
+  await f.api.ready("a", {sessionID}); f.advance(5000); await f.api.tick("a", {sessionID}); f.advance(20000);
   await f.api.submit("a", {sessionID, evidence: {rounds: [["APPLE"], ["BRICK"]]}});
   assert.ok(!f.db.snapshot(matchPath(sessionID)).exists);
   f.advance(15000); await f.api.tick("a", {sessionID});

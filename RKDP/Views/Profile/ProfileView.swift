@@ -381,6 +381,8 @@ struct ProfileView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var shop: ShopViewModel
     @State private var isGrantingTesterAccess = false
+    @State private var wordHuntTestPoolEnabled = false
+    @State private var isUpdatingWordHuntTestPool = false
     @State private var selectedOwnedCategory: CosmeticCategory = .title
     @State private var recentGames: [GameSession] = []
     @State private var onlineStatGames: [GameSession] = []
@@ -461,7 +463,7 @@ struct ProfileView: View {
                             Text(user.email).font(.caption).foregroundStyle(AppTheme.textSecondary)
                             CoinBadgeView(amount: user.coins)
 
-                            #if DEBUG
+                            #if PP_SOCIAL_SANDBOX
                             Button {
                                 Task {
                                     isGrantingTesterAccess = true
@@ -482,6 +484,35 @@ struct ProfileView: View {
                                 .overlay(Capsule().stroke((auth.user?.rankedAccess.allModesUnlocked == true ? AppTheme.teal : AppTheme.crownGold).opacity(0.45), lineWidth: 1))
                             }
                             .disabled(isGrantingTesterAccess)
+
+                            Button {
+                                guard let userID = auth.user?.id else { return }
+                                Task {
+                                    isUpdatingWordHuntTestPool = true
+                                    defer { isUpdatingWordHuntTestPool = false }
+                                    do {
+                                        wordHuntTestPoolEnabled = try await FirestoreService.shared.setWordHuntTestPool(
+                                            enabled: !wordHuntTestPoolEnabled,
+                                            userID: userID
+                                        )
+                                    } catch {
+                                        print("Word Hunt test pool update failed: \(error.localizedDescription)")
+                                    }
+                                }
+                            } label: {
+                                Label(
+                                    wordHuntTestPoolEnabled ? "Word Hunt ATEST Pool On" : "Enable Word Hunt ATEST Pool",
+                                    systemImage: wordHuntTestPoolEnabled ? "checkmark.circle.fill" : "testtube.2"
+                                )
+                                .font(.caption.bold())
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background((wordHuntTestPoolEnabled ? AppTheme.teal : AppTheme.hotPink).opacity(0.2))
+                                .foregroundStyle(wordHuntTestPoolEnabled ? AppTheme.teal : AppTheme.hotPink)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke((wordHuntTestPoolEnabled ? AppTheme.teal : AppTheme.hotPink).opacity(0.45), lineWidth: 1))
+                            }
+                            .disabled(isUpdatingWordHuntTestPool)
                             #endif
                         }
                         .padding(.top, 24)
@@ -581,6 +612,9 @@ struct ProfileView: View {
             }
             .task {
                 await loadRecentGames()
+                #if PP_SOCIAL_SANDBOX
+                await loadWordHuntTestPool()
+                #endif
             }
             .onAppear {
                 shop.refreshIdentity(from: currentUser)
@@ -591,6 +625,19 @@ struct ProfileView: View {
             }
         }
     }
+
+    #if PP_SOCIAL_SANDBOX
+    @MainActor
+    private func loadWordHuntTestPool() async {
+        guard let userID = auth.user?.id else { return }
+        do {
+            wordHuntTestPoolEnabled = try await FirestoreService.shared.wordHuntTestPoolEnabled(userID: userID)
+        } catch {
+            // The normal production build and unapproved accounts never expose this tool.
+            wordHuntTestPoolEnabled = false
+        }
+    }
+    #endif
 
     private var dailyProgressSection: some View {
         sectionCard(title: "Daily Play Streak") {
@@ -1108,6 +1155,7 @@ private struct GameCustomizationView: View {
                             }
 
                             Button {
+                                SoundManager.shared.appButtonTap()
                                 previewItem = item
                             } label: {
                                 Label("Preview", systemImage: "eye")
@@ -1148,9 +1196,10 @@ private struct CosmeticThemePreviewSheet: View {
             ZStack {
                 AppTheme.arenaBackground.ignoresSafeArea()
                 VStack(spacing: 20) {
-                    preview
+                    CosmeticThemeGameplayMock(item: item)
                         .frame(height: 260)
                         .frame(maxWidth: .infinity)
+                        .allowsHitTesting(false)
 
                     VStack(spacing: 6) {
                         Text(item.name)
@@ -1166,13 +1215,30 @@ private struct CosmeticThemePreviewSheet: View {
                     }
                     .padding(.horizontal, 24)
 
+                    Button {
+                        SoundManager.shared.playThemePreview(for: item)
+                    } label: {
+                        Label("Hear Theme", systemImage: "speaker.wave.2.fill")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(AppTheme.cardBackground.opacity(0.88))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(AppTheme.cardBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
                     if isEquipped {
                         Label("Equipped", systemImage: "checkmark.circle.fill")
                             .font(.headline.bold())
                             .foregroundStyle(AppTheme.teal)
                             .padding(.vertical, 12)
                     } else {
-                        Button(action: onEquip) {
+                        Button {
+                            SoundManager.shared.appButtonTap()
+                            onEquip()
+                        } label: {
                             Label("Equip Theme", systemImage: "checkmark.circle.fill")
                                 .font(.headline.bold())
                                 .foregroundStyle(AppTheme.textOnColor)
@@ -1200,18 +1266,207 @@ private struct CosmeticThemePreviewSheet: View {
         }
     }
 
-    @ViewBuilder
-    private var preview: some View {
+}
+
+private struct CosmeticThemeGameplayMock: View {
+    let item: CosmeticItem
+
+    private var board: BoardThemeStyle {
+        var cosmetics = OwnedCosmetics.default
+        if item.category == .boardTheme { cosmetics.equippedBoardTheme = item.id }
+        return cosmetics.themeStyle
+    }
+
+    private var tile: TileThemeStyle {
+        var cosmetics = OwnedCosmetics.default
+        if item.category == .tileTheme { cosmetics.equippedTileTheme = item.id }
+        return cosmetics.tileThemeStyle
+    }
+
+    private var cards: CardThemeStyle {
+        var cosmetics = OwnedCosmetics.default
+        if item.category == .cardTheme { cosmetics.equippedCardTheme = item.id }
+        return cosmetics.cardThemeStyle
+    }
+
+    var body: some View {
         switch item.category {
         case .boardTheme:
-            ShopThemePreview(themeID: item.id)
+            boardThemeMock
         case .tileTheme:
-            ShopTileThemePreview(tileThemeID: item.id)
+            tileThemeMock
         case .cardTheme:
-            ShopCardThemePreview(cardThemeID: item.id)
+            solitaireMock
         default:
             EmptyView()
         }
+    }
+
+    private var boardThemeMock: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(board.tileGradient)
+            .overlay {
+                VStack(spacing: 10) {
+                    HStack {
+                        Label("Board Preview", systemImage: "square.grid.3x3.fill")
+                            .font(.caption.bold())
+                            .foregroundStyle(boardLabelColor)
+                        Spacer()
+                        Text("NOT PLAYABLE")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(boardLabelColor.opacity(0.72))
+                    }
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 4) {
+                        ForEach(0..<25, id: \.self) { index in
+                            boardCell(index)
+                        }
+                    }
+                }
+                .padding(18)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(board.gridLineMajor.opacity(0.82), lineWidth: 1.5))
+            .padding(.horizontal, 24)
+            .shadow(color: board.gridLineMajor.opacity(0.25), radius: 14, x: 0, y: 8)
+    }
+
+    private var boardLabelColor: Color {
+        item.id == "theme_dark" || item.id == "theme_cosmic_crown" || item.id == "theme_prism_party"
+            ? .white
+            : AppTheme.textPrimary
+    }
+
+    private func boardCell(_ index: Int) -> some View {
+        let isSelected = [6, 7, 8, 13, 18].contains(index)
+        let isEndpoint = index == 6 || index == 18
+        return RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(isSelected ? board.selectedCell : board.cellBackground.opacity(0.88))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .stroke(index % 6 == 0 ? board.gridLineMajor : board.gridLineMinor, lineWidth: index % 6 == 0 ? 1.5 : 1)
+            )
+            .overlay {
+                if isEndpoint {
+                    Circle()
+                        .fill(board.activeTraceColor)
+                        .padding(10)
+                }
+            }
+            .aspectRatio(1, contentMode: .fit)
+    }
+
+    private var tileThemeMock: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Color(hex: "11142B"))
+            .overlay {
+                VStack(spacing: 18) {
+                    HStack {
+                        Label("Tile Preview", systemImage: "square.grid.2x2.fill")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.9))
+                        Spacer()
+                        Text("NOT PLAYABLE")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(.white.opacity(0.62))
+                    }
+
+                    HStack(spacing: 12) {
+                        previewTile("A", active: false)
+                        previewTile("7", active: true)
+                        previewTile("R", active: false)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    HStack(spacing: 8) {
+                        Circle().fill(tile.accent).frame(width: 8, height: 8)
+                        Capsule().fill(tile.border.opacity(0.7)).frame(width: 54, height: 4)
+                        Circle().fill(tile.accent).frame(width: 8, height: 8)
+                    }
+                }
+                .padding(18)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(tile.border.opacity(0.7), lineWidth: 1.5))
+            .padding(.horizontal, 24)
+            .shadow(color: tile.shadow.opacity(0.5), radius: 14, x: 0, y: 8)
+    }
+
+    private func previewTile(_ value: String, active: Bool) -> some View {
+        RoundedRectangle(cornerRadius: max(7, 18 * tile.cornerScale), style: .continuous)
+            .fill(active ? tile.fill : LinearGradient(
+                colors: [tile.inactiveFill, tile.inactiveFill.opacity(0.76)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ))
+            .frame(maxWidth: 92, maxHeight: 92)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(
+                RoundedRectangle(cornerRadius: max(7, 18 * tile.cornerScale), style: .continuous)
+                    .stroke(active ? tile.accent : tile.border, lineWidth: active ? 2.5 : 1.5)
+            )
+            .overlay {
+                Text(value)
+                    .font(.system(size: 31, weight: .black, design: .rounded))
+                    .foregroundStyle(active ? tile.textColor : tile.border)
+            }
+            .shadow(color: tile.shadow.opacity(active ? 0.9 : 0.38), radius: active ? 9 : 4, y: 4)
+    }
+
+    private var solitaireMock: some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(cards.tableTint)
+            .overlay {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Label("Solitaire preview", systemImage: "suit.spade.fill")
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.textPrimary.opacity(0.85))
+                        Spacer()
+                        Text("NOT PLAYABLE")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(AppTheme.textPrimary.opacity(0.72))
+                    }
+
+                    HStack(spacing: 14) {
+                        mockPlayingCard(rank: "A", suit: "♥", color: cards.redSuit)
+                            .rotationEffect(.degrees(-6))
+                        mockPlayingCard(rank: "K", suit: "♠", color: cards.blackSuit)
+                            .offset(y: 9)
+                        mockBackCard
+                            .rotationEffect(.degrees(6))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(18)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(cards.border.opacity(0.82), lineWidth: 1.5))
+            .padding(.horizontal, 24)
+            .shadow(color: cards.shadow.opacity(0.45), radius: 14, x: 0, y: 8)
+    }
+
+    private func mockPlayingCard(rank: String, suit: String, color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(cards.frontFill)
+            .frame(width: 76, height: 108)
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(cards.border, lineWidth: 1.5))
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: -2) {
+                    Text(rank).font(.headline.weight(.black))
+                    Text(suit).font(.caption.bold())
+                }
+                .foregroundStyle(color)
+                .padding(9)
+            }
+            .overlay(Text(suit).font(.system(size: 32)).foregroundStyle(color.opacity(0.9)))
+            .shadow(color: cards.shadow.opacity(0.5), radius: 5, y: 3)
+    }
+
+    private var mockBackCard: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(cards.backFill)
+            .frame(width: 76, height: 108)
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(cards.border, lineWidth: 1.5))
+            .overlay(Image(systemName: cards.backSymbol).font(.title2.bold()).foregroundStyle(cards.accent))
+            .shadow(color: cards.shadow.opacity(0.5), radius: 5, y: 3)
     }
 }
 

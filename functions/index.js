@@ -110,7 +110,9 @@ for (const method of ["create", "join", "accept", "decline", "ready", "start",
   });
 }
 
-const matchMethods = ["queue", "cancel", "ready", "submit", "forfeit", "tick"];
+const matchMethods = [
+  "queue", "cancel", "wordHuntTestPool", "ready", "submit", "forfeit", "tick",
+];
 for (const method of matchMethods) {
   exports[`officialMatch_${method}`] = onCall({
     maxInstances: 5, timeoutSeconds: 30,

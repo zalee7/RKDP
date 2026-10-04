@@ -29,7 +29,9 @@ struct WordleView: View {
         onHome: @escaping () -> Void = {}
     ) {
         let configuredRounds = MultiplayerPuzzleDataFactory.decodeWordle(puzzleData)?.matchRounds
-        let rounds = sessionID == nil || configuredRounds == 1 ? 1 : 3
+        // Solo and standard online Word Guess are one-word games. Party data may
+        // still opt into a longer set by explicitly providing a round count.
+        let rounds = sessionID == nil ? 1 : max(1, configuredRounds ?? 1)
         self.userID = user?.id
         self.sessionID = sessionID
         self.onMatchResult = onMatchResult

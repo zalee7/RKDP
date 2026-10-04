@@ -21,6 +21,16 @@ final class SoundManager {
         case inOnlineGame = "InOnlineGame"
         case matchmaking = "Matchmaking"
         case otherKeyboardPress = "OtherKeyboardPress"
+        case wordCombo1 = "WordCombo1"
+        case wordCombo2 = "WordCombo2"
+        case wordCombo3 = "WordCombo3"
+        case wordCombo4 = "WordCombo4"
+        case wordCombo5 = "WordCombo5"
+        case wordAlreadyUsed = "WordAlreadyUsed"
+        case wordInvalid = "WordInvalid"
+        case clearErase = "ClearErase"
+        case colorLinkAttached = "ColorLinkAttached"
+        case appButtonTap = "AppButtonTap"
         case wordleTileClick = "WordleTileClick"
     }
 
@@ -72,19 +82,49 @@ final class SoundManager {
         playOneShot(.otherKeyboardPress, volume: 0.75)
     }
 
+    /// Reserved for intentional navigation and primary app actions, never per-key gameplay input.
+    func appButtonTap() {
+        if hapticsEnabled {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        playOneShot(.appButtonTap, volume: 0.58)
+    }
+
     func wordleTileClick() {
         playOneShot(.wordleTileClick, volume: 0.85)
     }
 
-    // MARK: - Combo state
+    /// A non-gameplay sample for cosmetic previews. Keep the cosmetic ID here so
+    /// a future sound pack can replace these category defaults per theme.
+    func playThemePreview(for item: CosmeticItem) {
+        guard soundEffectsEnabled else { return }
 
-    private var lastWordTime: Date?
-    private var comboCount = 0
-    private let comboWindow: TimeInterval = 3.0
+        let soundID: SystemSoundID
+        let haptic: UIImpactFeedbackGenerator.FeedbackStyle
+        switch item.category {
+        case .boardTheme:
+            soundID = 1104
+            haptic = .light
+        case .tileTheme:
+            soundID = 1057
+            haptic = .medium
+        case .cardTheme:
+            soundID = 1110
+            haptic = .light
+        default:
+            soundID = 1104
+            haptic = .light
+        }
+
+        if hapticsEnabled {
+            UIImpactFeedbackGenerator(style: haptic).impactOccurred()
+        }
+        AudioServicesPlaySystemSound(soundID)
+    }
 
     // MARK: - Word found
 
-    /// Call whenever a valid word is accepted. Length drives both haptic weight and sound pitch.
+    /// Call whenever a valid word is accepted. Each authored combo cue maps to its word length.
     func wordFound(length: Int) {
         // Haptic intensity scales with word length
         if hapticsEnabled {
@@ -97,33 +137,7 @@ final class SoundManager {
             UIImpactFeedbackGenerator(style: style).impactOccurred()
         }
 
-        // System sound escalates with length
-        //  1104 = SMS received (short click)
-        //  1057 = Pinball (satisfying pop)
-        //  1016 = New voicemail (brighter)
-        //  1025 = Calendar alert (punchy)
-        //  1394 = Ping (premium reward)
-        let soundID: SystemSoundID
-        switch length {
-        case 3:    soundID = 1104
-        case 4:    soundID = 1057
-        case 5:    soundID = 1016
-        case 6:    soundID = 1025
-        default:   soundID = 1394
-        }
-        if soundEffectsEnabled {
-            AudioServicesPlaySystemSound(soundID)
-        }
-
-        // Combo detection
-        let now = Date()
-        if let last = lastWordTime, now.timeIntervalSince(last) < comboWindow {
-            comboCount += 1
-            if comboCount >= 2 { playCombo(count: comboCount) }
-        } else {
-            comboCount = 1
-        }
-        lastWordTime = now
+        playWordLengthCue(length: length)
     }
 
     // MARK: - Invalid / already found
@@ -132,9 +146,28 @@ final class SoundManager {
         if hapticsEnabled {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
-        if soundEffectsEnabled {
-            AudioServicesPlaySystemSound(1521)
+        playOneShot(.wordInvalid, volume: 0.85)
+    }
+
+    func wordAlreadyUsed() {
+        if hapticsEnabled {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
+        playOneShot(.wordAlreadyUsed, volume: 0.8)
+    }
+
+    func clearErase() {
+        if hapticsEnabled {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        playOneShot(.clearErase, volume: 0.75)
+    }
+
+    func colorLinkAttached() {
+        if hapticsEnabled {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+        playOneShot(.colorLinkAttached, volume: 0.9)
     }
 
     // MARK: - Game over
@@ -148,24 +181,23 @@ final class SoundManager {
         }
     }
 
-    // MARK: - Combo
+    // MARK: - Word length cues
 
-    private func playCombo(count: Int) {
-        if hapticsEnabled {
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+    private func playWordLengthCue(length: Int) {
+        let asset: AudioAsset
+        switch min(max(length - 2, 1), 5) {
+        case 1: asset = .wordCombo1 // 3 letters
+        case 2: asset = .wordCombo2 // 4 letters
+        case 3: asset = .wordCombo3 // 5 letters
+        case 4: asset = .wordCombo4 // 6 letters
+        default: asset = .wordCombo5
         }
-        guard soundEffectsEnabled else { return }
-        let reps = min(count, 4)
-        for i in 0..<reps {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
-                AudioServicesPlaySystemSound(1394)
-            }
-        }
+        playOneShot(asset, volume: 0.9)
     }
 
+    /// Retained for existing game lifecycle call sites. Word cues no longer depend on a combo timer.
     func resetCombo() {
-        comboCount = 0
-        lastWordTime = nil
+        // Intentionally empty.
     }
 
     private func configureSession() {

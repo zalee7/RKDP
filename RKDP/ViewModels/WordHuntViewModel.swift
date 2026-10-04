@@ -34,7 +34,8 @@ final class WordHuntViewModel: ObservableObject {
         let s = seed ?? Int.random(in: 0..<Int.max)
         if let puzzleData,
            let grid = Self.grid(from: puzzleData) {
-            self.game = WordHuntGame(grid: grid, seed: s)
+            let validWords = puzzleData.validWords.map { Set($0.map { $0.uppercased() }) }
+            self.game = WordHuntGame(grid: grid, seed: s, validWords: validWords)
         } else {
             self.game = WordHuntGame.generate(difficulty: difficulty, seed: s)
         }
@@ -86,7 +87,7 @@ final class WordHuntViewModel: ObservableObject {
 
         if foundWords.contains(word) {
             lastWordResult = .alreadyFound
-            SoundManager.shared.wordInvalid()
+            SoundManager.shared.wordAlreadyUsed()
         } else if game.validWords.contains(word) {
             foundWords.append(word)
             let pts = WordHuntGame.score(for: word)

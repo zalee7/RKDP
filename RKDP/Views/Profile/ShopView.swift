@@ -54,7 +54,11 @@ struct ShopView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(ShopSection.allCases, id: \.self) { section in
-                            Button { selectedSection = section } label: {
+                            Button {
+                                guard selectedSection != section else { return }
+                                SoundManager.shared.appButtonTap()
+                                selectedSection = section
+                            } label: {
                                 Text(section.title)
                                     .font(.subheadline.weight(selectedSection == section ? .bold : .regular))
                                     .padding(.horizontal, 14).padding(.vertical, 8)

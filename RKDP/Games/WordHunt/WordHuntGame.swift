@@ -50,11 +50,11 @@ struct WordHuntGame {
     static let defaultGridSize = 4
     private static let maximumTraceLength = 10
 
-    init(grid: [[Character]], seed: Int) {
+    init(grid: [[Character]], seed: Int, validWords: Set<String>? = nil) {
         self.grid = grid
         self.seed = seed
         self.size = grid.count
-        self.validWords = Self.findAllWords(in: grid)
+        self.validWords = validWords ?? Self.findAllWords(in: grid)
     }
 
     // MARK: - Path validation

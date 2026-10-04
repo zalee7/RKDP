@@ -503,24 +503,38 @@ struct MatchmakingView: View {
                 .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AppTheme.cardBorder, lineWidth: 1))
                 .padding(.horizontal)
             } else {
-                ZStack {
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 6)
+                if session.usesServerAuthority && session.preGameCountdownStartedAt == nil {
+                    ProgressView()
+                        .tint(mode.accentColor)
+                        .scaleEffect(1.35)
                         .frame(width: 80, height: 80)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(vm.matchCountdown) / 5.0)
-                        .stroke(mode.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .frame(width: 80, height: 80)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: 1), value: vm.matchCountdown)
-                    Text("\(vm.matchCountdown)")
-                        .font(.title.bold())
+                    Text("Waiting for opponent to load…")
+                        .font(.headline)
                         .foregroundStyle(AppTheme.textPrimary)
-                }
+                    Text("The match countdown begins once both players are ready.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.12), lineWidth: 6)
+                            .frame(width: 80, height: 80)
+                        Circle()
+                            .trim(from: 0, to: CGFloat(vm.matchCountdown) / 5.0)
+                            .stroke(mode.accentColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .frame(width: 80, height: 80)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.15), value: vm.matchCountdown)
+                        Text("\(vm.matchCountdown)")
+                            .font(.title.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+                    }
 
-                Text(isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isCasual ? "No rank, no wager · starts automatically…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…")))
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.textSecondary)
+                    Text(session.usesServerAuthority ? "Both players are ready. Starting together…" : (isBotOpponent ? "Bronze bot match · limited ranked rewards…" : (session.isCasual ? "No rank, no wager · starts automatically…" : (session.isExhibition ? "No rank or coins at stake · starts automatically…" : "Game starts automatically…"))))
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
             }
 
             Button {

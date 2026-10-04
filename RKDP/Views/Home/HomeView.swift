@@ -968,6 +968,8 @@ private struct LobbyTabSelector: View {
         HStack(spacing: 8) {
             ForEach(GameLobbyTab.allCases, id: \.self) { tab in
                 Button {
+                    guard selectedTab != tab else { return }
+                    SoundManager.shared.appButtonTap()
                     selectedTab = tab
                 } label: {
                     Label(tab.rawValue, systemImage: tab == .solo ? "person.fill" : "network")
