@@ -1684,9 +1684,7 @@ struct MatchBreakdownView: View {
             let rows = snapshotRows(result.summary["boardRows"])
             let givens = snapshotRows(result.summary["givensRows"])
             if !rows.isEmpty {
-                snapshotCard(title: "Board") {
-                    sudokuSnapshot(rows, givens: givens)
-                }
+                sudokuSnapshotSection(rows, givens: givens)
             }
         case .minesweeper:
             let rows = snapshotRows(result.summary["boardRows"])
@@ -1706,9 +1704,10 @@ struct MatchBreakdownView: View {
             }
         case .colorLink:
             let rows = snapshotRows(result.summary["boardRows"])
+            let endpoints = snapshotRows(result.summary["endpointRows"])
             if !rows.isEmpty {
-                snapshotCard(title: "Board") {
-                    colorGridSnapshot(rows: rows, cellSize: 24, showText: true)
+                snapshotCard(title: "Final Paths") {
+                    colorLinkSnapshot(rows: rows, endpoints: endpoints)
                 }
             }
         default:
@@ -1739,29 +1738,74 @@ struct MatchBreakdownView: View {
 
     private func sudokuSnapshot(_ rows: [String], givens: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 sudokuLegend("Given", color: AppTheme.textPrimary)
                 sudokuLegend("Placed", color: AppTheme.teal)
-                sudokuLegend("Remaining", color: AppTheme.textSecondary)
+                sudokuLegend("Open", color: AppTheme.textMuted)
             }
-            VStack(spacing: 1) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                HStack(spacing: 1) {
-                    ForEach(Array(row.enumerated()), id: \.offset) { colIndex, char in
-                        let given = sudokuIsGiven(givens, row: rowIndex, column: colIndex)
-                        let empty = char == "." || char == "0"
-                        Text(char == "." || char == "0" ? "" : String(char))
-                            .font(.system(size: 14, weight: given ? .bold : .semibold, design: .rounded))
-                            .foregroundStyle(given ? AppTheme.textPrimary : (empty ? AppTheme.textSecondary : AppTheme.teal))
-                            .frame(width: 26, height: 26)
-                            .background(given ? Color.white.opacity(0.18) : (empty ? Color.white.opacity(0.05) : AppTheme.teal.opacity(0.16)))
-                            .overlay(sudokuBorder(row: rowIndex, col: colIndex))
-                    }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 9), spacing: 0) {
+                ForEach(0..<81, id: \.self) { index in
+                    let rowIndex = index / 9
+                    let colIndex = index % 9
+                    let rowCharacters = rows.indices.contains(rowIndex) ? Array(rows[rowIndex]) : []
+                    let character: Character = rowCharacters.indices.contains(colIndex) ? rowCharacters[colIndex] : "."
+                    sudokuSnapshotCell(character, isGiven: sudokuIsGiven(givens, row: rowIndex, column: colIndex))
                 }
             }
+            .background(Color.white)
+            .overlay(sudokuGridOverlay)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(AppTheme.plum.opacity(0.72), lineWidth: 1.8)
+            )
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: 360)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func sudokuSnapshotSection(_ rows: [String], givens: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Board")
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.textSecondary)
+            sudokuSnapshot(rows, givens: givens)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sudokuGridOverlay: some View {
+        GeometryReader { _ in
+            Canvas { context, size in
+                let cell = size.width / 9
+                for index in 1..<9 {
+                    let position = CGFloat(index) * cell
+                    let isBoxLine = index % 3 == 0
+                    let lineWidth: CGFloat = isBoxLine ? 2 : 0.65
+                    let color = isBoxLine ? AppTheme.plum.opacity(0.66) : AppTheme.plum.opacity(0.17)
+
+                    context.stroke(
+                        Path { path in
+                            path.move(to: CGPoint(x: position, y: 0))
+                            path.addLine(to: CGPoint(x: position, y: size.height))
+                        },
+                        with: .color(color),
+                        lineWidth: lineWidth
+                    )
+                    context.stroke(
+                        Path { path in
+                            path.move(to: CGPoint(x: 0, y: position))
+                            path.addLine(to: CGPoint(x: size.width, y: position))
+                        },
+                        with: .color(color),
+                        lineWidth: lineWidth
+                    )
+                }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .allowsHitTesting(false)
     }
 
     private func sudokuLegend(_ label: String, color: Color) -> some View {
@@ -1771,15 +1815,25 @@ struct MatchBreakdownView: View {
         }
     }
 
+    private func sudokuSnapshotCell(_ character: Character, isGiven: Bool) -> some View {
+        let isEmpty = character == "." || character == "0"
+        let label = isEmpty ? "·" : String(character)
+        let weight: Font.Weight = isGiven ? .bold : .semibold
+        let foreground = isGiven ? AppTheme.textPrimary : (isEmpty ? AppTheme.textMuted.opacity(0.45) : AppTheme.teal)
+        let background = isGiven ? Color.white : (isEmpty ? AppTheme.plum.opacity(0.025) : AppTheme.teal.opacity(0.09))
+
+        return Text(label)
+            .font(.system(size: 17, weight: weight, design: .rounded))
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            .background(background)
+    }
+
     private func sudokuIsGiven(_ givens: [String], row: Int, column: Int) -> Bool {
         guard givens.indices.contains(row) else { return false }
         let cells = Array(givens[row])
         return cells.indices.contains(column) && cells[column] != "."
-    }
-
-    private func sudokuBorder(row: Int, col: Int) -> some View {
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .stroke((row % 3 == 0 || col % 3 == 0) ? Color.white.opacity(0.34) : Color.white.opacity(0.12), lineWidth: 0.8)
     }
 
     private func minesweeperSnapshot(_ rows: [String]) -> some View {
@@ -1814,6 +1868,32 @@ struct MatchBreakdownView: View {
                 }
             }
         }
+    }
+
+    private func colorLinkSnapshot(rows: [String], endpoints: [String]) -> some View {
+        VStack(spacing: 2) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                HStack(spacing: 2) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, char in
+                        let isEndpoint = endpoints.indices.contains(rowIndex) &&
+                            Array(endpoints[rowIndex]).indices.contains(columnIndex) &&
+                            Array(endpoints[rowIndex])[columnIndex] == "E"
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(char == "." ? Color.white.opacity(0.07) : snapshotPaletteColor(char))
+                            .frame(width: 26, height: 26)
+                            .overlay {
+                                if isEndpoint {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.92))
+                                        .frame(width: 12, height: 12)
+                                        .overlay(Circle().stroke(Color.black.opacity(0.24), lineWidth: 1))
+                                }
+                            }
+                    }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     private func resultPill(_ label: String, _ value: String, _ color: Color) -> some View {
@@ -1886,13 +1966,21 @@ struct MatchBreakdownView: View {
         ]
         switch session.mode {
         case .wordle:
-            stats.append(contentsOf: [("Rounds", "\(result.solvedRounds)"), ("Guesses", "\(result.totalGuesses)")])
+            let guesses = result.summary["attemptedGuesses"] ?? "\(result.totalGuesses)"
+            stats.append(contentsOf: [("Rounds", "\(result.solvedRounds)"), ("Guesses", guesses)])
         case .anagram, .wordHunt:
+            let words = parsedFoundWords(from: result)
+            let longestWordLength = max(result.longestWordLength, words.map(\.count).max() ?? 0)
+            let averageWordLength = result.summary["averageWordLength"] ?? {
+                guard !words.isEmpty else { return "-" }
+                let average = Double(words.reduce(0) { $0 + $1.count }) / Double(words.count)
+                return String(format: "%.1f", average)
+            }()
             stats.append(contentsOf: [
                 ("Score", "\(result.score)"),
-                ("Words", "\(result.wordCount)"),
-                ("Longest", "\(result.longestWordLength) letters"),
-                ("Average", result.summary["averageWordLength"] ?? "-"),
+                ("Words", "\(result.wordCount > 0 ? result.wordCount : words.count)"),
+                ("Longest", "\(longestWordLength) letters"),
+                ("Average", averageWordLength),
                 ("Top Word", (result.summary["topWord"] ?? "-").capitalized)
             ])
         case .hangman:

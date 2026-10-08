@@ -54,7 +54,7 @@ final class AnagramViewModel: ObservableObject {
 
     func returnToBank(id: Int) {
         guard !isFinished, let idx = placed.firstIndex(where: { $0.id == id }) else { return }
-        SoundManager.shared.keyboardPress()
+        SoundManager.shared.erase()
         let tile = placed.remove(at: idx)
         bank.append(tile)
         restoreRackOrder()

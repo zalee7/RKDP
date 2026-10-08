@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const {MemoryDB} = require("./test-support/memory-firestore");
 const {createMatchLifecycle, privatePath} = require("./match-lifecycle");
 const {createMatchRewards, matchPath} = require("./match-rewards");
-const {verifyResult, limits} = require("./match-evidence");
+const {verifyResult, verifyWordGuessProgress, limits} = require("./match-evidence");
 const {presets, onlineDifficulty, resolveMatch, rankDelta} = require("./match-reward-policy");
 const {readFileSync} = require("node:fs");
 
@@ -66,6 +66,8 @@ test("v2 Word Guess ends immediately when the first player solves", async () => 
   const f = fixture(); enableV2(f, "wordle", "casual");
   const sessionID = await f.paired();
   assert.equal(JSON.parse(f.db.snapshot(`serverMatches/${sessionID}`).data().puzzleData).matchRounds, 1);
+  await f.api.progress("b", {sessionID, evidence: {rounds: [["BRICK"]]}});
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults, undefined, "Progress stays private during play");
   f.advance(20000);
   await f.api.submit("a", {sessionID, evidence: {rounds: [["APPLE"]]}});
   const publicMatch = f.db.snapshot(`serverMatches/${sessionID}`).data();
@@ -73,11 +75,122 @@ test("v2 Word Guess ends immediately when the first player solves", async () => 
   assert.equal(publicMatch.winnerID, "a");
   assert.equal(publicMatch.playerResults.b.status, "Opponent solved first");
   assert.equal(publicMatch.playerResults.b.summary.raceLoss, "true");
+  assert.equal(publicMatch.playerResults.b.summary.round1Guesses, "BRICK:AAAAA");
+  assert.equal(publicMatch.playerResults.b.summary.attemptedGuesses, "1");
   const match = f.db.snapshot(matchPath(sessionID)).data();
+  assert.equal(match.playerProgress, undefined, "Draft progress is excluded from the immutable reward record");
   assert.equal(resolveMatch(match), "a");
   const receipt = await createMatchRewards({db: f.db, clock: f.clock}).settle("a", {sessionID});
   assert.equal(receipt.matchReward, 15);
   assert.equal((await createMatchRewards({db: f.db, clock: f.clock}).settle("b", {sessionID})).matchReward, 0);
+});
+
+test("a player can submit a winning result after sending progress", async () => {
+  const f = fixture(); enableV2(f, "wordle", "casual");
+  const sessionID = await f.paired();
+  await f.api.progress("a", {sessionID, evidence: {rounds: [["BRICK"]]}});
+  f.advance(20000);
+  await f.api.submit("a", {sessionID, evidence: {rounds: [["BRICK", "APPLE"]]}});
+  const match = f.db.snapshot(privatePath(sessionID)).data();
+  const publicMatch = f.db.snapshot(`serverMatches/${sessionID}`).data();
+  assert.equal(match.status, "finished");
+  assert.equal(publicMatch.winnerID, "a");
+  assert.deepEqual(match.playedUserIDs, ["a"]);
+});
+
+test("Word Guess accepts a verified late loser breakdown without changing the settled match", async () => {
+  const f = fixture(); enableV2(f, "wordle", "casual");
+  const sessionID = await f.paired();
+  f.advance(20000);
+  await f.api.submit("a", {sessionID, evidence: {rounds: [["APPLE"]]}});
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.b.summary.round1GuessCount, "0");
+  await f.api.progress("b", {sessionID, evidence: {rounds: [["BRICK"]]}});
+  const publicResult = f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.b;
+  assert.equal(publicResult.summary.round1Guesses, "BRICK:AAAAA");
+  assert.equal(publicResult.summary.raceLoss, "true");
+  assert.equal(f.db.snapshot(matchPath(sessionID)).data().playerResults.b.summary.round1GuessCount, "0",
+      "Late display enrichment does not rewrite the immutable reward record");
+});
+
+const progressCases = [
+  {mode: "sudoku", puzzle: {givens: Array(81).fill(0)}, evidence: {cells: [1, ...Array(80).fill(0)]}, summaryKey: "boardRows"},
+  {mode: "colorLink", puzzle: {size: 2, pairs: [{id: 0, start: 0, end: 2}]}, evidence: {paths: {0: [0, 1]}}, summaryKey: "boardRows"},
+  {mode: "minesweeper", puzzle: {rows: 5, cols: 5, mines: 3}, evidence: {firstCell: 12, revealed: [12]}, summaryKey: "boardRows"},
+  {mode: "gridlock", puzzle: {deck: Array.from({length: 52}, (_, index) => index)}, evidence: {moves: [[0]]}, summaryKey: "moves"},
+  {mode: "anagram", puzzle: {letters: "AEP", validWords: ["APE", "PEA"]}, evidence: {words: ["APE"]}, summaryKey: "foundWords"},
+  {mode: "wordHunt", puzzle: {grid: "APEPEAPE", validWords: ["APE", "PEA"]}, evidence: {words: ["APE"]}, summaryKey: "foundWords"},
+  {mode: "hangman", puzzle: {maxWrong: 6, rounds: [
+    {target: "APPLE", category: "Food", starter: "A"},
+    {target: "BRICK", category: "Object", starter: "B"},
+    {target: "CROWN", category: "Object", starter: "C"},
+  ]}, evidence: {rounds: ["P"]}, summaryKey: "revealedPattern"},
+];
+
+for (const item of progressCases) {
+  test(`${item.mode} keeps verified in-progress evidence private`, async () => {
+    const f = fixture(item.mode, "casual"); enableV2(f, item.mode, "casual");
+    const current = f.db.snapshot("economyPrivate/matchPuzzles/records/p").data();
+    f.db.set("economyPrivate/matchPuzzles/records/p", {...current, ...item.puzzle});
+    const sessionID = await f.paired();
+    await f.api.progress("b", {sessionID, evidence: item.evidence});
+    const privateMatch = f.db.snapshot(privatePath(sessionID)).data();
+    assert.equal(privateMatch.playerProgress.b.mode, item.mode);
+    assert.ok(privateMatch.playerProgress.b.summary[item.summaryKey] !== undefined);
+    assert.ok(privateMatch.playedUserIDs.includes("b"));
+    assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults, undefined);
+  });
+}
+
+for (const item of progressCases.filter((entry) => ["anagram", "wordHunt", "hangman"].includes(entry.mode))) {
+  test(`${item.mode} publishes both verified snapshots after a forfeit`, async () => {
+    const f = fixture(item.mode, "casual"); enableV2(f, item.mode, "casual");
+    const current = f.db.snapshot("economyPrivate/matchPuzzles/records/p").data();
+    f.db.set("economyPrivate/matchPuzzles/records/p", {...current, ...item.puzzle});
+    const sessionID = await f.paired();
+    await f.api.progress("a", {sessionID, evidence: item.evidence});
+    await f.api.progress("b", {sessionID, evidence: item.evidence});
+    await f.api.forfeit("b", {sessionID});
+    const results = f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults;
+    assert.equal(results.a.status, "Won by forfeit");
+    assert.equal(results.a.summary.forfeitWin, "true");
+    assert.ok(results.a.summary[item.summaryKey]);
+    assert.equal(results.b.status, "Forfeited");
+    assert.equal(results.b.summary.forfeit, "true");
+    assert.ok(results.b.summary[item.summaryKey]);
+    assert.equal(f.db.snapshot(matchPath(sessionID)).data().playerResults.a, undefined,
+        "Display snapshots must not enter the immutable reward record");
+  });
+}
+
+test("Color Link first finisher preserves the losing player's verified board", async () => {
+  const f = fixture("colorLink", "casual"); enableV2(f, "colorLink", "casual");
+  const current = f.db.snapshot("economyPrivate/matchPuzzles/records/p").data();
+  f.db.set("economyPrivate/matchPuzzles/records/p", {...current, size: 2, pairs: [{id: 0, start: 0, end: 2}]});
+  const sessionID = await f.paired();
+  await f.api.progress("b", {sessionID, evidence: {paths: {0: [0, 1]}}});
+  f.advance(12000);
+  await f.api.submit("a", {sessionID, evidence: {paths: {0: [0, 1, 3, 2]}}});
+  const publicResult = f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.b;
+  assert.equal(publicResult.status, "Opponent finished first");
+  assert.equal(publicResult.summary.firstFinisherLoss, "true");
+  assert.equal(publicResult.summary.boardRows, "11/1.");
+  assert.equal(publicResult.summary.endpointRows, "E./E.");
+  const verified = f.db.snapshot(matchPath(sessionID)).data();
+  assert.equal(verified.playerResults.b.summary.boardRows, "11/1.");
+  assert.equal(resolveMatch(verified), "a");
+});
+
+test("Color Link accepts a late loser board without rewriting settled rewards", async () => {
+  const f = fixture("colorLink", "casual"); enableV2(f, "colorLink", "casual");
+  const current = f.db.snapshot("economyPrivate/matchPuzzles/records/p").data();
+  f.db.set("economyPrivate/matchPuzzles/records/p", {...current, size: 2, pairs: [{id: 0, start: 0, end: 2}]});
+  const sessionID = await f.paired();
+  await f.api.submit("a", {sessionID, evidence: {paths: {0: [0, 1, 3, 2]}}});
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.b.summary.boardRows, undefined);
+  await f.api.progress("b", {sessionID, evidence: {paths: {0: [0, 1]}}});
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.b.summary.boardRows, "11/1.");
+  assert.equal(f.db.snapshot(matchPath(sessionID)).data().playerResults.b.summary.boardRows, undefined,
+      "Late display enrichment does not rewrite the immutable reward record");
 });
 
 test("Word Guess winner bonus rewards efficient verified solves without increasing losses", () => {
@@ -102,6 +215,9 @@ test("v2 Word Guess rejects extra rounds and unfinished attempts", () => {
   const p = {...fixture().puzzle, matchRounds: 1};
   assert.throws(() => verifyResult(p, "a", {rounds: [["APPLE"], ["BRICK"]]}, 20000));
   assert.throws(() => verifyResult(p, "a", {rounds: [["BRICK"]]}, 20000));
+  assert.equal(verifyWordGuessProgress(p, "a", {rounds: [["BRICK"]]}, 10000).summary.round1Guesses, "BRICK:AAAAA");
+  assert.throws(() => verifyWordGuessProgress(p, "a", {rounds: [["APPLE"]]}, 10000), /final/);
+  assert.throws(() => verifyWordGuessProgress(p, "a", {rounds: [["XXXXX"]]}, 10000), /Invalid guess/);
 });
 
 test("server board snapshots retain blanks and reconstruct mines without trusting client art", () => {
@@ -117,6 +233,12 @@ test("server board snapshots retain blanks and reconstruct mines without trustin
   assert.equal(rows.length, 5); assert.ok(rows.every((row) => row.length === 5));
   assert.equal(rows.join("").split("M").length - 1, 3);
   assert.equal(rows[2][2], "0");
+
+  const colorLink = verifyResult({mode: "colorLink", size: 2, pairs: [{id: 0, start: 0, end: 2}]}, "a",
+      {paths: {0: [0, 1, 3, 2]}, boardRows: "FAKE"}, 12000);
+  assert.equal(colorLink.result.summary.boardRows, "11/11");
+  assert.equal(colorLink.result.summary.endpointRows, "E./E.");
+  assert.equal(colorLink.result.summary.totalPairs, "1");
 });
 
 test("Word Hunt is Medium at every online rank; existing v2 Easy matches still settle", async () => {
@@ -152,13 +274,13 @@ test("shared Word Guess test target uses ATEST for both approved players", async
   assert.equal((await f.api.wordGuessTestTarget("a", {enabled: true})).enabled, true);
   const sessionID = await f.paired();
   const match = f.db.snapshot(privatePath(sessionID)).data();
-  assert.equal(match.puzzleID, "wordle_test_atest_medium_v1");
+  assert.equal(match.puzzleID, "wordle_test_atest_medium_v2");
   const payload = JSON.parse(f.db.snapshot(`serverMatches/${sessionID}`).data().puzzleData);
   assert.deepEqual(payload.targets, ["ATEST"]);
   assert.equal(payload.matchRounds, 1);
-  const puzzle = f.db.snapshot("economyPrivate/matchPuzzles/records/wordle_test_atest_medium_v1").data();
+  const puzzle = f.db.snapshot("economyPrivate/matchPuzzles/records/wordle_test_atest_medium_v2").data();
   assert.deepEqual(puzzle.targets, ["ATEST"]);
-  assert.throws(() => verifyResult({...puzzle, matchRounds: 1}, "a", {rounds: [["APPLE"]]}, 1000), /Invalid guess/);
+  assert.throws(() => verifyResult({...puzzle, matchRounds: 1}, "a", {rounds: [["APPLE"]]}, 1000), /not finished/);
   await f.api.submit("a", {sessionID, evidence: {rounds: [["ATEST"]]}});
   assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().winnerID, "a");
 });
@@ -261,6 +383,43 @@ test("forfeit cannot undo a submitted result; real quitter gets no coins", async
   const reward = createMatchRewards({db: f.db, clock: f.clock});
   assert.equal((await reward.settle("a", {sessionID})).matchReward, 15);
   assert.equal(f.db.snapshot("coinWallets/b").data().balance, 500);
+});
+
+test("a forfeit preserves the quitter's last verified board for the breakdown", async () => {
+  const f = fixture("sudoku", "casual"); enableV2(f, "sudoku", "casual");
+  const givens = Array(81).fill(0); givens[0] = 1;
+  const current = f.db.snapshot("economyPrivate/matchPuzzles/records/p").data();
+  f.db.set("economyPrivate/matchPuzzles/records/p", {...current, givens});
+  const sessionID = await f.paired();
+  await f.api.progress("a", {sessionID, evidence: {cells: [1, 3, ...Array(79).fill(0)]}});
+  await f.api.progress("b", {sessionID, evidence: {cells: [1, 2, ...Array(79).fill(0)]}});
+  await f.api.forfeit("b", {sessionID});
+  const publicResults = f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults;
+  assert.equal(publicResults.b.status, "Forfeited");
+  assert.equal(publicResults.b.summary.forfeit, "true");
+  assert.equal(publicResults.b.summary.boardRows.split("/")[0], "12.......");
+  assert.equal(publicResults.b.summary.givensRows.split("/")[0], "1........");
+  assert.equal(publicResults.a.status, "Won by forfeit");
+  assert.equal(publicResults.a.summary.forfeitWin, "true");
+  assert.equal(publicResults.a.summary.boardRows.split("/")[0], "13.......");
+  assert.equal(f.db.snapshot(matchPath(sessionID)).data().playerResults.a, undefined,
+      "Display-only winner progress must not enter the immutable reward record");
+});
+
+test("a forfeit winner can upload late board progress for the public breakdown", async () => {
+  const f = fixture("sudoku", "casual"); enableV2(f, "sudoku", "casual");
+  const givens = Array(81).fill(0); givens[0] = 1;
+  const current = f.db.snapshot("economyPrivate/matchPuzzles/records/p").data();
+  f.db.set("economyPrivate/matchPuzzles/records/p", {...current, givens});
+  const sessionID = await f.paired();
+  await f.api.forfeit("b", {sessionID});
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.a.summary.boardRows, undefined);
+  const reply = await f.api.progress("a", {sessionID, evidence: {cells: [1, 4, ...Array(79).fill(0)]}});
+  assert.equal(reply.ownResult.summary.boardRows.split("/")[0], "14.......");
+  assert.equal(reply.ownResult.summary.forfeitWin, "true");
+  assert.equal(f.db.snapshot(`serverMatches/${sessionID}`).data().playerResults.a.summary.boardRows.split("/")[0], "14.......");
+  assert.equal(f.db.snapshot(matchPath(sessionID)).data().playerResults.a, undefined,
+      "Late display enrichment must not rewrite settled rewards");
 });
 
 test("reconnect returns only the authenticated player's accepted final result", async () => {

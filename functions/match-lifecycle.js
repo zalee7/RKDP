@@ -3,7 +3,7 @@
 const {randomUUID, randomInt, createHash} = require("node:crypto");
 const {check, validUID, validID, dayKey} = require("./wallet-ledger");
 const {presets, onlineDifficulty, tier, resolveMatch, validateMatch} = require("./match-reward-policy");
-const {verifyResult, limits} = require("./match-evidence");
+const {verifyResult, verifyWordGuessProgress, limits} = require("./match-evidence");
 const {matchPath} = require("./match-rewards");
 const privatePath = (id) => `economyPrivate/liveMatches/records/${id}`;
 const accountPath = (uid) => `economyPrivate/matchAccounts/players/${uid}`;
@@ -16,13 +16,59 @@ function canonical(value) {
   return value;
 }
 const puzzleHash = (puzzle) => createHash("sha256").update(JSON.stringify(canonical(puzzle))).digest("hex");
-const actionReply = (m, uid) => ({accepted: true, status: m.status, ownResult: m.playerResults[uid] ?? null});
-const wordGuessTestPuzzleID = (difficulty) => `wordle_test_atest_${difficulty}_v1`;
+const actionReply = (m, uid) => ({accepted: true, status: m.status,
+  ownResult: m.playerResults[uid] ?? forfeitWinDisplayResult(m, uid)});
+const wordGuessTestPuzzleID = (difficulty) => `wordle_test_atest_${difficulty}_v2`;
 const wordGuessTestPuzzle = (difficulty) => ({
   protocolVersion: "match-v1", mode: "wordle", difficulty, seed: 1,
-  target: "ATEST", targets: ["ATEST"], validGuesses: ["ATEST"],
-  puzzleData: JSON.stringify({wordBankVersion: "test-atest-v1", targets: ["ATEST"]}),
+  target: "ATEST", targets: ["ATEST"],
+  validGuesses: ["ATEST", "APPLE", "BRICK", "CRANE"],
+  puzzleData: JSON.stringify({wordBankVersion: "test-atest-v2", targets: ["ATEST"]}),
 });
+const progressModes = new Set([
+  "sudoku", "gridlock", "colorLink", "minesweeper", "wordle", "anagram", "wordHunt", "hangman",
+]);
+const wordGuessProgressCount = (result) => Number(result?.summary?.attemptedGuesses ?? result?.summary?.round1GuessCount ?? 0);
+function wordGuessRaceLoss(uid, puzzle, elapsedSeconds, progress) {
+  const target = puzzle.targets[0];
+  const attempted = wordGuessProgressCount(progress);
+  return {userID: uid, mode: "wordle", completed: false, elapsedSeconds, score: 0, progress: 0,
+    status: "Opponent solved first", summary: {...(progress?.summary || {}), raceLoss: "true", isFinal: "true",
+      round1Target: target, round1Solved: "false", round1GuessCount: String(attempted),
+      round1Guesses: progress?.summary?.round1Guesses || "", round1Partial: "false",
+      solvedRounds: "0", failedRounds: "1", totalGuesses: "0", attemptedGuesses: String(attempted), roundCount: "1"},
+    details: [`Round 1: ${target} - opponent solved first`]};
+}
+
+function firstFinisherLoss(uid, mode, elapsedSeconds, progress, puzzle) {
+  if (mode === "wordle") return wordGuessRaceLoss(uid, puzzle, elapsedSeconds, progress);
+  const result = progress;
+  return {userID: uid, mode, completed: false, elapsedSeconds,
+    score: result?.score ?? 0, progress: result?.progress ?? 0,
+    status: "Opponent finished first",
+    summary: {...(result?.summary || {}), firstFinisherLoss: "true", isFinal: "true"},
+    details: result?.details || []};
+}
+
+function forfeitWinDisplayResult(m, uid) {
+  if (m.status !== "finished" || m.forfeitedIDs.length !== 1 || m.forfeitedIDs.includes(uid)) return null;
+  const progress = m.playerProgress?.[uid];
+  const elapsedSeconds = Math.max(0, Math.floor((m.finishedAtMs - m.startedAtMs) / 1000));
+  return {userID: uid, mode: m.mode, completed: progress?.completed ?? false,
+    elapsedSeconds, score: progress?.score ?? 0, progress: progress?.progress ?? 0,
+    status: "Won by forfeit",
+    summary: {...(progress?.summary || {}), forfeitWin: "true", isFinal: "true"},
+    details: progress?.details || ["Opponent forfeited before the match was completed."]};
+}
+
+function verifyProgress(puzzle, uid, evidence, elapsed, limit) {
+  if (puzzle.mode === "wordle") {
+    return {result: verifyWordGuessProgress({...puzzle, matchRounds: 1}, uid, evidence, elapsed), played: true};
+  }
+  const verified = verifyResult(puzzle, uid, evidence, elapsed, limit, true);
+  check(!verified.result.completed, "Completed results must be submitted");
+  return verified;
+}
 
 function entryAccess(wallet, mode, now, consume) {
   const access = structuredClone(wallet.rankedAccess || {});
@@ -57,13 +103,21 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
     if (m.rulesVersion === 2 && m.mode === "wordle") {
       puzzleData = JSON.stringify({...JSON.parse(puzzleData), matchRounds: 1});
     }
+    const displayResults = {...m.playerResults};
+    if (m.status === "finished" && m.forfeitedIDs.length === 1) {
+      for (const player of m.players) {
+        const displayResult = forfeitWinDisplayResult(m, player.userID);
+        if (!displayResults[player.userID] && displayResult) displayResults[player.userID] = displayResult;
+      }
+    }
     return {id: m.sessionID, mode: m.mode, difficulty: m.difficulty, matchKind: m.matchKind, seed: m.seed,
       puzzleData, status: m.status, players: m.players, playerIDs: m.players.filter((p) => !p.isBot).map((p) => p.userID),
       createdAt: timestamp(m.createdAtMs), ...(m.preGameCountdownStartedAtMs ? {preGameCountdownStartedAt: timestamp(m.preGameCountdownStartedAtMs)} : {}),
       ...(m.startedAtMs ? {startedAt: timestamp(m.startedAtMs)} : {}),
       ...(m.finishedAtMs ? {finishedAt: timestamp(m.finishedAtMs)} : {}),
       // Do not expose another player's private input/answers during the round.
-      ...(m.status === "finished" ? {playerResults: m.playerResults, winnerID: resolveMatch(m), winnerReason: "Verified result"} : {})};
+      ...(m.status === "finished" ? {playerResults: displayResults, winnerID: resolveMatch(m),
+        winnerReason: m.forfeitedIDs.length ? "Opponent forfeited" : "Verified result"} : {})};
   }
   function participant(uid, data, mode) {
     const points = data.wallet.matchRanks?.[mode]?.points ?? 0;
@@ -173,7 +227,7 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       if (bot) players.push({userID: `bot_${newID}`, username: "Training Bot", wager: 0, isBot: true, rankPoints: 200, rankTier: 0});
       const m = {version: 1, rulesVersion, verifierVersion: "match-v1", sessionID: newID, mode: data.mode, difficulty,
         matchKind: data.matchKind, status: "waiting", players, seed: puzzle.seed, puzzleID, puzzleHash: puzzleHash(puzzle),
-        createdAtMs: now, readyIDs: [], playerResults: {}, playedUserIDs: [], forfeitedIDs: [],
+        createdAtMs: now, readyIDs: [], playerResults: {}, playerProgress: {}, playedUserIDs: [], forfeitedIDs: [],
         botStrong: bot && choose(100) >= 82};
       if (staleSessionID) {
         tx.update(db.doc(privatePath(staleSessionID)), {status: "abandoned"});
@@ -209,11 +263,36 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       const now = clock(); const ref = db.doc(privatePath(data.sessionID));
       const m = (await tx.get(ref)).data();
       check(m?.players.some((p) => p.userID === uid && !p.isBot), "Not a participant");
-      if (["finished", "abandoned"].includes(m.status)) return actionReply(m, uid);
+      if (["finished", "abandoned"].includes(m.status) && action !== "progress") return actionReply(m, uid);
       if (action === "ready" && m.status === "inProgress") return actionReply(m, uid);
       const puzzle = (await tx.get(db.doc(`economyPrivate/matchPuzzles/records/${m.puzzleID}`))).data();
       check(puzzle?.seed === m.seed && puzzle.mode === m.mode && puzzle.protocolVersion === "match-v1" && puzzleHash(puzzle) === m.puzzleHash, "Puzzle unavailable");
-      if (action === "tick" && m.status === "waiting") {
+      if (action === "progress") {
+        check(progressModes.has(m.mode) && m.rulesVersion >= 2 && ["inProgress", "finished"].includes(m.status), "Progress is unavailable");
+        const elapsed = now - m.startedAtMs;
+        const verifiedProgress = verifyProgress(puzzle, uid, data.evidence, elapsed, matchTimeLimit(m));
+        const progress = verifiedProgress.result;
+        if (verifiedProgress.played && !m.playedUserIDs.includes(uid)) m.playedUserIDs.push(uid);
+        m.playerProgress ||= {};
+        const previous = m.playerProgress[uid];
+        if (m.mode === "wordle") {
+          if (wordGuessProgressCount(progress) > wordGuessProgressCount(previous)) m.playerProgress[uid] = progress;
+        } else {
+          m.playerProgress[uid] = progress;
+        }
+        if (m.status === "finished") {
+          const result = m.playerResults[uid];
+          const isForfeitWinner = m.forfeitedIDs.length === 1 && !m.forfeitedIDs.includes(uid);
+          check(result?.summary?.raceLoss === "true" || result?.summary?.firstFinisherLoss === "true" || isForfeitWinner,
+              "Finished progress is unavailable");
+          if (!isForfeitWinner && (m.mode !== "wordle" || wordGuessProgressCount(progress) > wordGuessProgressCount(result))) {
+            m.playerResults[uid] = firstFinisherLoss(uid, m.mode, result.elapsedSeconds, progress, puzzle);
+          }
+          tx.set(ref, m);
+          tx.set(db.doc(`serverMatches/${m.sessionID}`), publicMatch(m, puzzle.puzzleData));
+          return actionReply(m, uid);
+        }
+      } else if (action === "tick" && m.status === "waiting") {
         if (m.preGameCountdownStartedAtMs && now >= m.preGameCountdownStartedAtMs + preGameCountdownMilliseconds) {
           await startMatch(tx, m, now);
         } else if (now - m.createdAtMs > 120000) m.status = "abandoned";
@@ -232,8 +311,10 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
           // Submitting a final result cannot be undone by leaving the screen.
           if (!m.playerResults[uid]) {
             m.forfeitedIDs = [uid];
+            const progress = m.playerProgress?.[uid];
             m.playerResults[uid] = {userID: uid, mode: m.mode, completed: false, elapsedSeconds: Math.floor((now - m.startedAtMs) / 1000),
-              score: 0, progress: 0, status: "Forfeited", summary: {forfeit: "true"}, details: []};
+              score: progress?.score ?? 0, progress: progress?.progress ?? 0, status: "Forfeited",
+              summary: {...(progress?.summary || {}), forfeit: "true", isFinal: "true"}, details: progress?.details || []};
           }
         }
       } else {
@@ -244,14 +325,14 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
           check(!limit || elapsed <= (limit + 20) * 1000, "Submission window expired");
           const verified = verifyResult(m.rulesVersion === 2 && m.mode === "wordle" ? {...puzzle, matchRounds: 1} : puzzle, uid, data.evidence, elapsed, limit);
           m.playerResults[uid] = verified.result;
-          if (verified.played) m.playedUserIDs.push(uid);
-          if (m.rulesVersion === 2 && m.mode === "wordle" && verified.result.completed) {
-            // Word Guess is a one-word race: the first verified solve ends it.
+          if (verified.played && !m.playedUserIDs.includes(uid)) m.playedUserIDs.push(uid);
+          if (m.rulesVersion === 2 && progressModes.has(m.mode) && verified.result.completed) {
+            // First-finisher modes close immediately, but preserve every other
+            // player's latest server-verified state for the result breakdown.
             for (const player of m.players) {
               if (player.userID === uid || m.playerResults[player.userID]) continue;
-              m.playerResults[player.userID] = {userID: player.userID, mode: m.mode, completed: false,
-                elapsedSeconds: Math.floor(elapsed / 1000), score: 0, progress: 0, status: "Opponent solved first",
-                summary: {raceLoss: "true", isFinal: "true", solvedRounds: "0", failedRounds: "1", totalGuesses: "0", roundCount: "0"}, details: []};
+              m.playerResults[player.userID] = firstFinisherLoss(
+                  player.userID, m.mode, Math.floor(elapsed / 1000), m.playerProgress?.[player.userID], puzzle);
             }
           }
         }
@@ -274,7 +355,7 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
         if (resolved) {
           m.status = "finished"; m.finishedAtMs = now;
           const verified = {...m};
-          delete verified.botStrong; delete verified.readyIDs;
+          delete verified.botStrong; delete verified.readyIDs; delete verified.playerProgress;
           validateMatch(verified, m.sessionID, now);
           tx.create(db.doc(matchPath(m.sessionID)), verified);
         }
@@ -298,7 +379,7 @@ function createMatchLifecycle({db, clock = Date.now, choose = randomInt, uuid = 
       return {enabled: flags.wordGuessTestTargetEnabled === true};
     });
   }
-  return {queue, cancel, wordGuessTestTarget, ready: (uid, data) => act(uid, data, "ready"), submit: (uid, data) => act(uid, data, "submit"),
+  return {queue, cancel, wordGuessTestTarget, ready: (uid, data) => act(uid, data, "ready"), progress: (uid, data) => act(uid, data, "progress"), submit: (uid, data) => act(uid, data, "submit"),
     forfeit: (uid, data) => act(uid, data, "forfeit"), tick: (uid, data) => act(uid, data, "tick")};
 }
 

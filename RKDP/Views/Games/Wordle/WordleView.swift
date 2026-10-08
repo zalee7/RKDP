@@ -110,7 +110,8 @@ struct WordleView: View {
         .onDisappear { vm.stop() }
         .onChange(of: vm.guesses.count) { _, count in
             guard count > 0, sessionID != nil else { return }
-            reportMatchResult(isFinal: false)
+            let singleRoundFinished = vm.totalRounds == 1 && (vm.didSolveRound || vm.guesses.count >= vm.maxGuesses)
+            reportMatchResult(isFinal: singleRoundFinished)
         }
         .onChange(of: vm.roundResults.count) { _, count in
             guard count > 0, sessionID != nil else { return }
@@ -337,16 +338,14 @@ struct WordleView: View {
     }
 
     private func reportMatchResult(isFinal: Bool) {
-        guard sessionID != nil, let userID else { return }
-        if isFinal {
-            guard !didReportMatchResult else { return }
-            didReportMatchResult = true
-        }
+        guard sessionID != nil, let userID, !didReportMatchResult else { return }
+        if isFinal { didReportMatchResult = true }
 
         var rounds = vm.roundResults
         let latestCompletedMatchesCurrent = vm.roundResults.last?.targetWord == vm.game.targetWord && vm.roundResults.last?.guesses.count == vm.guesses.count
-        let hasCurrentPartial = !vm.guesses.isEmpty && vm.currentRound < vm.totalRounds && !latestCompletedMatchesCurrent
-        if hasCurrentPartial {
+        let hasUnrecordedCurrentRound = !vm.guesses.isEmpty && vm.currentRound < vm.totalRounds && !latestCompletedMatchesCurrent
+        let hasCurrentPartial = hasUnrecordedCurrentRound && !isFinal
+        if hasUnrecordedCurrentRound {
             let solved = vm.didSolveRound
             rounds.append(WordleRoundResult(
                 targetWord: vm.game.targetWord,
@@ -357,7 +356,7 @@ struct WordleView: View {
         }
 
         let solved = rounds.filter(\.solved)
-        let completedFailedRounds = vm.roundResults.filter { !$0.solved }.count
+        let completedFailedRounds = rounds.filter { !$0.solved }.count
         let totalSolvedGuesses = solved.reduce(0) { $0 + $1.guessCount }
         var summary: [String: String] = [
             "solvedRounds": "\(solved.count)",
@@ -378,7 +377,7 @@ struct WordleView: View {
             }
         }
 
-        let completed = solved.count >= 2
+        let completed = solved.count >= ((vm.totalRounds / 2) + 1)
         let status = hasCurrentPartial && !isFinal
             ? "\(solved.count)/\(vm.totalRounds) solved · round \(vm.currentRound + 1)"
             : "\(solved.count)/\(vm.totalRounds) solved"

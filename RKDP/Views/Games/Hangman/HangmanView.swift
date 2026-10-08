@@ -87,7 +87,18 @@ struct HangmanView: View {
             }
         }
         .navigationBarBackButtonHidden()
-        .onDisappear { vm.stop() }
+        .onAppear {
+            let remaining = vm.timeRemaining ?? Int.max
+            SoundManager.shared.setTimerUrgency(remaining > 0 && remaining <= 5)
+        }
+        .onDisappear {
+            vm.stop()
+            SoundManager.shared.setTimerUrgency(false)
+        }
+        .onChange(of: vm.timeRemaining) { _, remaining in
+            let seconds = remaining ?? Int.max
+            SoundManager.shared.setTimerUrgency(seconds > 0 && seconds <= 5)
+        }
         .onChange(of: vm.isFinished) { _, finished in
             guard finished else { return }
             if sessionID == nil { reportSoloResult() }
@@ -119,7 +130,7 @@ struct HangmanView: View {
             if let remaining = vm.timeRemaining {
                 Text(timeString(remaining))
                     .font(.caption.bold())
-                    .foregroundStyle(remaining <= 15 ? AppTheme.danger : AppTheme.textSecondary)
+                    .foregroundStyle(remaining <= 5 ? AppTheme.danger : AppTheme.textSecondary)
                     .frame(width: 48, alignment: .trailing)
             } else {
                 Image(systemName: "infinity")

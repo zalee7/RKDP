@@ -63,6 +63,9 @@ struct MinesweeperView: View {
                 ScrollView([.horizontal, .vertical]) {
                     MinesweeperGridView(board: vm.board) { row, col in
                         vm.tap(row: row, col: col)
+                        if vm.firstCell != nil && !vm.isFinished {
+                            reportMatchResult(isFinal: false)
+                        }
                     } onLongPress: { row, col in
                         vm.longPress(row: row, col: col)
                     }
@@ -92,10 +95,12 @@ struct MinesweeperView: View {
         }
     }
 
-    private func reportMatchResult() {
+    private func reportMatchResult(isFinal: Bool = true) {
         guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
-        vm.stop()
+        if isFinal {
+            didReportMatchResult = true
+            vm.stop()
+        }
         let hitMine = vm.status == .lost
         let completed = vm.status == .won
         onMatchResult(MatchPlayerResult(
@@ -112,7 +117,8 @@ struct MinesweeperView: View {
                 "totalSafeCells": "\(vm.board.safeCells)",
                 "boardRows": minesweeperBoardRows(vm.board),
                 "boardRowsCount": "\(vm.board.config.rows)",
-                "boardColsCount": "\(vm.board.config.cols)"
+                "boardColsCount": "\(vm.board.config.cols)",
+                "isFinal": isFinal ? "true" : "false"
             ],
             details: [
                 "\(vm.board.revealedCount) of \(vm.board.safeCells) safe cells revealed",
@@ -185,8 +191,10 @@ struct MinesweeperGridView: View {
     let onLongPress: (Int, Int) -> Void
 
     private let cellSize: CGFloat = 36
+    @Environment(\.boardCosmetics) private var cosmetics
 
     var body: some View {
+        let theme = cosmetics.themeStyle
         VStack(spacing: 1) {
             ForEach(0..<board.config.rows, id: \.self) { row in
                 HStack(spacing: 1) {
@@ -199,6 +207,10 @@ struct MinesweeperGridView: View {
                 }
             }
         }
+        .padding(4)
+        .background(theme.cellBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(theme.gridLineMajor.opacity(0.8), lineWidth: 1.5))
     }
 }
 
@@ -212,18 +224,18 @@ struct MinesweeperCellView: View {
     ]
 
     var body: some View {
-        let tile = cosmetics.tileThemeStyle
+        let theme = cosmetics.themeStyle
         ZStack {
             switch cell.state {
             case .hidden:
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(tile.fill)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(tile.border.opacity(0.55), lineWidth: 1))
-                    .shadow(color: tile.shadow, radius: 2)
+                    .fill(theme.tileGradient)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(theme.gridLineMinor.opacity(0.8), lineWidth: 1))
+                    .shadow(color: theme.gridLineMajor.opacity(0.2), radius: 2)
             case .flagged:
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(tile.fill)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(tile.border.opacity(0.55), lineWidth: 1))
+                    .fill(theme.tileGradient)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(theme.activeTraceColor.opacity(0.9), lineWidth: 1.5))
                 Text("🚩").font(.system(size: size * 0.55))
             case .exploded:
                 RoundedRectangle(cornerRadius: 4)
@@ -231,8 +243,8 @@ struct MinesweeperCellView: View {
                 Text("💥").font(.system(size: size * 0.55))
             case .revealed(let adj):
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(cell.hasMine ? Color.red.opacity(0.5) : tile.inactiveFill.opacity(0.55))
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(tile.border.opacity(0.30), lineWidth: 1))
+                    .fill(cell.hasMine ? Color.red.opacity(0.5) : theme.cellBackground.opacity(0.92))
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(theme.gridLineMinor, lineWidth: 1))
                 if cell.hasMine {
                     Text("💣").font(.system(size: size * 0.55))
                 } else if adj > 0 {

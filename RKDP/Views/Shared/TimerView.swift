@@ -11,7 +11,7 @@ struct TimerView: View {
     var body: some View {
         Label(formatted, systemImage: "timer")
             .font(.headline.monospacedDigit())
-            .foregroundStyle(.primary)
+            .foregroundStyle(AppTheme.textPrimary)
     }
 }
 
@@ -178,11 +178,17 @@ struct NumberPadView: View {
                     Button { onDigit(digit) } label: {
                         Text("\(digit)")
                             .font(.title2.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
                             .frame(maxWidth: .infinity, minHeight: 48)
-                            .background(Color(.secondarySystemBackground))
+                            .background(AppTheme.controlBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(AppTheme.controlBorder, lineWidth: 1)
+                            )
+                            .shadow(color: AppTheme.softShadow.opacity(0.7), radius: 3, x: 0, y: 2)
                     }
-                    .foregroundStyle(.primary)
+                    .buttonStyle(.plain)
                 }
             }
             HStack(spacing: 16) {
@@ -190,18 +196,28 @@ struct NumberPadView: View {
                     Label("Notes", systemImage: "pencil")
                         .font(.subheadline)
                         .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(isNoteMode ? Color.blue : Color(.secondarySystemBackground))
-                        .foregroundStyle(isNoteMode ? .white : .primary)
+                        .background(isNoteMode ? AppTheme.royalBlue : AppTheme.controlBackground)
+                        .foregroundStyle(isNoteMode ? AppTheme.textOnColor : AppTheme.textPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(isNoteMode ? AppTheme.royalBlue : AppTheme.controlBorder, lineWidth: 1)
+                        )
                 }
+                .buttonStyle(.plain)
                 Button { onErase() } label: {
                     Label("Erase", systemImage: "delete.left")
                         .font(.subheadline)
                         .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(Color(.secondarySystemBackground))
-                        .foregroundStyle(.primary)
+                        .background(AppTheme.controlBackground)
+                        .foregroundStyle(AppTheme.textPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(AppTheme.controlBorder, lineWidth: 1)
+                        )
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal)

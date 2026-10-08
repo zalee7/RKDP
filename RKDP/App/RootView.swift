@@ -39,6 +39,9 @@ private struct RankedSandboxView: View {
     @State private var casual = false
     @State private var selectedMode: GameMode?
     @State private var showFriends = false
+    @State private var showCosmeticPreview = false
+    @State private var testingSolo = false
+    @State private var soloDifficulty: Difficulty = .easy
     @State private var wordGuessTestTargetEnabled = false
     @State private var isUpdatingWordGuessTarget = false
 
@@ -46,6 +49,21 @@ private struct RankedSandboxView: View {
         NavigationStack {
             if let user = auth.user {
                 List {
+                    Section("Test Type") {
+                        Picker("Play", selection: $testingSolo) {
+                            Text("Online").tag(false)
+                            Text("Solo").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+
+                        if testingSolo {
+                            Picker("Difficulty", selection: $soloDifficulty) {
+                                ForEach(Difficulty.allCases, id: \.self) { difficulty in
+                                    Text(difficulty.displayName).tag(difficulty)
+                                }
+                            }
+                        }
+                    }
                     Section {
                         LabeledContent("Firebase", value: "puzzlepartytest")
                         LabeledContent("Player", value: user.username)
@@ -55,17 +73,22 @@ private struct RankedSandboxView: View {
                         }
                     }
                     Section {
-                        Picker("Match", selection: $casual) {
-                            Text("Ranked").tag(false)
-                            Text("Casual").tag(true)
+                        if !testingSolo {
+                            Picker("Match", selection: $casual) {
+                                Text("Ranked").tag(false)
+                                Text("Casual").tag(true)
+                            }
+                            .pickerStyle(.segmented)
                         }
-                        .pickerStyle(.segmented)
                         ForEach(GameMode.allCases, id: \.self) { mode in
                             Button { selectedMode = mode } label: {
                                 HStack {
                                     Text(mode.displayName)
                                     Spacer()
-                                    if !casual {
+                                    if testingSolo {
+                                        Text(mode.difficultyLabel(soloDifficulty))
+                                            .foregroundStyle(.secondary)
+                                    } else if !casual {
                                         Text("\(user.rank(for: mode).points) pts")
                                             .foregroundStyle(.secondary)
                                     }
@@ -104,10 +127,11 @@ private struct RankedSandboxView: View {
                     #endif
                     Section {
                         Button("Friends and Parties", systemImage: "person.2.fill") { showFriends = true }
+                        Button("Cosmetic Preview", systemImage: "eye.fill") { showCosmeticPreview = true }
                         Button("Sign Out", role: .destructive) { auth.signOut() }
                     }
                 }
-                .navigationTitle("Online Test")
+                .navigationTitle("Ranked Test")
                 .task {
                     #if PP_SOCIAL_SANDBOX
                     wordGuessTestTargetEnabled = (try? await FirestoreService.shared.wordGuessTestTargetEnabled(userID: user.id)) ?? false
@@ -116,9 +140,24 @@ private struct RankedSandboxView: View {
                 .fullScreenCover(item: $selectedMode, onDismiss: {
                     Task { await auth.refreshUser() }
                 }) { mode in
-                    NavigationStack {
-                        MatchmakingView(user: user, mode: mode, difficulty: mode.onlinePresetDifficulty,
-                            entryKind: casual ? .casual : .ranked)
+                    if testingSolo {
+                        SoloGameView(
+                            mode: mode,
+                            difficulty: soloDifficulty,
+                            user: user,
+                            onSoloResult: { result in
+                                Task { await auth.recordSoloResult(result) }
+                            },
+                            onChangeDifficulty: { selectedMode = nil },
+                            onTryRanked: { selectedMode = nil },
+                            onHome: { selectedMode = nil }
+                        )
+                        .environmentObject(auth)
+                    } else {
+                        NavigationStack {
+                            MatchmakingView(user: user, mode: mode, difficulty: mode.onlinePresetDifficulty,
+                                entryKind: casual ? .casual : .ranked)
+                        }
                     }
                 }
                 .sheet(isPresented: $showFriends, onDismiss: {
@@ -126,9 +165,100 @@ private struct RankedSandboxView: View {
                 }) {
                     FriendsView(user: user)
                 }
+                .sheet(isPresented: $showCosmeticPreview) {
+                    CosmeticPreviewSandboxView()
+                }
             } else {
                 ProgressView("Loading test account")
             }
+        }
+    }
+}
+
+private struct CosmeticPreviewSandboxView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var category: CosmeticCategory = .boardTheme
+    @State private var selectedItem: CosmeticItem?
+
+    private let categories: [CosmeticCategory] = [.boardTheme, .tileTheme, .cardTheme]
+    private var items: [CosmeticItem] {
+        CosmeticCatalog.all.filter { $0.category == category }.sorted { $0.name < $1.name }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Picker("Category", selection: $category) {
+                        Text("Boards").tag(CosmeticCategory.boardTheme)
+                        Text("Tiles").tag(CosmeticCategory.tileTheme)
+                        Text("Cards").tag(CosmeticCategory.cardTheme)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text("Uses the same non-playable preview and theme sound as Profile customization.")
+                }
+
+                Section(categoryTitle) {
+                    ForEach(items) { item in
+                        Button {
+                            SoundManager.shared.appButtonTap()
+                            selectedItem = item
+                        } label: {
+                            HStack(spacing: 12) {
+                                preview(for: item)
+                                    .frame(width: 82, height: 62)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.name)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text(item.rarity.rawValue.capitalized)
+                                        .font(.caption.bold())
+                                        .foregroundStyle(item.rarity.badgeColor)
+                                }
+                                Spacer()
+                                Image(systemName: "eye")
+                                    .foregroundStyle(AppTheme.hotPink)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .navigationTitle("Cosmetic Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .sheet(item: $selectedItem) { item in
+                CosmeticThemePreviewSheet(item: item, isEquipped: false, showsEquipAction: false) {}
+            }
+        }
+    }
+
+    private var categoryTitle: String {
+        switch category {
+        case .boardTheme: return "Board Themes"
+        case .tileTheme: return "Tile Themes"
+        case .cardTheme: return "Card Themes"
+        default: return "Themes"
+        }
+    }
+
+    @ViewBuilder
+    private func preview(for item: CosmeticItem) -> some View {
+        switch item.category {
+        case .boardTheme:
+            ShopThemePreview(themeID: item.id)
+        case .tileTheme:
+            ShopTileThemePreview(tileThemeID: item.id)
+        case .cardTheme:
+            ShopCardThemePreview(cardThemeID: item.id)
+        default:
+            EmptyView()
         }
     }
 }

@@ -93,6 +93,7 @@ final class WordleViewModel: ObservableObject {
     func deleteLetter() {
         guard !currentInput.isEmpty, !isRoundOver, revealingRow == nil else { return }
         currentInput.removeLast()
+        SoundManager.shared.erase()
     }
 
     func submitGuess() {

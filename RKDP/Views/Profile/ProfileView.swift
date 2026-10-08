@@ -1057,7 +1057,7 @@ private struct GameCustomizationView: View {
             AppTheme.arenaBackground.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Tune how boards, tiles, and Solitaire cards look across your games.")
+                    Text("Tune board surfaces, letter and number tiles, and Solitaire cards separately.")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -1081,6 +1081,12 @@ private struct GameCustomizationView: View {
                         }
                         .padding(.horizontal)
                     }
+
+                    Text(description(for: selectedCategory))
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
 
                     ownedGameItems
                         .padding(.horizontal)
@@ -1176,27 +1182,133 @@ private struct GameCustomizationView: View {
 
     private func label(for category: CosmeticCategory) -> String {
         switch category {
-        case .boardTheme: return "Board / Background Themes"
-        case .tileTheme: return "Tile Themes"
+        case .boardTheme: return "Board Themes"
+        case .tileTheme: return "Letter & Number Tiles"
         case .cardTheme: return "Card Themes"
         default: return category.rawValue
         }
     }
+
+    private func description(for category: CosmeticCategory) -> String {
+        switch category {
+        case .boardTheme:
+            return "Changes the shared play surface, grid lines, highlights, and path accents in Sudoku, Color Link, Minesweeper, and Word Hunt."
+        case .tileTheme:
+            return "Changes the individual letter and number pieces in Word Guess, Anagrams, Word Hunt, and Sudoku."
+        case .cardTheme:
+            return "Changes Solitaire card fronts, backs, suits, borders, and table color only."
+        default:
+            return ""
+        }
+    }
 }
 
-private struct CosmeticThemePreviewSheet: View {
+private enum CosmeticThemePreviewGame: String, CaseIterable, Identifiable {
+    case sudoku = "Sudoku"
+    case colorLink = "Color Link"
+    case minesweeper = "Minesweeper"
+    case wordGuess = "Word Guess"
+    case anagram = "Anagrams"
+    case wordHunt = "Word Hunt"
+    case solitaire = "Solitaire"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .sudoku: return "square.grid.3x3.fill"
+        case .colorLink: return "link"
+        case .minesweeper: return "burst.fill"
+        case .wordGuess: return "textformat.abc"
+        case .anagram: return "textformat"
+        case .wordHunt: return "square.grid.3x3"
+        case .solitaire: return "suit.spade.fill"
+        }
+    }
+
+    static func options(for category: CosmeticCategory) -> [Self] {
+        switch category {
+        case .boardTheme:
+            return [.sudoku, .colorLink, .minesweeper, .wordHunt]
+        case .tileTheme:
+            return [.wordGuess, .anagram, .wordHunt, .sudoku]
+        case .cardTheme:
+            return [.solitaire]
+        default:
+            return []
+        }
+    }
+}
+
+struct CosmeticThemePreviewSheet: View {
     let item: CosmeticItem
     let isEquipped: Bool
+    let showsEquipAction: Bool
     let onEquip: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var previewGame: CosmeticThemePreviewGame
+
+    init(
+        item: CosmeticItem,
+        isEquipped: Bool,
+        showsEquipAction: Bool = true,
+        onEquip: @escaping () -> Void
+    ) {
+        self.item = item
+        self.isEquipped = isEquipped
+        self.showsEquipAction = showsEquipAction
+        self.onEquip = onEquip
+        _previewGame = State(initialValue: CosmeticThemePreviewGame.options(for: item.category).first ?? .sudoku)
+    }
+
+    private var previewGames: [CosmeticThemePreviewGame] {
+        CosmeticThemePreviewGame.options(for: item.category)
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 AppTheme.arenaBackground.ignoresSafeArea()
-                VStack(spacing: 20) {
-                    CosmeticThemeGameplayMock(item: item)
+                VStack(spacing: 16) {
+                    if previewGames.count > 1 {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Preview in")
+                                .font(.caption.bold())
+                                .foregroundStyle(AppTheme.textSecondary)
+                                .padding(.horizontal, 24)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(previewGames) { game in
+                                        Button {
+                                            SoundManager.shared.appButtonTap()
+                                            previewGame = game
+                                        } label: {
+                                            Label(game.rawValue, systemImage: game.icon)
+                                                .font(.caption.bold())
+                                                .foregroundStyle(previewGame == game ? AppTheme.textOnColor : AppTheme.textSecondary)
+                                                .padding(.horizontal, 12)
+                                                .frame(height: 34)
+                                                .background(previewGame == game ? AppTheme.hotPink : AppTheme.cardBackground)
+                                                .clipShape(Capsule())
+                                                .overlay(Capsule().stroke(previewGame == game ? AppTheme.hotPink : AppTheme.cardBorder, lineWidth: 1))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 24)
+                            }
+                        }
+                    }
+
+                    Text(previewScopeDescription)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+
+                    CosmeticThemeGameplayMock(item: item, previewGame: previewGame)
                         .frame(height: 260)
                         .frame(maxWidth: .infinity)
                         .allowsHitTesting(false)
@@ -1229,7 +1341,12 @@ private struct CosmeticThemePreviewSheet: View {
                     }
                     .buttonStyle(.plain)
 
-                    if isEquipped {
+                    if !showsEquipAction {
+                        Text("Preview only")
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .padding(.vertical, 12)
+                    } else if isEquipped {
                         Label("Equipped", systemImage: "checkmark.circle.fill")
                             .font(.headline.bold())
                             .foregroundStyle(AppTheme.teal)
@@ -1266,10 +1383,24 @@ private struct CosmeticThemePreviewSheet: View {
         }
     }
 
+    private var previewScopeDescription: String {
+        switch item.category {
+        case .boardTheme:
+            return "Board theme preview: shared surface, grid, highlights, and path accents. Letter and number pieces stay separate."
+        case .tileTheme:
+            return "Tile preview: letter and number pieces only. Board surfaces and Minesweeper cells stay separate."
+        case .cardTheme:
+            return "Card theme preview: Solitaire cards and table styling only."
+        default:
+            return ""
+        }
+    }
+
 }
 
 private struct CosmeticThemeGameplayMock: View {
     let item: CosmeticItem
+    let previewGame: CosmeticThemePreviewGame
 
     private var board: BoardThemeStyle {
         var cosmetics = OwnedCosmetics.default
@@ -1292,9 +1423,9 @@ private struct CosmeticThemeGameplayMock: View {
     var body: some View {
         switch item.category {
         case .boardTheme:
-            boardThemeMock
+            boardThemeMock(for: previewGame)
         case .tileTheme:
-            tileThemeMock
+            tileThemeMock(for: previewGame)
         case .cardTheme:
             solitaireMock
         default:
@@ -1302,32 +1433,33 @@ private struct CosmeticThemeGameplayMock: View {
         }
     }
 
-    private var boardThemeMock: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(board.tileGradient)
-            .overlay {
-                VStack(spacing: 10) {
-                    HStack {
-                        Label("Board Preview", systemImage: "square.grid.3x3.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(boardLabelColor)
-                        Spacer()
-                        Text("NOT PLAYABLE")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(boardLabelColor.opacity(0.72))
-                    }
+    private func boardThemeMock(for game: CosmeticThemePreviewGame) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppTheme.cardBackground)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(board.tileGradient)
+                .opacity(0.2)
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 4) {
-                        ForEach(0..<25, id: \.self) { index in
-                            boardCell(index)
-                        }
-                    }
+            VStack(spacing: 10) {
+                HStack {
+                    Label(game.rawValue, systemImage: game.icon)
+                        .font(.caption.bold())
+                        .foregroundStyle(boardLabelColor)
+                    Spacer()
+                    Text("PREVIEW")
+                        .font(.system(size: 9, weight: .black))
+                        .foregroundStyle(boardLabelColor.opacity(0.68))
                 }
-                .padding(18)
+
+                boardPreviewContent(for: game)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(board.gridLineMajor.opacity(0.82), lineWidth: 1.5))
-            .padding(.horizontal, 24)
-            .shadow(color: board.gridLineMajor.opacity(0.25), radius: 14, x: 0, y: 8)
+            .padding(14)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(board.gridLineMajor.opacity(0.82), lineWidth: 1.5))
+        .padding(.horizontal, 24)
+        .shadow(color: board.gridLineMajor.opacity(0.2), radius: 10, x: 0, y: 6)
     }
 
     private var boardLabelColor: Color {
@@ -1336,79 +1468,206 @@ private struct CosmeticThemeGameplayMock: View {
             : AppTheme.textPrimary
     }
 
-    private func boardCell(_ index: Int) -> some View {
-        let isSelected = [6, 7, 8, 13, 18].contains(index)
-        let isEndpoint = index == 6 || index == 18
-        return RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(isSelected ? board.selectedCell : board.cellBackground.opacity(0.88))
-            .overlay(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .stroke(index % 6 == 0 ? board.gridLineMajor : board.gridLineMinor, lineWidth: index % 6 == 0 ? 1.5 : 1)
-            )
-            .overlay {
-                if isEndpoint {
-                    Circle()
-                        .fill(board.activeTraceColor)
-                        .padding(10)
-                }
-            }
-            .aspectRatio(1, contentMode: .fit)
+    @ViewBuilder
+    private func boardPreviewContent(for game: CosmeticThemePreviewGame) -> some View {
+        switch game {
+        case .sudoku:
+            sudokuBoardPreview
+        case .colorLink:
+            colorLinkBoardPreview
+        case .minesweeper:
+            minesweeperBoardPreview
+        case .wordHunt:
+            wordHuntBoardPreview(usesTileTheme: false)
+        default:
+            sudokuBoardPreview
+        }
     }
 
-    private var tileThemeMock: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(Color(hex: "11142B"))
-            .overlay {
-                VStack(spacing: 18) {
-                    HStack {
-                        Label("Tile Preview", systemImage: "square.grid.2x2.fill")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.9))
-                        Spacer()
-                        Text("NOT PLAYABLE")
-                            .font(.system(size: 9, weight: .black))
-                            .foregroundStyle(.white.opacity(0.62))
+    private var sudokuBoardPreview: some View {
+        let values = [
+            "6", "", "", "1", "", "4",
+            "", "2", "", "", "6", "",
+            "", "", "5", "", "", "3",
+            "2", "", "", "5", "", "",
+            "", "4", "", "", "1", "",
+            "5", "", "2", "", "", "6"
+        ]
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 6), spacing: 0) {
+            ForEach(values.indices, id: \.self) { index in
+                Rectangle()
+                    .fill(index == 20 ? board.selectedCell : board.cellBackground.opacity(0.9))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(Rectangle().stroke(index % 2 == 0 ? board.gridLineMinor : board.gridLineMinor.opacity(0.72), lineWidth: 0.7))
+                    .overlay {
+                        Text(values[index])
+                            .font(.system(size: 16, weight: values[index].isEmpty ? .regular : .bold, design: .rounded))
+                            .foregroundStyle(boardLabelColor)
                     }
-
-                    HStack(spacing: 12) {
-                        previewTile("A", active: false)
-                        previewTile("7", active: true)
-                        previewTile("R", active: false)
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    HStack(spacing: 8) {
-                        Circle().fill(tile.accent).frame(width: 8, height: 8)
-                        Capsule().fill(tile.border.opacity(0.7)).frame(width: 54, height: 4)
-                        Circle().fill(tile.accent).frame(width: 8, height: 8)
-                    }
-                }
-                .padding(18)
             }
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(tile.border.opacity(0.7), lineWidth: 1.5))
-            .padding(.horizontal, 24)
-            .shadow(color: tile.shadow.opacity(0.5), radius: 14, x: 0, y: 8)
+        }
+        .frame(width: 188, height: 188)
+        .overlay(Rectangle().stroke(board.gridLineMajor, lineWidth: 2))
     }
 
-    private func previewTile(_ value: String, active: Bool) -> some View {
-        RoundedRectangle(cornerRadius: max(7, 18 * tile.cornerScale), style: .continuous)
+    private var colorLinkBoardPreview: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let cell = side / 5
+            ZStack(alignment: .topLeading) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 5), spacing: 2) {
+                    ForEach(0..<25, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(board.cellBackground.opacity(0.88))
+                            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(board.gridLineMinor, lineWidth: 0.8))
+                            .aspectRatio(1, contentMode: .fit)
+                    }
+                }
+                .frame(width: side, height: side)
+
+                Canvas { context, _ in
+                    drawLink([0, 1, 6, 11, 12], color: board.activeTraceColor, cell: cell, context: &context)
+                    drawLink([4, 9, 14, 19, 18, 17], color: AppTheme.hotPink, cell: cell, context: &context)
+                    for (index, color) in [(0, board.activeTraceColor), (12, board.activeTraceColor), (4, AppTheme.hotPink), (17, AppTheme.hotPink)] {
+                        let center = linkPoint(index, cell: cell)
+                        context.fill(Path(ellipseIn: CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14)), with: .color(color))
+                    }
+                }
+                .frame(width: side, height: side)
+            }
+            .frame(width: side, height: side)
+            .position(x: geo.size.width / 2, y: geo.size.height / 2)
+        }
+        .frame(width: 188, height: 188)
+    }
+
+    private func drawLink(_ indices: [Int], color: Color, cell: CGFloat, context: inout GraphicsContext) {
+        var path = Path()
+        for (offset, index) in indices.enumerated() {
+            let point = linkPoint(index, cell: cell)
+            if offset == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+    }
+
+    private func linkPoint(_ index: Int, cell: CGFloat) -> CGPoint {
+        CGPoint(x: (CGFloat(index % 5) + 0.5) * cell, y: (CGFloat(index / 5) + 0.5) * cell)
+    }
+
+    private func tileThemeMock(for game: CosmeticThemePreviewGame) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(hex: "11142B"))
+            VStack(spacing: 10) {
+                HStack {
+                    Label(game.rawValue, systemImage: game.icon)
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.92))
+                    Spacer()
+                    Text("PREVIEW")
+                        .font(.system(size: 9, weight: .black))
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                tilePreviewContent(for: game)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .padding(14)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(tile.border.opacity(0.72), lineWidth: 1.5))
+        .padding(.horizontal, 24)
+        .shadow(color: tile.shadow.opacity(0.42), radius: 10, x: 0, y: 6)
+    }
+
+    @ViewBuilder
+    private func tilePreviewContent(for game: CosmeticThemePreviewGame) -> some View {
+        switch game {
+        case .wordGuess:
+            wordGuessTilePreview
+        case .anagram:
+            anagramTilePreview
+        case .wordHunt:
+            wordHuntBoardPreview(usesTileTheme: true)
+        case .sudoku:
+            sudokuTilePreview
+        default:
+            anagramTilePreview
+        }
+    }
+
+    private var wordGuessTilePreview: some View {
+        let letters = Array("CROWNPARTYGUESS")
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 5), spacing: 5) {
+            ForEach(0..<15, id: \.self) { index in
+                compactTile(String(letters[index]), active: index < 10)
+            }
+        }
+        .frame(width: 210)
+    }
+
+    private var anagramTilePreview: some View {
+        HStack(spacing: 7) {
+            ForEach(Array("PUZZLE").indices, id: \.self) { index in
+                compactTile(String(Array("PUZZLE")[index]), active: index == 2)
+                    .frame(width: 38, height: 48)
+            }
+        }
+    }
+
+    private var sudokuTilePreview: some View {
+        let values = ["6", "", "2", "", "5", "1", "", "4", "", "3", "", "6", "2", "", "", "5"]
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 4) {
+            ForEach(values.indices, id: \.self) { index in
+                compactTile(values[index], active: index == 6 || index == 9)
+            }
+        }
+        .frame(width: 184)
+    }
+
+    private func wordHuntBoardPreview(usesTileTheme: Bool) -> some View {
+        let letters = Array("CROWNPARTYLINKSXY")
+        let selected = Set([0, 1, 5, 9, 10])
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 4) {
+            ForEach(0..<16, id: \.self) { index in
+                if usesTileTheme {
+                    compactTile(String(letters[index]), active: selected.contains(index))
+                } else {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(selected.contains(index) ? board.selectedCell : board.cellBackground.opacity(0.9))
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(selected.contains(index) ? board.activeTraceColor : board.gridLineMinor, lineWidth: selected.contains(index) ? 2 : 1))
+                        .overlay(Text(String(letters[index])).font(.system(size: 16, weight: .black, design: .rounded)).foregroundStyle(boardLabelColor))
+                }
+            }
+        }
+        .frame(width: 184)
+    }
+
+    private var minesweeperBoardPreview: some View {
+        let values = ["1", "1", "", "", "⚑", "", "2", "2", "1", "", "1", "2", "✦", "2", "1", "", "1", "1", "2", ""]
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 4) {
+            ForEach(values.indices, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(index == 4 || index == 12 ? board.tileGradient : LinearGradient(colors: [board.cellBackground.opacity(0.9), board.cellBackground.opacity(0.9)], startPoint: .top, endPoint: .bottom))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(index == 4 ? board.activeTraceColor : board.gridLineMinor, lineWidth: index == 4 ? 1.5 : 1))
+                    .overlay(Text(values[index]).font(.system(size: 15, weight: .black, design: .rounded)).foregroundStyle(boardLabelColor))
+            }
+        }
+        .frame(width: 210)
+    }
+
+    private func compactTile(_ value: String, active: Bool) -> some View {
+        RoundedRectangle(cornerRadius: max(4, 14 * tile.cornerScale), style: .continuous)
             .fill(active ? tile.fill : LinearGradient(
-                colors: [tile.inactiveFill, tile.inactiveFill.opacity(0.76)],
+                colors: [tile.inactiveFill, tile.inactiveFill.opacity(0.8)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ))
-            .frame(maxWidth: 92, maxHeight: 92)
             .aspectRatio(1, contentMode: .fit)
-            .overlay(
-                RoundedRectangle(cornerRadius: max(7, 18 * tile.cornerScale), style: .continuous)
-                    .stroke(active ? tile.accent : tile.border, lineWidth: active ? 2.5 : 1.5)
-            )
-            .overlay {
-                Text(value)
-                    .font(.system(size: 31, weight: .black, design: .rounded))
-                    .foregroundStyle(active ? tile.textColor : tile.border)
-            }
-            .shadow(color: tile.shadow.opacity(active ? 0.9 : 0.38), radius: active ? 9 : 4, y: 4)
+            .overlay(RoundedRectangle(cornerRadius: max(4, 14 * tile.cornerScale), style: .continuous).stroke(active ? tile.accent : tile.border, lineWidth: active ? 2 : 1))
+            .overlay(Text(value).font(.system(size: 16, weight: .black, design: .rounded)).foregroundStyle(tile.textColor))
+            .shadow(color: tile.shadow.opacity(active ? 0.72 : 0.25), radius: active ? 5 : 2, y: 2)
     }
 
     private var solitaireMock: some View {

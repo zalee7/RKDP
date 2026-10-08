@@ -39,8 +39,11 @@ new Command("social-test-admin").before(requireAuth).action(async () => {
         const players = [];
         for (const p of m.players.filter((p) => !p.isBot)) {
           const receipt = (await db.doc(`coinWallets/${p.userID}/receipts/match_${doc.id}`).get()).data();
+          const progress = m.playerProgress?.[p.userID];
           players.push({name: p.username, result: m.playerResults[p.userID]?.status,
             completed: m.playerResults[p.userID]?.completed, forfeited: m.forfeitedIDs.includes(p.userID),
+            progress: progress ? {status: progress.status, completed: progress.completed,
+              score: progress.score, progress: progress.progress} : null,
             receipt: receipt ? {coins: receipt.matchReward, daily: receipt.dailyCoins,
               rankDelta: receipt.rankDelta, outcome: receipt.outcome, reason: receipt.reason,
               balance: receipt.balance} : null});

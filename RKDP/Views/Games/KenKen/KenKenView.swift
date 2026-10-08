@@ -87,6 +87,11 @@ struct GridlockView: View {
                 reportMatchResult(status: "Cleared Solitaire")
             }
         }
+        .onChange(of: vm.moveCount) { _, moveCount in
+            if moveCount > 0 && !vm.isComplete {
+                reportMatchResult(status: "In progress", isFinal: false)
+            }
+        }
         .onChange(of: vm.elapsedSeconds) { _, seconds in
             if sessionID != nil && seconds >= difficulty.rankedTimeLimit(for: .gridlock) {
                 reportMatchResult(status: "Time expired")
@@ -268,10 +273,12 @@ struct GridlockView: View {
         onSoloResult(result)
     }
 
-    private func reportMatchResult(status: String) {
+    private func reportMatchResult(status: String, isFinal: Bool = true) {
         guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
-        vm.stop()
+        if isFinal {
+            didReportMatchResult = true
+            vm.stop()
+        }
         let progressPercent = Int((vm.progress * 100).rounded())
         onMatchResult(MatchPlayerResult(
             userID: userID,
@@ -289,7 +296,8 @@ struct GridlockView: View {
                 "wasteCount": "\(vm.wasteCount)",
                 "drawCount": "\(vm.rules.drawCount)",
                 "redealsUsed": "\(vm.redealsUsed)",
-                "redealLimit": vm.rules.maxRedeals.map(String.init) ?? "unlimited"
+                "redealLimit": vm.rules.maxRedeals.map(String.init) ?? "unlimited",
+                "isFinal": isFinal ? "true" : "false"
             ],
             details: [
                 vm.isComplete ? "Cleared Solitaire in \(vm.moveCount) moves" : "Reached \(progressPercent)% foundation progress",

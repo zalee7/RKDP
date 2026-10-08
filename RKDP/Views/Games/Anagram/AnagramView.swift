@@ -95,12 +95,23 @@ struct AnagramView: View {
             }
         }
         .navigationBarBackButtonHidden()
-        .onDisappear { vm.stop() }
+        .onAppear { SoundManager.shared.setTimerUrgency(vm.timeRemaining > 0 && vm.timeRemaining <= 5) }
+        .onDisappear {
+            vm.stop()
+            SoundManager.shared.setTimerUrgency(false)
+        }
+        .onChange(of: vm.timeRemaining) { _, remaining in
+            SoundManager.shared.setTimerUrgency(remaining > 0 && remaining <= 5)
+        }
         .onChange(of: vm.isFinished) { _, finished in
             if finished {
                 if sessionID == nil { reportSoloResult() }
-                reportMatchResult()
+                reportMatchResult(final: true)
             }
+        }
+        .onChange(of: vm.foundWords) { _, words in
+            guard sessionID != nil, !vm.isFinished, !words.isEmpty else { return }
+            reportMatchResult(final: false)
         }
     }
 
@@ -126,7 +137,7 @@ struct AnagramView: View {
                         .monospacedDigit()
                 }
                 .font(.headline)
-                .foregroundStyle(vm.timeRemaining <= 15 ? .red : AppTheme.textPrimary)
+                .foregroundStyle(vm.timeRemaining <= 5 ? .red : AppTheme.textPrimary)
                 .animation(.easeInOut, value: vm.timeRemaining)
             }
 
@@ -555,18 +566,21 @@ struct AnagramView: View {
         onSoloResult(makeSoloResult())
     }
 
-    private func reportMatchResult() {
-        guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
+    private func reportMatchResult(final: Bool) {
+        guard sessionID != nil, let userID else { return }
+        if final {
+            guard !didReportMatchResult else { return }
+            didReportMatchResult = true
+        }
         let longest = vm.foundWords.map(\.count).max() ?? 0
         onMatchResult(MatchPlayerResult(
             userID: userID,
             mode: .anagram,
-            completed: true,
+            completed: final,
             elapsedSeconds: vm.elapsedSeconds,
             score: vm.score,
             progress: Double(vm.score),
-            status: "Time expired",
+            status: final ? "Time expired" : "\(vm.foundWords.count) word\(vm.foundWords.count == 1 ? "" : "s") found",
             summary: [
                 "wordCount": "\(vm.foundWords.count)",
                 "longestWordLength": "\(longest)",
@@ -574,7 +588,8 @@ struct AnagramView: View {
                 "topWord": topWordText,
                 "wordsByLength": lengthDistributionText,
                 "foundWords": encodedFoundWords,
-                "missedWords": "\(vm.missedWords.count)"
+                "missedWords": "\(vm.missedWords.count)",
+                "isFinal": final ? "true" : "false"
             ],
             details: vm.sortedFoundWords.prefix(50).map { "\($0.capitalized) (+\(AnagramGame.score(for: $0)))" },
             rewardEvidenceJSON: GameSession.needsMatchEvidence(sessionID) ? SoloCoinRewards.evidence(["words": vm.foundWords]) : nil

@@ -48,12 +48,13 @@ struct SudokuView: View {
                     Spacer()
                     Label("\(difficulty.displayName)", systemImage: "star.fill")
                         .font(.caption)
-                        .foregroundStyle(difficulty == .expert ? .orange : .secondary)
+                        .foregroundStyle(difficulty == .expert ? AppTheme.warning : AppTheme.textSecondary)
                     Spacer()
                     if sessionID == nil {
                         Button { vm.useHint() } label: {
                             Label("Hint", systemImage: "lightbulb.fill")
                                 .font(.caption)
+                                .foregroundStyle(AppTheme.textPrimary)
                         }
                     }
                 }
@@ -64,7 +65,8 @@ struct SudokuView: View {
                 SudokuBoardView(board: vm.board, selectedID: vm.selectedID) { id in
                     vm.selectCell(id: id)
                 }
-                .padding(12)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .aspectRatio(1, contentMode: .fit)
 
                 Divider()
@@ -72,8 +74,14 @@ struct SudokuView: View {
                 // Number pad
                 NumberPadView(
                     size: 9,
-                    onDigit: { vm.enterDigit($0) },
-                    onErase: { vm.erase() },
+                    onDigit: {
+                        vm.enterDigit($0)
+                        reportMatchProgress()
+                    },
+                    onErase: {
+                        vm.erase()
+                        reportMatchProgress()
+                    },
                     onNote: { vm.isNoteMode.toggle() },
                     isNoteMode: vm.isNoteMode
                 )
@@ -132,10 +140,17 @@ struct SudokuView: View {
         onSoloResult(result)
     }
 
-    private func reportMatchResult(status: String) {
+    private func reportMatchProgress() {
+        guard !vm.isComplete else { return }
+        reportMatchResult(status: "In progress", isFinal: false)
+    }
+
+    private func reportMatchResult(status: String, isFinal: Bool = true) {
         guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
-        vm.stop()
+        if isFinal {
+            didReportMatchResult = true
+            vm.stop()
+        }
         onMatchResult(MatchPlayerResult(
             userID: userID,
             mode: .sudoku,
@@ -147,7 +162,8 @@ struct SudokuView: View {
             summary: [
                 "progressPercent": "\(Int((vm.progress * 100).rounded()))",
                 "boardRows": sudokuBoardRows(vm.board),
-                "boardSize": "9"
+                "boardSize": "9",
+                "isFinal": isFinal ? "true" : "false"
             ],
             details: [
                 vm.isComplete ? "Completed the Sudoku" : "Reached \(Int((vm.progress * 100).rounded()))% progress"
@@ -170,29 +186,15 @@ struct SudokuBoardView: View {
     let board: SudokuBoard
     let selectedID: Int?
     let onSelect: (Int) -> Void
-    @Environment(\.boardCosmetics) var cosmetics
-
-    private let thickBorder: CGFloat = 2.5
-    private let thinBorder: CGFloat = 0.5
+    private let thickBorder: CGFloat = 2.2
+    private let thinBorder: CGFloat = 0.65
 
     var body: some View {
-        let theme = cosmetics.themeStyle
         GeometryReader { geo in
             let cellSize = geo.size.width / 9
-            Canvas { context, size in
-                for i in 0...9 {
-                    let x = CGFloat(i) * cellSize
-                    let y = CGFloat(i) * cellSize
-                    let lw: CGFloat = (i % 3 == 0) ? thickBorder : thinBorder
-                    let color = i % 3 == 0 ? theme.gridLineMajor : theme.gridLineMinor
+            ZStack {
+                Color.white
 
-                    context.stroke(Path { p in p.move(to: CGPoint(x: x, y: 0)); p.addLine(to: CGPoint(x: x, y: size.height)) },
-                                   with: .color(color), lineWidth: lw)
-                    context.stroke(Path { p in p.move(to: CGPoint(x: 0, y: y)); p.addLine(to: CGPoint(x: size.width, y: y)) },
-                                   with: .color(color), lineWidth: lw)
-                }
-            }
-            .overlay(
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 9), spacing: 0) {
                     ForEach(board.cells) { cell in
                         Button { onSelect(cell.id) } label: {
@@ -204,7 +206,41 @@ struct SudokuBoardView: View {
                         .accessibilityValue(cell.value == 0 ? "Empty" : "\(cell.value)")
                     }
                 }
+
+                Canvas { context, size in
+                    for i in 0...9 {
+                        let x = CGFloat(i) * cellSize
+                        let y = CGFloat(i) * cellSize
+                        let isBoxLine = i % 3 == 0
+                        let lineWidth = isBoxLine ? thickBorder : thinBorder
+                        let color = isBoxLine ? AppTheme.plum.opacity(0.72) : AppTheme.plum.opacity(0.18)
+
+                        context.stroke(
+                            Path { path in
+                                path.move(to: CGPoint(x: x, y: 0))
+                                path.addLine(to: CGPoint(x: x, y: size.height))
+                            },
+                            with: .color(color),
+                            lineWidth: lineWidth
+                        )
+                        context.stroke(
+                            Path { path in
+                                path.move(to: CGPoint(x: 0, y: y))
+                                path.addLine(to: CGPoint(x: size.width, y: y))
+                            },
+                            with: .color(color),
+                            lineWidth: lineWidth
+                        )
+                    }
+                }
+                .allowsHitTesting(false)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(AppTheme.plum.opacity(0.72), lineWidth: 1.8)
             )
+            .shadow(color: AppTheme.softShadow, radius: 8, x: 0, y: 4)
         }
     }
 }
@@ -215,18 +251,15 @@ struct SudokuCellView: View {
     @Environment(\.boardCosmetics) var cosmetics
 
     private var bg: Color {
-        let theme = cosmetics.themeStyle
-        let tile = cosmetics.tileThemeStyle
-        if cell.isSelected    { return theme.selectedCell }
-        if cell.isInvalid     { return theme.invalidCell }
-        if cell.isHighlighted { return theme.highlightedCell }
-        if cell.value != 0 && !cell.isGiven { return tile.inactiveFill.opacity(0.58) }
-        return theme.cellBackground
+        if cell.isSelected { return AppTheme.royalBlue.opacity(0.30) }
+        if cell.isInvalid { return AppTheme.danger.opacity(0.20) }
+        if cell.isHighlighted { return AppTheme.royalBlue.opacity(0.10) }
+        if cell.value != 0 && !cell.isGiven { return AppTheme.teal.opacity(0.08) }
+        return .clear
     }
 
     var body: some View {
         let fs = cosmetics.fontStyle
-        let tile = cosmetics.tileThemeStyle
         ZStack {
             bg
             if cell.value != 0 {
@@ -234,17 +267,13 @@ struct SudokuCellView: View {
                     .font(.system(size: cellSize * 0.55,
                                   weight: cell.isGiven ? .bold : fs.weight,
                                   design: fs.design))
-                    .foregroundStyle(cell.isInvalid ? .red : (cell.isGiven ? .primary : tile.accent))
+                    .foregroundStyle(cell.isInvalid ? AppTheme.danger : (cell.isGiven ? AppTheme.textPrimary : AppTheme.teal))
             } else if !cell.notes.isEmpty {
                 noteGrid(fs: fs)
             }
         }
         .frame(width: cellSize, height: cellSize)
         .contentShape(Rectangle())
-        .overlay(
-            RoundedRectangle(cornerRadius: 2)
-                .stroke(cell.value != 0 && !cell.isGiven ? tile.border.opacity(0.38) : Color.clear, lineWidth: 1)
-        )
     }
 
     private func noteGrid(fs: NumberFontStyle) -> some View {
@@ -253,7 +282,7 @@ struct SudokuCellView: View {
             ForEach(1...9, id: \.self) { n in
                 Text(cell.notes.contains(n) ? "\(n)" : " ")
                     .font(.system(size: cellSize * 0.18, weight: fs.weight, design: fs.design))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.textSecondary)
             }
         }
     }

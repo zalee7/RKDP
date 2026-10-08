@@ -147,6 +147,7 @@ final class GridlockViewModel: ObservableObject {
             return
         }
 
+        SoundManager.shared.solitaireShuffleCards()
         let drawTotal = min(rules.drawCount, stock.count)
         rewardMoves.append([0])
         for _ in 0..<drawTotal {
@@ -169,6 +170,7 @@ final class GridlockViewModel: ObservableObject {
             return
         }
         if moveSelectedToFoundation(suit) {
+            SoundManager.shared.solitairePlaceCard()
             registerMove()
             clearAfterMove()
         } else {
@@ -181,6 +183,7 @@ final class GridlockViewModel: ObservableObject {
 
         if let selected {
             if moveSelectedToTableau(column) {
+                SoundManager.shared.solitairePlaceCard()
                 registerMove()
                 clearAfterMove()
                 return
@@ -238,6 +241,7 @@ final class GridlockViewModel: ObservableObject {
         }
 
         if didMove {
+            SoundManager.shared.solitairePlaceCard()
             registerMove()
             clearAfterMove()
         } else {
@@ -286,6 +290,7 @@ final class GridlockViewModel: ObservableObject {
             return card
         }
         rewardMoves.append([0])
+        SoundManager.shared.solitaireShuffleCards()
         waste.removeAll()
         redealsUsed += 1
         registerMove()
@@ -367,7 +372,6 @@ final class GridlockViewModel: ObservableObject {
 
     private func registerMove() {
         moveCount += 1
-        SoundManager.shared.keyboardPress()
         if foundationCount == 52 {
             isComplete = true
             selected = nil

@@ -67,7 +67,7 @@ function validateMatch(m, id, now) {
     "Invalid result metrics");
     check(Object.keys(r.summary).length <= 80 && Object.values(r.summary).every((s) => typeof s === "string" && s.length <= 16000),
         "Invalid result summary");
-    for (const key of ["solvedRounds", "failedRounds", "totalGuesses", "roundCount", "totalRounds", "wrongGuessCount",
+    for (const key of ["solvedRounds", "failedRounds", "totalGuesses", "attemptedGuesses", "roundCount", "totalRounds", "wrongGuessCount",
       "revealedLetterCount", "wordCount", "longestWordLength", "moves", "foundationCount", "solvedPairs"]) {
       if (r.summary[key] !== undefined) check(/^\d+$/.test(r.summary[key]) && integer(stat(r, key)), "Invalid summary metric");
     }

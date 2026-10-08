@@ -210,14 +210,14 @@ extension OwnedCosmetics {
             )
         case "theme_prism_party":
             return BoardThemeStyle(
-                cellBackground: Color(hex: "171A3A").opacity(0.88),
-                selectedCell: Color(hex: "FF4F91").opacity(0.68),
-                highlightedCell: Color(hex: "7266D9").opacity(0.34),
+                cellBackground: Color(hex: "291047").opacity(0.22),
+                selectedCell: Color(hex: "FF2F78").opacity(0.42),
+                highlightedCell: Color(hex: "12C8A2").opacity(0.18),
                 invalidCell: Color.red.opacity(0.3),
-                gridLineMajor: Color(hex: "A89CFF").opacity(0.78),
-                gridLineMinor: Color(hex: "8D86D9").opacity(0.38),
-                tileGradient: LinearGradient(colors: [Color(hex: "151833"), Color(hex: "2A2454")], startPoint: .topLeading, endPoint: .bottomTrailing),
-                activeTraceColor: Color(hex: "FFD36B")
+                gridLineMajor: Color(hex: "FF2F78"),
+                gridLineMinor: Color(hex: "12C8A2").opacity(0.34),
+                tileGradient: LinearGradient(colors: [Color(hex: "FF2F78"), Color(hex: "7B42FF"), Color(hex: "12C8A2"), Color(hex: "FFD02E")], startPoint: .topLeading, endPoint: .bottomTrailing),
+                activeTraceColor: Color(hex: "FFD02E")
             )
         case "theme_royal_arcade":
             return BoardThemeStyle(

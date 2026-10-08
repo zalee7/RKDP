@@ -29,13 +29,20 @@ final class SoundManager {
         case wordAlreadyUsed = "WordAlreadyUsed"
         case wordInvalid = "WordInvalid"
         case clearErase = "ClearErase"
+        case erase = "Erase"
         case colorLinkAttached = "ColorLinkAttached"
         case appButtonTap = "AppButtonTap"
         case wordleTileClick = "WordleTileClick"
+        case preGameCountdown = "PreGameCountdown"
+        case placingCard = "PlacingCard"
+        case puzzlePartyCardShuffle = "PuzzlePartyCardShuffle"
+        case timeRunningOut = "TimeRunningOut"
     }
 
     private var oneShotPlayers: [AudioAsset: AVAudioPlayer] = [:]
     private var loopPlayers: [AudioAsset: AVAudioPlayer] = [:]
+    private var timerUrgencyIsPlaying = false
+    private var lastCountdownSessionID: String?
 
     private init() {
         configureSession()
@@ -76,6 +83,27 @@ final class SoundManager {
     func stopAllLoops() {
         stopMatchmakingLoop()
         stopOnlineGameLoop()
+        setTimerUrgency(false)
+    }
+
+    func playPreGameCountdown(sessionID: String) {
+        guard lastCountdownSessionID != sessionID else { return }
+        lastCountdownSessionID = sessionID
+        playOneShot(.preGameCountdown, volume: 0.9)
+    }
+
+    func setTimerUrgency(_ active: Bool) {
+        guard active, soundEffectsEnabled else {
+            timerUrgencyIsPlaying = false
+            stopLoop(.timeRunningOut)
+            return
+        }
+        guard !timerUrgencyIsPlaying else { return }
+        guard let player = player(for: .timeRunningOut, looping: true) else { return }
+        player.volume = 0.45
+        player.currentTime = 0
+        player.play()
+        timerUrgencyIsPlaying = true
     }
 
     func keyboardPress() {
@@ -161,6 +189,21 @@ final class SoundManager {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
         playOneShot(.clearErase, volume: 0.75)
+    }
+
+    func erase() {
+        if hapticsEnabled {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+        playOneShot(.erase, volume: 0.62)
+    }
+
+    func solitairePlaceCard() {
+        playOneShot(.placingCard, volume: 0.78)
+    }
+
+    func solitaireShuffleCards() {
+        playOneShot(.puzzlePartyCardShuffle, volume: 0.8)
     }
 
     func colorLinkAttached() {

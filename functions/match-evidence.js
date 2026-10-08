@@ -3,7 +3,26 @@
 const {check} = require("./wallet-ledger");
 const {validateCompletion, validateSolitaire, shuffled} = require("./solo-reward-policy");
 const limits = {sudoku: 720, colorLink: 540, minesweeper: 300, gridlock: 600, wordle: 0, hangman: 90, anagram: 60, wordHunt: 75};
+const wordGuessLimits = {easy: 7, medium: 6, hard: 5, expert: 4};
 const unique = (a) => new Set(a).size === a.length;
+function verifiedFoundWords(p, e) {
+  check(Array.isArray(e.words) && e.words.length <= 500 &&
+    e.words.every((word) => typeof word === "string" && /^[A-Z]{3,30}$/.test(word)) && unique(e.words),
+  "Invalid found words");
+  check(e.words.every((word) => p.validWords.includes(word)), "Invalid found words");
+  return e.words;
+}
+
+function wordSummary(found, isFinal) {
+  const sorted = [...found].sort((a, b) => Math.min(5, b.length - 2) - Math.min(5, a.length - 2) || a.localeCompare(b));
+  const lengths = new Map();
+  for (const word of found) lengths.set(word.length, (lengths.get(word.length) || 0) + 1);
+  const average = found.length ? (found.reduce((sum, word) => sum + word.length, 0) / found.length).toFixed(1) : "-";
+  return {wordCount: String(found.length), longestWordLength: String(Math.max(0, ...found.map((word) => word.length))),
+    averageWordLength: average, topWord: sorted[0] || "",
+    wordsByLength: [...lengths.entries()].sort((a, b) => b[0] - a[0]).map(([length, count]) => `${length}:${count}`).join(","),
+    foundWords: sorted.join("|"), isFinal: String(isFinal)};
+}
 function cells(a, size) {
   check(Array.isArray(a) && a.length <= size && a.every((n) => Number.isSafeInteger(n) && n >= 0 && n < size) && unique(a), "Invalid cells");
   return a;
@@ -11,7 +30,7 @@ function cells(a, size) {
 
 // Reconstruct every competitive metric from evidence and the private canonical
 // puzzle. No caller-supplied score, completion, time, rank or target is used.
-function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
+function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode], allowActive = false) {
   check(e && typeof e === "object" && !Array.isArray(e) && Buffer.byteLength(JSON.stringify(e)) <= 180000, "Invalid evidence");
   check(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0, "Match has not started");
   const elapsed = Math.floor(elapsedMs / 1000);
@@ -67,7 +86,20 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
       }
       r.score = occupied.size; r.progress = occupied.size / (p.size * p.size);
       r.completed = solved === p.pairs.length && r.progress === 1;
-      r.summary = {solvedPairs: String(solved), filledCells: String(r.score), totalCells: String(p.size * p.size)};
+      const board = Array(p.size * p.size).fill(".");
+      for (const [cell, pairID] of occupied.entries()) {
+        board[cell] = (Number(pairID) + 1).toString(36).toUpperCase();
+      }
+      const endpoints = Array(p.size * p.size).fill(".");
+      for (const pair of p.pairs) {
+        endpoints[pair.start] = "E"; endpoints[pair.end] = "E";
+      }
+      const rows = (values) => Array.from({length: p.size}, (_, i) =>
+        values.slice(i * p.size, (i + 1) * p.size).join("")).join("/");
+      r.summary = {solvedPairs: String(solved), totalPairs: String(p.pairs.length),
+        filledCells: String(r.score), totalCells: String(p.size * p.size), boardSize: String(p.size),
+        boardRows: rows(board), endpointRows: rows(endpoints)};
+      r.details = [`${r.score} of ${p.size * p.size} cells filled`, `${solved} of ${p.pairs.length} color pairs connected`];
       break;
     }
     case "gridlock": {
@@ -105,12 +137,15 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
       break;
     }
     case "anagram": case "wordHunt": {
-      validateCompletion(p, e, elapsedMs);
-      r.completed = true; r.elapsedSeconds = limits[p.mode];
-      r.score = e.words.reduce((sum, word) => sum + Math.min(5, word.length - 2), 0); r.progress = 1;
-      r.summary = {wordCount: String(e.words.length), longestWordLength: String(Math.max(0, ...e.words.map((w) => w.length))), foundWords: e.words.join("|")};
-      r.details = e.words.map((w) => `${w} (+${Math.min(5, w.length - 2)})`);
-      played = e.words.length > 0;
+      const found = verifiedFoundWords(p, e);
+      if (!allowActive) validateCompletion(p, e, elapsedMs);
+      r.completed = !allowActive; r.elapsedSeconds = allowActive ? elapsed : limits[p.mode];
+      r.score = found.reduce((sum, word) => sum + Math.min(5, word.length - 2), 0);
+      r.progress = allowActive ? found.length / Math.max(1, p.validWords.length) : 1;
+      r.status = allowActive ? `${found.length} word${found.length === 1 ? "" : "s"} found` : "Time expired";
+      r.summary = wordSummary(found, !allowActive);
+      r.details = found.slice(0, 50).map((word) => `${word} (+${Math.min(5, word.length - 2)})`);
+      played = found.length > 0;
       break;
     }
     case "wordle": {
@@ -137,6 +172,7 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
     case "hangman": {
       check(Array.isArray(e.rounds) && e.rounds.length > 0 && e.rounds.length <= 3, "Invalid Lava rounds");
       let solved = 0; let wrong = 0; let revealed = 0;
+      let current = null;
       for (const [i, letters] of e.rounds.entries()) {
         check(solved < 2 && typeof letters === "string" && /^[A-Z]{0,26}$/.test(letters) && unique([...letters]), "Invalid Lava letters");
         const target = p.rounds[i]; const correct = new Set([target.starter]); let misses = "";
@@ -146,24 +182,35 @@ function verifyResult(p, uid, e, elapsedMs, timeLimit = limits[p.mode]) {
         }
         const win = [...target.target].every((c) => correct.has(c));
         const terminal = win || misses.length === p.maxWrong;
-        check(terminal || (timeout && i === e.rounds.length - 1), "Unfinished Lava round");
+        check(terminal || (i === e.rounds.length - 1 && (allowActive || timeout)), "Unfinished Lava round");
         if (win) solved++;
         wrong += misses.length; revealed += correct.size;
         if (letters.length) played = true;
+        const pattern = [...target.target].map((letter) => correct.has(letter) ? letter : "_").join("");
+        current = {target, correct, misses, pattern, win};
         Object.assign(r.summary, {[`round${i + 1}TargetWord`]: target.target, [`round${i + 1}Category`]: target.category,
           [`round${i + 1}StarterLetter`]: target.starter, [`round${i + 1}Solved`]: String(win),
-          [`round${i + 1}WrongLetters`]: misses, [`round${i + 1}CorrectLetters`]: [...correct].join("")});
+          [`round${i + 1}WrongLetters`]: misses, [`round${i + 1}CorrectLetters`]: [...correct].sort().join(""),
+          [`round${i + 1}Pattern`]: pattern});
       }
-      check(solved >= 2 || e.rounds.length === 3 || timeout, "Unfinished Lava match");
-      r.completed = solved >= 2; r.score = solved; r.progress = Math.min(1, solved / 2);
+      check(allowActive || solved >= 2 || e.rounds.length === 3 || timeout, "Unfinished Lava match");
+      r.completed = !allowActive && solved >= 2; r.score = solved; r.progress = Math.min(1, solved / 2);
       Object.assign(r.summary, {solvedRounds: String(solved), wrongGuessCount: String(wrong), revealedLetterCount: String(revealed),
-        roundCount: String(e.rounds.length), totalRounds: "3", final: "true"});
+        roundCount: String(e.rounds.length), totalRounds: "3", final: String(!allowActive), isFinal: String(!allowActive)});
+      if (current) {
+        Object.assign(r.summary, {targetWord: current.target.target, category: current.target.category,
+          starterLetter: current.target.starter, correctLetters: [...current.correct].sort().join(""),
+          wrongLetters: current.misses, currentWrongGuessCount: String(current.misses.length),
+          revealedPattern: current.pattern, maxWrongGuesses: String(p.maxWrong), lavaLevel: String(current.misses.length),
+          solved: String(current.win)});
+      }
+      r.status = allowActive ? `${solved}/3 rescued` : r.status;
       break;
     }
     default: throw new Error("Unsupported game");
   }
   const naturallyFinal = r.completed || r.summary.hitMine === "true" || r.summary.isFinal === "true" || r.summary.final === "true";
-  check(naturallyFinal || timeout, "Round is still active");
+  check(allowActive || naturallyFinal || timeout, "Round is still active");
   if (timeout && !r.completed) r.status = "Time expired";
   return {result: r, played};
 }
@@ -180,4 +227,27 @@ function evaluateWord(word, target) {
   });
   return marks.join("");
 }
-module.exports = {verifyResult, limits};
+
+// A Word Guess race can end while the other player is still entering guesses.
+// Verify those guesses privately so the finished match can show both boards
+// without trusting client-authored tile colors or exposing progress mid-round.
+function verifyWordGuessProgress(p, uid, e, elapsedMs) {
+  check(p?.mode === "wordle" && Array.isArray(p.targets) && typeof p.targets[0] === "string", "Invalid Word Guess puzzle");
+  check(e && typeof e === "object" && !Array.isArray(e) && Buffer.byteLength(JSON.stringify(e)) <= 180000, "Invalid evidence");
+  check(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0, "Match has not started");
+  check(Array.isArray(e.rounds) && e.rounds.length === 1 && Array.isArray(e.rounds[0]), "Invalid Word Guess progress");
+  const round = e.rounds[0];
+  const maxGuesses = wordGuessLimits[p.difficulty];
+  check(Number.isSafeInteger(maxGuesses) && round.length > 0 && round.length < maxGuesses, "Word Guess attempt is final");
+  check(round.every((word) => typeof word === "string" && /^[A-Z]{5}$/.test(word) && p.validGuesses.includes(word)), "Invalid guess");
+  check(!round.includes(p.targets[0]), "Word Guess attempt is final");
+  const guessCount = round.length;
+  return {userID: uid, mode: "wordle", completed: false, elapsedSeconds: Math.floor(elapsedMs / 1000),
+    score: 0, progress: guessCount / maxGuesses, status: `Guess ${guessCount} of ${maxGuesses}`,
+    summary: {round1Target: p.targets[0], round1Solved: "false", round1GuessCount: String(guessCount),
+      round1Guesses: round.map((word) => `${word}:${evaluateWord(word, p.targets[0])}`).join(";"),
+      round1Partial: "true", solvedRounds: "0", failedRounds: "0", totalGuesses: "0",
+      attemptedGuesses: String(guessCount), roundCount: "1", isFinal: "false"},
+    details: [`Round 1: ${p.targets[0]} in progress`]};
+}
+module.exports = {verifyResult, verifyWordGuessProgress, limits};

@@ -54,7 +54,12 @@ final class MultiplayerViewModel: ObservableObject {
     private var isForfeiting = false
     private var officialSearchTask: Task<Void, Never>?
     private var officialHeartbeatTask: Task<Void, Never>?
+    private var officialProgressTask: Task<Void, Never>?
     private var usesOfficialSearch = false
+
+    private static let officialProgressModes: Set<GameMode> = [
+        .sudoku, .gridlock, .colorLink, .minesweeper, .wordle, .anagram, .wordHunt, .hangman
+    ]
 
     var user: AppUser?
     var mode: GameMode = .sudoku
@@ -399,27 +404,33 @@ final class MultiplayerViewModel: ObservableObject {
                     }
                 }
                 guard session.status == .finished else { return }
+                var finishedSession = session
+                if session.usesServerAuthority, Self.officialProgressModes.contains(session.mode), let userID = self.user?.id,
+                   await self.retryOfficialProgress(sessionID: session.id, userID: userID),
+                   let refreshed = try? await self.store.fetchSession(id: session.id) {
+                    finishedSession = refreshed
+                }
                 self.officialHeartbeatTask?.cancel()
                 self.gameTimer?.invalidate()
-                if let results = session.playerResults {
+                if let results = finishedSession.playerResults {
                     self.playerResults = self.playerResults.merging(results) { _, sessionResult in sessionResult }
                 }
-                if session.isRanked {
-                    await self.applyFinishedRewards(session)
-                } else if session.isCasual {
-                    await self.applyFinishedCasualRewards(session)
+                if finishedSession.isRanked {
+                    await self.applyFinishedRewards(finishedSession)
+                } else if finishedSession.isCasual {
+                    await self.applyFinishedCasualRewards(finishedSession)
                 } else {
                     self.rewardSnapshot = nil
                     self.rewardErrorMessage = nil
                     self.casualRewardMessage = nil
-                    if session.isExhibition, let user = self.user {
-                        if let updated = try? await self.store.recordOnlineBestIfNeeded(session: session, for: user.id) {
+                    if finishedSession.isExhibition, let user = self.user {
+                        if let updated = try? await self.store.recordOnlineBestIfNeeded(session: finishedSession, for: user.id) {
                             self.user = updated
                         }
                     }
                 }
-                self.state = .finished(session: session)
-                self.finishedSessionID = session.id
+                self.state = .finished(session: finishedSession)
+                self.finishedSessionID = finishedSession.id
             }
         }
     }
@@ -427,7 +438,19 @@ final class MultiplayerViewModel: ObservableObject {
     func submitResult(_ result: MatchPlayerResult, session: GameSession) async {
         guard result.userID == user?.id else { return }
         if session.usesVerifiedResults {
-            guard MatchResolver.isFinalResult(result), let evidence = result.rewardEvidenceJSON else { return }
+            guard let evidence = result.rewardEvidenceJSON else { return }
+            if !MatchResolver.isFinalResult(result) {
+                guard session.usesServerAuthority, Self.officialProgressModes.contains(result.mode),
+                      playerResults[result.userID].map({ MatchResolver.isFinalResult($0) }) != true else { return }
+                if result.mode == .wordle {
+                    guard MultiplayerPuzzleDataFactory.decodeWordle(session.puzzleData)?.matchRounds == 1 else { return }
+                }
+                UserDefaults.standard.set(evidence, forKey: officialProgressKey(session.id, result.userID))
+                scheduleOfficialProgress(sessionID: session.id, userID: result.userID)
+                return
+            }
+            officialProgressTask?.cancel()
+            officialProgressTask = nil
             guard playerResults[result.userID].map({ MatchResolver.isFinalResult($0) }) != true else { return }
             playerResults[result.userID] = result
             let key = officialEvidenceKey(session.id, result.userID)
@@ -970,6 +993,8 @@ final class MultiplayerViewModel: ObservableObject {
         officialSearchTask = nil
         officialHeartbeatTask?.cancel()
         officialHeartbeatTask = nil
+        officialProgressTask?.cancel()
+        officialProgressTask = nil
         tearDownDiscoveryListeners()
         sessionListener?.remove()
         sessionListener = nil
@@ -1072,6 +1097,7 @@ final class MultiplayerViewModel: ObservableObject {
 
     func startMatchCountdown(session: GameSession) {
         matchCountdown = 5
+        SoundManager.shared.playPreGameCountdown(sessionID: session.id)
         countdownTask?.cancel()
         countdownTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -1097,6 +1123,7 @@ final class MultiplayerViewModel: ObservableObject {
         stopMatchCountdown()
         sharedCountdownSessionID = session.id
         sharedCountdownStartedAt = startedAt
+        SoundManager.shared.playPreGameCountdown(sessionID: session.id)
         countdownTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let deadline = startedAt.addingTimeInterval(5)
@@ -1204,6 +1231,34 @@ final class MultiplayerViewModel: ObservableObject {
         "officialMatchEvidence_\(userID)_\(sessionID)"
     }
 
+    private func officialProgressKey(_ sessionID: String, _ userID: String) -> String {
+        "officialMatchProgress_\(userID)_\(sessionID)"
+    }
+
+    private func scheduleOfficialProgress(sessionID: String, userID: String) {
+        officialProgressTask?.cancel()
+        officialProgressTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 350_000_000) } catch { return }
+            guard !Task.isCancelled, let self else { return }
+            _ = await self.retryOfficialProgress(sessionID: sessionID, userID: userID)
+        }
+    }
+
+    @discardableResult
+    private func retryOfficialProgress(sessionID: String, userID: String) async -> Bool {
+        let key = officialProgressKey(sessionID, userID)
+        guard let evidence = UserDefaults.standard.string(forKey: key) else { return false }
+        do {
+            _ = try await store.officialAction("progress", userID: userID, sessionID: sessionID, evidenceJSON: evidence)
+            if UserDefaults.standard.string(forKey: key) == evidence {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
     private func retryOfficialSubmission(sessionID: String, userID: String) async {
         let key = officialEvidenceKey(sessionID, userID)
         guard let evidence = UserDefaults.standard.string(forKey: key) else { return }
@@ -1213,6 +1268,7 @@ final class MultiplayerViewModel: ObservableObject {
             if reply.status == "finished" || reply.status == "abandoned" {
                 UserDefaults.standard.removeObject(forKey: key)
                 UserDefaults.standard.removeObject(forKey: key + "_result")
+                UserDefaults.standard.removeObject(forKey: officialProgressKey(sessionID, userID))
             }
             rewardErrorMessage = nil
         } catch {
@@ -1225,6 +1281,7 @@ final class MultiplayerViewModel: ObservableObject {
         let key = officialEvidenceKey(sessionID, userID)
         UserDefaults.standard.removeObject(forKey: key)
         UserDefaults.standard.removeObject(forKey: key + "_result")
+        UserDefaults.standard.removeObject(forKey: officialProgressKey(sessionID, userID))
         guard currentSessionID == sessionID else { return }
         playerResults[userID] = result
     }
@@ -1298,6 +1355,7 @@ enum MatchResolver {
     }
 
     static func isFinalResult(_ result: MatchPlayerResult) -> Bool {
+        if result.summary["isFinal"] == "false" { return false }
         switch result.mode {
         case .wordle:
             return result.isFinalWordleResult

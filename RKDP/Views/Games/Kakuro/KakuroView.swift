@@ -61,8 +61,10 @@ struct ColorLinkView: View {
                     solvedPairIDs: vm.solvedPairIDs
                 ) { row, col in
                     vm.beginDraw(row: row, col: col)
+                    reportMatchProgress()
                 } onContinue: { row, col in
                     vm.continueDraw(row: row, col: col)
+                    reportMatchProgress()
                 }
                 .padding(.horizontal)
                 .aspectRatio(1, contentMode: .fit)
@@ -80,7 +82,10 @@ struct ColorLinkView: View {
                         .background(AppTheme.teal.opacity(0.16))
                         .clipShape(Capsule())
                         .overlay(Capsule().stroke(AppTheme.teal.opacity(0.35), lineWidth: 1))
-                    Button { vm.clearActivePath() } label: {
+                    Button {
+                        vm.clearActivePath()
+                        reportMatchProgress()
+                    } label: {
                         Label("Clear", systemImage: "eraser.fill")
                     }
                     .buttonStyle(.bordered)
@@ -154,10 +159,17 @@ struct ColorLinkView: View {
         return "Drag from an endpoint to draw a path"
     }
 
-    private func reportMatchResult(status: String) {
+    private func reportMatchProgress() {
+        guard !vm.isComplete else { return }
+        reportMatchResult(status: "In progress", isFinal: false)
+    }
+
+    private func reportMatchResult(status: String, isFinal: Bool = true) {
         guard !didReportMatchResult, sessionID != nil, let userID else { return }
-        didReportMatchResult = true
-        vm.stop()
+        if isFinal {
+            didReportMatchResult = true
+            vm.stop()
+        }
         let fillPercent = Int((vm.fillProgress * 100).rounded())
         onMatchResult(MatchPlayerResult(
             userID: userID,
@@ -174,7 +186,8 @@ struct ColorLinkView: View {
                 "solvedPairs": "\(vm.solvedPairCount)",
                 "totalPairs": "\(vm.board.pairs.count)",
                 "boardSize": "\(vm.board.size)",
-                "boardRows": colorLinkBoardRows(board: vm.board, paths: vm.paths)
+                "boardRows": colorLinkBoardRows(board: vm.board, paths: vm.paths),
+                "isFinal": isFinal ? "true" : "false"
             ],
             details: [
                 "\(vm.filledCellCount) of \(vm.board.totalCells) cells filled",
@@ -220,13 +233,16 @@ struct ColorLinkBoardView: View {
     let onContinue: (Int, Int) -> Void
 
     @State private var isDragging = false
+    @Environment(\.boardCosmetics) private var cosmetics
 
     var body: some View {
         GeometryReader { geo in
             let cellSize = geo.size.width / CGFloat(board.size)
+            let theme = cosmetics.themeStyle
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.secondarySystemBackground))
+                    .fill(theme.cellBackground)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.gridLineMajor.opacity(0.8), lineWidth: 1.5))
 
                 ForEach(0..<board.size, id: \.self) { row in
                     ForEach(0..<board.size, id: \.self) { col in
@@ -287,10 +303,10 @@ private struct ColorLinkCellView: View {
 
     var body: some View {
         ZStack {
-            let tile = cosmetics.tileThemeStyle
+            let theme = cosmetics.themeStyle
             Rectangle()
-                .fill(tile.inactiveFill.opacity(0.32))
-                .overlay(Rectangle().stroke(tile.border.opacity(0.18), lineWidth: 1))
+                .fill(theme.cellBackground.opacity(0.92))
+                .overlay(Rectangle().stroke(theme.gridLineMinor, lineWidth: 1))
 
             if pairID != nil {
                 RoundedRectangle(cornerRadius: isEndpoint ? cellSize * 0.28 : cellSize * 0.16)

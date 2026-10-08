@@ -174,19 +174,19 @@ struct ShopView: View {
 
             itemSection(
                 title: "Board Themes",
-                subtitle: "Four rotating board themes for today.",
+                subtitle: "Play surfaces, grid lines, highlights, and path accents.",
                 items: vm.todaysBoardShopItems
             )
 
             itemSection(
-                title: "Tile Themes",
-                subtitle: "Four rotating tile themes for today.",
+                title: "Letter & Number Tiles",
+                subtitle: "Puzzle pieces for Word Guess, Anagrams, Word Hunt, and Sudoku.",
                 items: vm.todaysTileShopItems
             )
 
             itemSection(
                 title: "Card Themes",
-                subtitle: "Four rotating Solitaire card themes for today.",
+                subtitle: "Solitaire card fronts, backs, suits, and table styling.",
                 items: vm.todaysCardShopItems
             )
 
@@ -196,7 +196,7 @@ struct ShopView: View {
                 items: vm.todaysTitleShopItems
             )
 
-            Text("Owned cosmetics stay organized in Profile customization, where you can equip avatar parts, board themes, tile themes, and Solitaire card themes separately.")
+            Text("Owned cosmetics stay organized in Profile customization, where board surfaces, letter and number tiles, and Solitaire cards remain separate.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.textSecondary)
                 .multilineTextAlignment(.center)
